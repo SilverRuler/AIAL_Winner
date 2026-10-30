@@ -4,9 +4,10 @@ import { MealEntry } from '@/types/meal';
 
 export const maxDuration = 60;
 
-// NVIDIA NIM Vision Model (Primary)
+// NVIDIA NIM Vision Model (Primary & Fallback)
 const NIM_API_URL = process.env.NIM_API_URL || 'https://integrate.api.nvidia.com/v1/chat/completions';
 const NIM_MODEL = process.env.NIM_MODEL || 'mistralai/mistral-large-4-1t-a52b';
+const NIM_FALLBACK_MODEL = process.env.NIM_FALLBACK_MODEL || 'meta/muse-glimmer-30b';
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
 
 // LLM evaluation service (sr-combo on oci2 - fallback)
@@ -229,10 +230,78 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * NVIDIA NIM Vision API 단일 호출 헬퍼
+ */
+async function callNimVision(
+  model: string,
+  systemPrompt: string,
+  contentList: any[],
+  member: string
+): Promise<SingleEvalResult | null> {
+  if (!NVIDIA_API_KEY) return null;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+    const resp = await fetch(NIM_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${NVIDIA_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: contentList },
+        ],
+        max_tokens: model.includes('glimmer') ? 8192 : 4096,
+        stream: false,
+        temperature: 0.3,
+        top_p: 0.95,
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (resp.ok) {
+      const rawText = await resp.text();
+      const start = rawText.indexOf('{');
+      const end = rawText.lastIndexOf('}');
+      if (start !== -1 && end !== -1) {
+        const parsed = JSON.parse(rawText.substring(start, end + 1));
+        let evalData = parsed;
+        if (parsed.choices && parsed.choices[0]?.message?.content) {
+          const content = parsed.choices[0].message.content.trim();
+          const cStart = content.indexOf('{');
+          const cEnd = content.lastIndexOf('}');
+          if (cStart !== -1 && cEnd !== -1) {
+            evalData = JSON.parse(content.substring(cStart, cEnd + 1));
+          }
+        }
+        if (typeof evalData.score === 'number' && typeof evalData.review === 'string') {
+          return {
+            score: Math.max(0, Math.min(100, Math.round(evalData.score))),
+            review: evalData.review.trim(),
+          };
+        }
+      }
+    } else {
+      console.warn(`[Single Meal Eval] NIM (${model}) response status: ${resp.status}`);
+    }
+  } catch (nimErr) {
+    console.warn(`[Single Meal Eval] NIM (${model}) call failed for ${member}:`, nimErr);
+  }
+  return null;
+}
+
+/**
  * 참가자 1명의 식사를 개별 평가
  * 1순위: NVIDIA NIM Vision 모델 (mistralai/mistral-large-4-1t-a52b)을 통한 실제 이미지 직접 시각 평가.
- * 2순위: NIM 실패 시 기존 sr-combo LLM 텍스트 기반 평가 fallback.
- * 3순위: 최종 휴리스틱 평가 fallback.
+ * 2순위: 1순위 실패 시 NVIDIA NIM Vision 모델 (meta/muse-glimmer-30b) 시각 평가 Fallback.
+ * 3순위: NIM 실패 시 기존 sr-combo LLM 텍스트 기반 평가 fallback.
+ * 4순위: 최종 휴리스틱 평가 fallback.
  */
 async function evaluateSingleMeal(
   slot: string,
@@ -247,24 +316,23 @@ async function evaluateSingleMeal(
   const cDesc = comment || '(등록된 코멘트 없음)';
   const userPrompt = `참가자: ${member}\n출품 메뉴(제목): ${tDesc}\n코멘트: ${cDesc}\n제출된 식사 사진을 직접 시각적으로 관찰하여 미식 평가와 점수를 매겨주세요.`;
 
-  // 1순위: NVIDIA NIM Vision 모델 호출
+  // 1순위 & 2순위: NVIDIA NIM Vision 모델 호출
   if (NVIDIA_API_KEY) {
-    try {
-      let imageBase64: string | null = null;
-      if (imageUrl) {
-        try {
-          const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(8000) });
-          if (imgRes.ok) {
-            const ab = await imgRes.arrayBuffer();
-            const cType = imgRes.headers.get('content-type') || 'image/jpeg';
-            imageBase64 = `data:${cType};base64,${Buffer.from(ab).toString('base64')}`;
-          }
-        } catch (imgErr) {
-          console.warn(`[Single Meal Eval] Image download failed for ${member}:`, imgErr);
+    let imageBase64: string | null = null;
+    if (imageUrl) {
+      try {
+        const imgRes = await fetch(imageUrl, { signal: AbortSignal.timeout(8000) });
+        if (imgRes.ok) {
+          const ab = await imgRes.arrayBuffer();
+          const cType = imgRes.headers.get('content-type') || 'image/jpeg';
+          imageBase64 = `data:${cType};base64,${Buffer.from(ab).toString('base64')}`;
         }
+      } catch (imgErr) {
+        console.warn(`[Single Meal Eval] Image download failed for ${member}:`, imgErr);
       }
+    }
 
-      const nimSystemPrompt = `당신은 세계 최고 권위의 미식 평가단이자 'AIAL 식사 배틀'의 AI 심사위원입니다.
+    const nimSystemPrompt = `당신은 세계 최고 권위의 미식 평가단이자 'AIAL 식사 배틀'의 AI 심사위원입니다.
 제출된 ${slot} 식사 사진을 직접 시각적으로 정밀 관찰하여 음식의 종류, 차림새, 재료의 조화, 신선도, 플레이팅을 냉정하고 전문적으로 평가하세요.
 
 [총평 작성 규칙]
@@ -289,66 +357,26 @@ async function evaluateSingleMeal(
 응답 포맷:
 {"score": 85, "review": "이 식사는 ...인 것 같으며, ... 높은 완성도를 평가하여 85점을 부여했습니다."}`;
 
-      const contentList: any[] = [{ type: 'text', text: userPrompt }];
-      if (imageBase64) {
-        contentList.push({ type: 'image_url', image_url: { url: imageBase64 } });
-      }
+    const contentList: any[] = [{ type: 'text', text: userPrompt }];
+    if (imageBase64) {
+      contentList.push({ type: 'image_url', image_url: { url: imageBase64 } });
+    }
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 45000);
+    // 1순위: NIM Primary 모델 시도
+    const tier1Res = await callNimVision(NIM_MODEL, nimSystemPrompt, contentList, member);
+    if (tier1Res) {
+      return tier1Res;
+    }
 
-      const resp = await fetch(NIM_API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${NVIDIA_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: NIM_MODEL,
-          messages: [
-            { role: 'system', content: nimSystemPrompt },
-            { role: 'user', content: contentList },
-          ],
-          max_tokens: 4096,
-          stream: false,
-          temperature: 0.3,
-        }),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-
-      if (resp.ok) {
-        const rawText = await resp.text();
-        const start = rawText.indexOf('{');
-        const end = rawText.lastIndexOf('}');
-        if (start !== -1 && end !== -1) {
-          const parsed = JSON.parse(rawText.substring(start, end + 1));
-          let evalData = parsed;
-          if (parsed.choices && parsed.choices[0]?.message?.content) {
-            const content = parsed.choices[0].message.content.trim();
-            const cStart = content.indexOf('{');
-            const cEnd = content.lastIndexOf('}');
-            if (cStart !== -1 && cEnd !== -1) {
-              evalData = JSON.parse(content.substring(cStart, cEnd + 1));
-            }
-          }
-          if (typeof evalData.score === 'number' && typeof evalData.review === 'string') {
-            return {
-              score: Math.max(0, Math.min(100, Math.round(evalData.score))),
-              review: evalData.review.trim(),
-            };
-          }
-        }
-      } else {
-        console.warn(`[Single Meal Eval] NIM response status: ${resp.status}`);
-      }
-    } catch (nimErr) {
-      console.warn(`[Single Meal Eval] NIM call failed for ${member}:`, nimErr);
+    // 2순위: NIM Fallback 모델 시도
+    console.warn(`[Single Meal Eval] Primary NIM (${NIM_MODEL}) failed for ${member}. Trying secondary NIM fallback (${NIM_FALLBACK_MODEL})...`);
+    const tier2Res = await callNimVision(NIM_FALLBACK_MODEL, nimSystemPrompt, contentList, member);
+    if (tier2Res) {
+      return tier2Res;
     }
   }
 
-  // 2순위: sr-combo LLM 텍스트 기반 평가 Fallback
+  // 3순위: sr-combo LLM 텍스트 기반 평가 Fallback
   try {
     const systemPrompt = `당신은 세계 최고 권위의 미식 평가단이자 'AIAL 식사 배틀'의 AI 심사위원입니다.
 각 참가자가 제출한 ${slot} 식사 사진의 제목(메뉴명)과 코멘트를 참고하여(없거나 비어있을 수도 있음) 전문적이고 감각적인 미식 총평과 맛 점수를 부여합니다.
@@ -430,7 +458,7 @@ async function evaluateSingleMeal(
     console.warn(`[Single Meal Eval] LLM fallback call failed for ${member}:`, llmErr);
   }
 
-  // 3순위: Fallback 휴리스틱 평가
+  // 4순위: Fallback 휴리스틱 평가
   const fallbackMenu = menuName || '정갈하고 든든한 한 끼';
   const fallbackScore = Math.floor(Math.random() * 26) + 60;
   return {

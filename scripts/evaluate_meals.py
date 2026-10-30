@@ -34,9 +34,10 @@ LLM_FALLBACK_URL = "http://oci2.silverruler.xyz:20129/v1/chat/completions"
 MODEL_NAME = os.environ.get("LLM_MODEL", "sr-combo")
 API_KEY = os.environ.get("LLM_API_KEY", "")
 
-# NVIDIA NIM Vision 모델 설정 (1순위 미식 심사위원)
+# NVIDIA NIM Vision 모델 설정 (1순위 & 2순위 미식 심사위원)
 NIM_API_URL = os.environ.get("NIM_API_URL", "https://integrate.api.nvidia.com/v1/chat/completions")
 NIM_MODEL = os.environ.get("NIM_MODEL", "mistralai/mistral-large-4-1t-a52b")
+NIM_FALLBACK_MODEL = os.environ.get("NIM_FALLBACK_MODEL", "meta/muse-glimmer-30b")
 NIM_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 
 # 로컬 .env 파일 보조 로드
@@ -55,6 +56,7 @@ LLM_API_URL = os.environ.get("LLM_API_URL", LLM_API_URL)
 MODEL_NAME = os.environ.get("LLM_MODEL", MODEL_NAME)
 NIM_API_URL = os.environ.get("NIM_API_URL", NIM_API_URL)
 NIM_MODEL = os.environ.get("NIM_MODEL", NIM_MODEL)
+NIM_FALLBACK_MODEL = os.environ.get("NIM_FALLBACK_MODEL", NIM_FALLBACK_MODEL)
 NIM_API_KEY = os.environ.get("NVIDIA_API_KEY", NIM_API_KEY)
 
 def get_current_slot():
@@ -109,13 +111,16 @@ def get_image_data_url(image_url):
         print(f"  [Warn] Failed to prepare image data URL for {image_url}: {e}", flush=True)
         return None
 
-def call_nim_vision(user_prompt, image_data_url, slot_name):
+def call_nim_vision(user_prompt, image_data_url, slot_name, model_name=None):
     """
-    NVIDIA NIM Vision API(mistralai/mistral-large-4-1t-a52b)를 호출하여
+    NVIDIA NIM Vision API를 호출하여
     실제 식사 사진을 시각적으로 관찰하고 전문적인 점수 및 미식 총평 반환.
+    model_name이 지정되지 않으면 기본 1순위 모델(NIM_MODEL)을 사용.
     """
     if not NIM_API_KEY:
         return None
+
+    target_model = model_name or NIM_MODEL
 
     system_prompt = f"""당신은 세계 최고 권위의 미식 평가단이자 'AIAL 식사 배틀'의 AI 심사위원입니다.
 제출된 {slot_name} 식사 사진을 직접 시각적으로 정밀 관찰하여 음식의 종류, 차림새, 재료의 조화, 신선도, 플레이팅을 냉정하고 전문적으로 평가하세요.
@@ -146,15 +151,18 @@ def call_nim_vision(user_prompt, image_data_url, slot_name):
     if image_data_url:
         content_list.append({"type": "image_url", "image_url": {"url": image_data_url}})
 
+    max_tokens = 8192 if "glimmer" in target_model else 4096
+
     payload = {
-        "model": NIM_MODEL,
+        "model": target_model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": content_list}
         ],
-        "max_tokens": 4096,
+        "max_tokens": max_tokens,
         "stream": True,
-        "temperature": 0.3
+        "temperature": 0.3,
+        "top_p": 0.95
     }
 
     headers = {
@@ -164,10 +172,10 @@ def call_nim_vision(user_prompt, image_data_url, slot_name):
     }
 
     try:
-        print(f"  [NIM Vision] Requesting evaluation from {NIM_MODEL}...", flush=True)
+        print(f"  [NIM Vision] Requesting evaluation from {target_model}...", flush=True)
         resp = requests.post(NIM_API_URL, headers=headers, json=payload, stream=True, timeout=(30, 180))
         if resp.status_code == 200:
-            print("  [NIM Vision] Connected. Streaming evaluation (reasoning & review)...", flush=True)
+            print(f"  [NIM Vision - {target_model}] Connected. Streaming evaluation (reasoning & review)...", flush=True)
             content_chunks = []
             for line in resp.iter_lines():
                 if line:
@@ -191,14 +199,14 @@ def call_nim_vision(user_prompt, image_data_url, slot_name):
             if s != -1 and e != -1:
                 parsed = json.loads(full_text[s:e+1])
                 if "score" in parsed and "review" in parsed:
-                    print(f"  [NIM Vision] Success! Score: {parsed['score']}", flush=True)
+                    print(f"  [NIM Vision - {target_model}] Success! Score: {parsed['score']}", flush=True)
                     return parsed
             else:
-                print(f"  [NIM Vision] Failed to parse JSON from output: {full_text[:120]}", flush=True)
+                print(f"  [NIM Vision - {target_model}] Failed to parse JSON from output: {full_text[:120]}", flush=True)
         else:
-            print(f"  [NIM Vision] HTTP Error {resp.status_code}: {resp.text[:150]}", flush=True)
+            print(f"  [NIM Vision - {target_model}] HTTP Error {resp.status_code}: {resp.text[:150]}", flush=True)
     except Exception as e:
-        print(f"  [NIM Vision] Request failed or timed out: {e}", flush=True)
+        print(f"  [NIM Vision - {target_model}] Request failed or timed out: {e}", flush=True)
 
     return None
 
@@ -206,8 +214,9 @@ def evaluate_single_meal(m, slot_name):
     """
     각 참가자의 식사 사진에 대해 1장씩 단독 평가를 수행.
     1순위: NVIDIA NIM Vision 모델 (mistralai/mistral-large-4-1t-a52b)을 통한 실제 이미지 직접 시각 평가.
-    2순위: NIM 실패 시 기존 sr-combo LLM 텍스트 기반 평가 fallback.
-    3순위: 최종 휴리스틱 평가 fallback.
+    2순위: 1순위 실패 시 NVIDIA NIM Vision 모델 (meta/muse-glimmer-30b) 시각 평가 Fallback.
+    3순위: NIM 실패 시 기존 sr-combo LLM 텍스트 기반 평가 Fallback.
+    4순위: 최종 휴리스틱 평가 Fallback.
     """
     menu_name = (m.get("menuName") or "").strip()
     comment = (m.get("comment") or "").strip()
@@ -219,14 +228,21 @@ def evaluate_single_meal(m, slot_name):
     user_prompt = f"참가자: {member}\n출품 메뉴(제목): {t_desc}\n코멘트: {c_desc}\n제출된 식사 사진을 직접 시각적으로 관찰하여 미식 평가와 점수를 매겨주세요."
 
     res = None
-    # 1순위: NVIDIA NIM Vision 모델
-    if NIM_API_KEY:
-        image_data_url = get_image_data_url(image_url) if image_url else None
-        res = call_nim_vision(user_prompt, image_data_url, slot_name)
+    image_data_url = get_image_data_url(image_url) if (NIM_API_KEY and image_url) else None
 
-    # 2순위: NIM 실패 시 sr-combo LLM 텍스트 기반 평가 Fallback
+    # 1순위: NVIDIA NIM Vision 1순위 모델 (mistralai/mistral-large-4-1t-a52b)
+    if NIM_API_KEY:
+        print(f"  [Tier 1] Trying primary NIM Vision model ({NIM_MODEL}) for {member}...", flush=True)
+        res = call_nim_vision(user_prompt, image_data_url, slot_name, model_name=NIM_MODEL)
+
+    # 2순위: 1순위 실패 시 NVIDIA NIM Vision 2순위 모델 (meta/muse-glimmer-30b) Fallback
+    if (not res or not isinstance(res, dict) or "score" not in res) and NIM_API_KEY:
+        print(f"  [Tier 2 Fallback] Primary NIM failed. Trying secondary NIM model ({NIM_FALLBACK_MODEL}) for {member}...", flush=True)
+        res = call_nim_vision(user_prompt, image_data_url, slot_name, model_name=NIM_FALLBACK_MODEL)
+
+    # 3순위: NIM 실패 시 sr-combo LLM 텍스트 기반 평가 Fallback
     if not res or not isinstance(res, dict) or "score" not in res:
-        print(f"  [Fallback] Falling back to sr-combo for {member}...", flush=True)
+        print(f"  [Tier 3 Fallback] NIM models failed. Falling back to sr-combo for {member}...", flush=True)
         system_prompt = f"""당신은 세계 최고 권위의 미식 평가단이자 'AIAL 식사 배틀'의 AI 심사위원입니다.
 각 참가자가 제출한 {slot_name} 식사 사진의 제목(메뉴명)과 코멘트를 참고하여(없거나 비어있을 수도 있음) 전문적이고 감각적인 미식 총평과 맛 점수를 부여합니다.
 
@@ -263,7 +279,8 @@ def evaluate_single_meal(m, slot_name):
         except Exception as e:
             print(f"[Warn] Parsing error for {member}: {e}", flush=True)
 
-    # 3순위: 최종 Fallback 휴리스틱 평가
+    # 4순위: 최종 Fallback 휴리스틱 평가
+    print(f"  [Tier 4 Fallback] All LLM models failed. Using heuristic fallback for {member}...", flush=True)
     fallback_menu = menu_name if menu_name else "정갈하고 든든한 한 끼"
     fallback_score = random.randint(60, 85)
     fallback_review = (

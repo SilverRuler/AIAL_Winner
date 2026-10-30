@@ -95,16 +95,22 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   const memberInfo = getMemberInfo(meal.member);
   const comments = meal.comments || [];
 
-  const formattedMealDate = React.useMemo(() => {
-    if (!meal?.date) return '';
-    const [y, m, d] = meal.date.split('-').map(Number);
-    const dateObj = new Date(y, m - 1, d);
-    const days = ['일', '월', '화', '수', '목', '금', '토'];
-    const dayName = days[dateObj.getDay()] || '';
-    const padM = String(m).padStart(2, '0');
-    const padD = String(d).padStart(2, '0');
-    return `${y}.${padM}.${padD}. (${dayName})`;
-  }, [meal?.date]);
+  // 날짜 및 요일 포맷 (예: 2026.10.31. (토))
+  const formatMealDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      const dateObj = new Date(y, m - 1, d);
+      const days = ['일', '월', '화', '수', '목', '금', '토'];
+      const dayName = days[dateObj.getDay()] || '';
+      const padM = String(m).padStart(2, '0');
+      const padD = String(d).padStart(2, '0');
+      return `${y}.${padM}.${padD}. (${dayName})`;
+    } catch {
+      return dateStr || '';
+    }
+  };
+  const formattedMealDate = formatMealDate(meal.date);
 
   const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();

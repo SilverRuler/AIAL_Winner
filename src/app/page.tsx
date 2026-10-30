@@ -1095,13 +1095,6 @@ export default function Home() {
         onSuccess={handleAdminLoginSuccess}
       />
 
-      <ImageViewerModal
-        isOpen={!!viewerImage}
-        onClose={() => setViewerImage(null)}
-        imageUrl={viewerImage?.url || null}
-        title={viewerImage?.title}
-      />
-
       <BestWinnerModal
         isOpen={isBestWinnerOpen}
         onClose={() => setIsBestWinnerOpen(false)}
@@ -1131,6 +1124,14 @@ export default function Home() {
         initialComment={adminTargetMeal?.comment || ''}
         initialMember={adminTargetMeal?.member || ''}
         onConfirm={handleAdminConfirm}
+      />
+
+      {/* 이미지 확대 뷰어 모달: 상세 모달 등 모든 모달 상단에 노출되도록 최하단에 배치 */}
+      <ImageViewerModal
+        isOpen={!!viewerImage}
+        onClose={() => setViewerImage(null)}
+        imageUrl={viewerImage?.url || null}
+        title={viewerImage?.title}
       />
     </div>
   );

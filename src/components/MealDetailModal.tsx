@@ -95,6 +95,17 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   const memberInfo = getMemberInfo(meal.member);
   const comments = meal.comments || [];
 
+  const formattedMealDate = React.useMemo(() => {
+    if (!meal?.date) return '';
+    const [y, m, d] = meal.date.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    const dayName = days[dateObj.getDay()] || '';
+    const padM = String(m).padStart(2, '0');
+    const padD = String(d).padStart(2, '0');
+    return `${y}.${padM}.${padD}. (${dayName})`;
+  }, [meal?.date]);
+
   const handlePostComment = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -218,9 +229,9 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 )}
               </div>
               <div className="flex items-center space-x-2 text-[11px] text-slate-400 mt-0.5">
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1 font-medium">
                   <Calendar className="w-3 h-3 text-slate-500" />
-                  {meal.date} ({meal.slot})
+                  {formattedMealDate} · {meal.slot}
                 </span>
                 {meal.time && (
                   <span className="flex items-center gap-1">

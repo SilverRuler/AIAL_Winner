@@ -176,6 +176,22 @@ export default function Home() {
     setSelectedDate(`${newY}-${newM}-${newD}`);
   };
 
+  // 선택된 날짜와 요일 포맷 (예: "2026.10.31. 토")
+  const selectedDateFormatted = useMemo(() => {
+    if (!selectedDate) return { fullText: '', datePart: '', dayName: '' };
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    const dayName = days[dateObj.getDay()] || '';
+    const padM = String(m).padStart(2, '0');
+    const padD = String(d).padStart(2, '0');
+    return {
+      fullText: `${y}.${padM}.${padD}. ${dayName}`,
+      datePart: `${y}.${padM}.${padD}.`,
+      dayName,
+    };
+  }, [selectedDate]);
+
   // 관리자 로그인/로그아웃
   const handleAdminLoginSuccess = () => {
     setIsAdmin(true);
@@ -645,7 +661,7 @@ export default function Home() {
             {/* 달력 선택 그룹 */}
             <div
               onClick={handleOpenCalendar}
-              className="flex items-center space-x-1.5 bg-slate-950 border border-slate-700 hover:border-amber-500 rounded-xl px-2.5 sm:px-3 py-1.5 transition-colors cursor-pointer shrink-0"
+              className="relative flex items-center space-x-1.5 bg-slate-950 border border-slate-700 hover:border-amber-500 rounded-xl px-2.5 sm:px-3 py-1.5 transition-colors cursor-pointer shrink-0 group select-none"
               title="클릭하여 달력에서 날짜 선택"
             >
               <button
@@ -654,11 +670,27 @@ export default function Home() {
                   e.stopPropagation();
                   handleOpenCalendar();
                 }}
-                className="p-0.5 text-amber-400 hover:text-amber-300 transition-colors"
+                className="p-0.5 text-amber-400 group-hover:text-amber-300 transition-colors shrink-0"
               >
                 <Calendar className="w-4 h-4" />
               </button>
 
+              <div className="flex items-center space-x-1 text-xs sm:text-sm font-bold text-white tracking-tight">
+                <span>{selectedDateFormatted.datePart}</span>
+                <span
+                  className={
+                    selectedDateFormatted.dayName === '토'
+                      ? 'text-blue-400 font-extrabold'
+                      : selectedDateFormatted.dayName === '일'
+                      ? 'text-rose-400 font-extrabold'
+                      : 'text-amber-300 font-extrabold'
+                  }
+                >
+                  {selectedDateFormatted.dayName}
+                </span>
+              </div>
+
+              {/* 투명한 네이티브 date input (클릭 시 브라우저 달력 팝업 호출) */}
               <input
                 ref={dateInputRef}
                 type="date"
@@ -666,11 +698,8 @@ export default function Home() {
                 max="2035-12-31"
                 value={selectedDate}
                 onChange={(e) => handleDateChange(e.target.value)}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleOpenCalendar();
-                }}
-                className="bg-transparent text-xs sm:text-sm font-bold text-white focus:outline-none cursor-pointer w-[125px] sm:w-[135px]"
+                className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10 [color-scheme:dark]"
+                title="클릭하여 달력에서 날짜 선택"
               />
 
               <button
@@ -679,7 +708,7 @@ export default function Home() {
                   e.stopPropagation();
                   setSelectedDate(getKSTNow().date);
                 }}
-                className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-semibold transition-colors shrink-0"
+                className="relative z-20 px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-[11px] font-semibold transition-colors shrink-0 cursor-pointer"
               >
                 오늘
               </button>

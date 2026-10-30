@@ -48,11 +48,15 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
               <span className="text-[11px] text-slate-400">2026-10-30</span>
             </div>
 
-            <div className="space-y-2 pt-1 text-slate-200 leading-relaxed font-medium">
+            <div className="space-y-2.5 pt-1 text-slate-200 leading-relaxed font-medium">
               <p className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                평가의 신뢰성을 위해 저녁 평가부터 모델을 교체하였습니다.
+                평가의 신뢰성을 위해 당일 저녁 평가부터 모델을 교체하였습니다.
               </p>
+              <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] sm:text-xs text-slate-300">
+                <p><span className="text-amber-400 font-bold">모델 이름 :</span> NVIDIA NIM Vision 모델 (mistralai/mistral-large-4-1t-a52b)</p>
+                <p><span className="text-amber-400 font-bold">모델 스펙 :</span> 1T(1조 파라미터) 초대형 모델 + CoT(생각의 사슬) 추론</p>
+              </div>
               <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                 이전의 게시글도 재심사 하였습니다(이전 게시글은 위너 변동X)
@@ -72,7 +76,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
             <div>
               <h4 className="font-bold text-white text-xs sm:text-sm">신규 AI 비전 모델 적용 안내</h4>
               <p className="text-slate-400 text-xs mt-0.5 leading-relaxed">
-                출품된 식사 사진을 실제 시각적으로 직접 판독(국물 색, 재료 상태, 플레이팅 등)하여 보다 공정하고 엄격한 미식 평가 점수를 부여합니다(각 사진당 평가 <span className="text-red-400 font-bold">4~5분</span> 이상 소요). 비식사 사진(셀카 등)은 자동으로 최하점 처리됩니다.
+                출품된 식사 사진을 실제 시각적으로 직접 판독(국물 색, 재료 상태, 플레이팅 등)하여 보다 공정하고 엄격한 미식 평가 점수를 부여합니다(각 사진당 평가 평균 <span className="text-red-400 font-bold">4~5분</span> 이상 소요). 비식사 사진(셀카 등)은 자동으로 최하점 처리됩니다.
               </p>
             </div>
           </div>

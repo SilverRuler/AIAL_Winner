@@ -13,6 +13,8 @@ export interface MealComment {
   author: string;
   content: string;
   createdAt: number;
+  ip?: string; // 몽고디비 원본 저장용 전체 IP
+  maskedIp?: string; // 화면 노출용 마스킹 IP (예: 211.123.X.X)
 }
 
 export interface MealEntry {

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { MealEntry, MealComment, Member } from '@/types/meal';
 import { MEMBERS, getMemberInfo } from '@/constants/members';
+import { maskIp } from '@/lib/ip';
 
 interface MealDetailModalProps {
   isOpen: boolean;
@@ -459,6 +460,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 comments.map((cmt) => {
                   const cmtMember = MEMBERS.find((m) => m.name === cmt.author);
                   const isDeleting = deletingCommentId === cmt.id;
+                  const displayIp = cmt.maskedIp || (cmt.ip ? maskIp(cmt.ip) : '');
 
                   return (
                     <div
@@ -466,7 +468,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                       className="p-3 rounded-2xl bg-slate-900/60 border border-slate-800/80 flex items-start justify-between gap-2.5 group hover:border-slate-700 transition-colors"
                     >
                       <div className="space-y-1 min-w-0 flex-1">
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center space-x-1.5 flex-wrap">
                           {cmtMember ? (
                             <span
                               className={`inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-black border shadow-sm ${cmtMember.avatarBg} ${cmtMember.borderColor}`}
@@ -478,7 +480,12 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                               {cmt.author}
                             </span>
                           )}
-                          <span className="text-[10px] text-slate-500 font-mono">
+                          {displayIp && (
+                            <span className="text-[11px] text-slate-400 font-mono font-normal">
+                              ({displayIp})
+                            </span>
+                          )}
+                          <span className="text-[10px] text-slate-500 font-mono pl-0.5">
                             {formatCommentTime(cmt.createdAt)}
                           </span>
                         </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MealEntry } from '@/types/meal';
 import { checkCanRegisterMeal, getKSTNow } from '@/constants/members';
+import { maskIp } from '@/lib/ip';
 
 const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
 const ADMIN_PW = process.env.ADMIN_PW || 'bbb';
@@ -38,6 +39,15 @@ export async function GET(request: NextRequest) {
       ...m,
       id: m.id || m._id.toString(),
       _id: undefined,
+      comments: Array.isArray(m.comments)
+        ? m.comments.map((c: any) => ({
+            id: c.id,
+            author: c.author,
+            content: c.content,
+            createdAt: c.createdAt,
+            maskedIp: c.maskedIp || (c.ip ? maskIp(c.ip) : undefined),
+          }))
+        : [],
     }));
 
     return NextResponse.json(

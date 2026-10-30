@@ -68,7 +68,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
             <div>
               <h4 className="font-bold text-white text-xs sm:text-sm">신규 AI 비전 모델 적용 안내</h4>
               <p className="text-slate-400 text-xs mt-0.5 leading-relaxed">
-                출품된 식사 사진을 실제 시각적으로 직접 판독(국물 색, 재료 상태, 플레이팅 등)하여 보다 공정하고 엄격한 미식 평가 점수를 부여합니다(각 사진당 평가 <span className="text-red-400 font-bold">3~4분</span> 소요). 비식사 사진(셀카 등)은 자동으로 최하점 처리됩니다.
+                출품된 식사 사진을 실제 시각적으로 직접 판독(국물 색, 재료 상태, 플레이팅 등)하여 보다 공정하고 엄격한 미식 평가 점수를 부여합니다(각 사진당 평가 <span className="text-red-400 font-bold">4~5분</span> 이상 소요). 비식사 사진(셀카 등)은 자동으로 최하점 처리됩니다.
               </p>
             </div>
           </div>

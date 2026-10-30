@@ -51,7 +51,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
             <div className="space-y-2.5 pt-1 text-slate-200 leading-relaxed font-medium">
               <p className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                평가의 신뢰성을 위해 당일 저녁 평가부터 모델을 교체하였습니다.
+                평가의 신뢰성을 위해 당일 저녁부터 평가 모델을 교체하였습니다.
               </p>
               <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] sm:text-xs text-slate-300">
                 <p><span className="text-amber-400 font-bold">모델 이름 :</span> NVIDIA NIM Vision 모델 (mistralai/mistral-large-4-1t-a52b)</p>

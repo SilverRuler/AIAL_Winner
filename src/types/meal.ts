@@ -33,6 +33,7 @@ export interface MealEntry {
   createdAt: number;
   updatedAt?: number;
   comments?: MealComment[]; // 게시글 댓글 목록
+  ip?: string; // 몽고디비 내부 기록용 작성자 원본 IP (UI 비공개)
 }
 
 export interface MealSlotSummary {

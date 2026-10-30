@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MealEntry } from '@/types/meal';
 import { checkCanRegisterMeal, getKSTNow } from '@/constants/members';
-import { maskIp } from '@/lib/ip';
+import { getClientIp, maskIp } from '@/lib/ip';
 
 const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
 const ADMIN_PW = process.env.ADMIN_PW || 'bbb';
@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
       ...m,
       id: m.id || m._id.toString(),
       _id: undefined,
+      ip: undefined, // UI 노출 방지 (몽고디비 내부에만 기록)
       comments: Array.isArray(m.comments)
         ? m.comments.map((c: any) => ({
             id: c.id,
@@ -131,6 +132,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 클라이언트 IP 추출 (몽고디비 내부 기록용, UI 비공개)
+    const clientIp = getClientIp(request);
+
     const newEntry: MealEntry = {
       id: mealId,
       date: mealDate,
@@ -143,6 +147,7 @@ export async function POST(request: NextRequest) {
       isWinner: false,
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      ip: clientIp, // 몽고디비 원본 전체 IP 기록
     };
 
     const db = await getDatabase();
@@ -169,16 +174,27 @@ export async function POST(request: NextRequest) {
         _id: newEntry.id as any,
       });
 
+      // 클라이언트 응답 시에는 IP를 제거하여 브라우저에 노출되지 않도록 처리
+      const responseMeal = {
+        ...newEntry,
+        ip: undefined,
+      };
+
       return NextResponse.json({
         success: true,
-        meal: newEntry,
+        meal: responseMeal,
         storageMode: 'mongodb',
       });
     }
 
+    const responseMeal = {
+      ...newEntry,
+      ip: undefined,
+    };
+
     return NextResponse.json({
       success: true,
-      meal: newEntry,
+      meal: responseMeal,
       storageMode: 'client_local',
       notice: 'MongoDB 연결 대기 중: 브라우저 로컬 저장소에 저장되었습니다.',
     });

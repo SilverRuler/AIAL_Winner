@@ -53,12 +53,12 @@ Vercel 대시보드 (`Settings -> Environment Variables`)에 아래 값을 등�
 
 | 변수명 | 설명 |
 |---|---|
-| `MONGODB_URI` | 몽고디비 연결 문자열 (`mongodb+srv://...`) |
+| `MONGODB_URI` | 몽고디비 연결 문자열 (`mongodb+srv://ghdelqtlr_db_user`) |
 | `MONGODB_DB_NAME` | 데이터베이스 이름 (`aial_winner`) |
 | `ADMIN_ID` | 관리자 아이디 |
 | `ADMIN_PW` | 관리자 비밀번호 |
-| `LLM_API_URL` | sr-combo LLM 프록시 주소 |
-| `LLM_MODEL` | LLM 모델명 (`sr-combo`) |
+| `LLM_API_URL` | NIM Provider |
+| `LLM_MODEL` | `mistralai/mistral-large-4-1t-a52b` |
 | `LLM_API_KEY` | API 키 |
 
 > [!IMPORTANT]

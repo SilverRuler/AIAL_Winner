@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X, Bell, Sparkles, ShieldCheck, Info } from 'lucide-react';
+import { X, Bell, Sparkles, ShieldCheck, Info, Award } from 'lucide-react';
 
 interface NoticeModalProps {
   isOpen: boolean;
@@ -56,6 +56,10 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
               <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
                 이전의 게시글도 재심사 하였습니다(이전 게시글은 위너 변동X)
+              </p>
+              <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
+                <Award className="w-4 h-4 text-amber-400 shrink-0" />
+                각 게시글마다 0점부터 100점까지 다채롭고 객관적인 평가 기준을 도입했습니다.
               </p>
             </div>
           </div>

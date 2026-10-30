@@ -460,7 +460,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 comments.map((cmt) => {
                   const cmtMember = MEMBERS.find((m) => m.name === cmt.author);
                   const isDeleting = deletingCommentId === cmt.id;
-                  const displayIp = cmt.maskedIp || (cmt.ip ? maskIp(cmt.ip) : '');
+                  const displayIp = maskIp(cmt.maskedIp || cmt.ip);
 
                   return (
                     <div

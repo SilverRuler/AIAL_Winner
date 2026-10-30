@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 클라이언트 IP 추출 및 마스킹 (예: 211.123.X.X)
+    // 클라이언트 IP 추출 및 마스킹 (예: 211.123)
     const clientIp = getClientIp(request);
     const maskedIp = maskIp(clientIp);
 

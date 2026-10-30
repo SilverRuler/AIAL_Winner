@@ -23,8 +23,8 @@ export function getClientIp(request: NextRequest): string {
 }
 
 /**
- * 디시인사이드 스타일 IP 마스킹: 뒤 2개의 옥텟 가리기
- * 예시: 211.123.123.123 -> 211.123.X.X
+ * 디시인사이드 스타일 IP 마스킹: 앞 2개 옥텟만 표시
+ * 예시: 211.123.123.123 -> 211.123
  */
 export function maskIp(ip?: string | null): string {
   if (!ip) return '';
@@ -35,11 +35,11 @@ export function maskIp(ip?: string | null): string {
     cleanIp = cleanIp.substring(7);
   }
 
-  // IPv4 포맷: a.b.c.d
+  // IPv4 포맷: a.b.c.d (또는 기존 마스킹 a.b.X.X)
   if (cleanIp.includes('.')) {
     const parts = cleanIp.split('.');
     if (parts.length >= 2) {
-      return `${parts[0]}.${parts[1]}.X.X`;
+      return `${parts[0]}.${parts[1]}`;
     }
   }
 
@@ -47,7 +47,7 @@ export function maskIp(ip?: string | null): string {
   if (cleanIp.includes(':')) {
     const parts = cleanIp.split(':');
     if (parts.length >= 2) {
-      return `${parts[0]}:${parts[1]}:X:X`;
+      return `${parts[0]}:${parts[1]}`;
     }
   }
 

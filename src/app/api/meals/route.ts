@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
             author: c.author,
             content: c.content,
             createdAt: c.createdAt,
-            maskedIp: c.maskedIp || (c.ip ? maskIp(c.ip) : undefined),
+            maskedIp: maskIp(c.maskedIp || c.ip) || undefined,
           }))
         : [],
     }));

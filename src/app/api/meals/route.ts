@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MealEntry } from '@/types/meal';
-import { checkCanRegisterMeal, getKSTNow } from '@/constants/members';
+import { MEMBERS, checkCanRegisterMeal, getKSTNow } from '@/constants/members';
 import { getClientIp, maskIp } from '@/lib/ip';
 
 const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
@@ -41,13 +41,16 @@ export async function GET(request: NextRequest) {
       _id: undefined,
       ip: undefined, // UI 노출 방지 (몽고디비 내부에만 기록)
       comments: Array.isArray(m.comments)
-        ? m.comments.map((c: any) => ({
-            id: c.id,
-            author: c.author,
-            content: c.content,
-            createdAt: c.createdAt,
-            maskedIp: maskIp(c.maskedIp || c.ip) || undefined,
-          }))
+        ? m.comments.map((c: any) => {
+            const isMember = MEMBERS.some((mem) => mem.name === c.author);
+            return {
+              id: c.id,
+              author: c.author,
+              content: c.content,
+              createdAt: c.createdAt,
+              maskedIp: isMember ? undefined : (maskIp(c.maskedIp || c.ip) || undefined),
+            };
+          })
         : [],
     }));
 

@@ -460,7 +460,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 comments.map((cmt) => {
                   const cmtMember = MEMBERS.find((m) => m.name === cmt.author);
                   const isDeleting = deletingCommentId === cmt.id;
-                  const displayIp = maskIp(cmt.maskedIp || cmt.ip);
+                  const displayIp = !cmtMember ? maskIp(cmt.maskedIp || cmt.ip) : '';
 
                   return (
                     <div
@@ -476,14 +476,16 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                               {cmt.author}
                             </span>
                           ) : (
-                            <span className="font-extrabold text-white text-xs">
-                              {cmt.author}
-                            </span>
-                          )}
-                          {displayIp && (
-                            <span className="text-[11px] text-slate-400 font-mono font-normal">
-                              ({displayIp})
-                            </span>
+                            <>
+                              <span className="font-extrabold text-white text-xs">
+                                {cmt.author}
+                              </span>
+                              {displayIp && (
+                                <span className="text-[11px] text-slate-400 font-mono font-normal">
+                                  ({displayIp})
+                                </span>
+                              )}
+                            </>
                           )}
                           <span className="text-[10px] text-slate-500 font-mono pl-0.5">
                             {formatCommentTime(cmt.createdAt)}

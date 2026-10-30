@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MealComment } from '@/types/meal';
 import { getClientIp, maskIp } from '@/lib/ip';
+import { MEMBERS } from '@/constants/members';
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,9 +33,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 클라이언트 IP 추출 및 마스킹 (예: 211.123)
+    // 클라이언트 IP 추출 (12인 멤버 칩 선택 시 화면 노출용 maskedIp는 생략)
     const clientIp = getClientIp(request);
-    const maskedIp = maskIp(clientIp);
+    const isMember = MEMBERS.some((m) => m.name === trimmedAuthor);
+    const maskedIp = isMember ? undefined : maskIp(clientIp);
 
     const newComment: MealComment = {
       id: `cmt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
@@ -42,7 +44,7 @@ export async function POST(request: NextRequest) {
       content: trimmedContent,
       createdAt: Date.now(),
       ip: clientIp, // 몽고디비 원본 full IP 기록
-      maskedIp: maskedIp, // 화면 표시용 마스킹 IP
+      maskedIp: maskedIp, // 유동닉일 때만 (211.123) 마스킹 IP 설정
     };
 
     const db = await getDatabase();

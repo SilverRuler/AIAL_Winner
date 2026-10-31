@@ -136,10 +136,23 @@ export async function DELETE(request: NextRequest) {
 
       // 2) 관리자가 아닐 때 접속 기기(IP) 일치 여부 확인
       if (!isAdmin) {
+        // IP 컬럼 적용 이전에 등록된 구형 댓글인 경우: 작성 기기 식별이 불가하므로 오직 관리자만 삭제 가능
+        if (!targetComment.ip || !targetComment.ip.trim()) {
+          return NextResponse.json(
+            {
+              success: false,
+              requireAdmin: true,
+              message:
+                'IP 기록 기능 적용 전에 등록된 댓글은 관리자만 삭제할 수 있습니다.',
+            },
+            { status: 403 }
+          );
+        }
+
         const commentIpNorm = normalizeIp(targetComment.ip);
         const clientIpNorm = normalizeIp(clientIp);
 
-        // 댓글 작성 당시 IP가 없거나, 현재 접속한 클라이언트 IP와 일치하지 않는 경우
+        // 현재 접속한 클라이언트 IP와 댓글 작성 당시 IP가 불일치하는 경우
         if (!commentIpNorm || commentIpNorm !== clientIpNorm) {
           return NextResponse.json(
             {

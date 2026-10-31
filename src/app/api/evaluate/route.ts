@@ -230,6 +230,16 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * 평가 총평 끝에 사용된 평가 모델명을 '(평가모델 : <모델명>)' 형태로 추가
+ */
+function appendModelTag(review: string, modelName: string): string {
+  if (!review) return `(평가모델 : ${modelName})`;
+  // 기존에 중복 부착 방지 (모델이 임의로 평가모델 괄호를 출력했거나 이전 태그가 남아있는 경우 제거)
+  const cleaned = review.replace(/\s*\((?:구\s*)?평가모델\s*:[^)]*\)\s*$/gi, '').trim();
+  return `${cleaned} (평가모델 : ${modelName})`;
+}
+
+/**
  * NVIDIA NIM Vision API 단일 호출 헬퍼
  */
 async function callNimVision(
@@ -365,14 +375,20 @@ async function evaluateSingleMeal(
     // 1순위: NIM Primary 모델 시도
     const tier1Res = await callNimVision(NIM_MODEL, nimSystemPrompt, contentList, member);
     if (tier1Res) {
-      return tier1Res;
+      return {
+        score: tier1Res.score,
+        review: appendModelTag(tier1Res.review, NIM_MODEL),
+      };
     }
 
     // 2순위: NIM Fallback 모델 시도
     console.warn(`[Single Meal Eval] Primary NIM (${NIM_MODEL}) failed for ${member}. Trying secondary NIM fallback (${NIM_FALLBACK_MODEL})...`);
     const tier2Res = await callNimVision(NIM_FALLBACK_MODEL, nimSystemPrompt, contentList, member);
     if (tier2Res) {
-      return tier2Res;
+      return {
+        score: tier2Res.score,
+        review: appendModelTag(tier2Res.review, NIM_FALLBACK_MODEL),
+      };
     }
   }
 
@@ -449,7 +465,7 @@ async function evaluateSingleMeal(
         if (typeof evalData.score === 'number' && typeof evalData.review === 'string') {
           return {
             score: Math.max(0, Math.min(100, Math.round(evalData.score))),
-            review: evalData.review.trim(),
+            review: appendModelTag(evalData.review.trim(), LLM_MODEL),
           };
         }
       }
@@ -463,6 +479,9 @@ async function evaluateSingleMeal(
   const fallbackScore = Math.floor(Math.random() * 26) + 60;
   return {
     score: fallbackScore,
-    review: `이 식사는 ${fallbackMenu}인 것 같으며, 정성이 담긴 비주얼과 식욕을 돋우는 조화가 돋보이는 식사입니다. 음식의 구성과 차림새를 바탕으로 ${fallbackScore}점을 부여했습니다.`,
+    review: appendModelTag(
+      `이 식사는 ${fallbackMenu}인 것 같으며, 정성이 담긴 비주얼과 식욕을 돋우는 조화가 돋보이는 식사입니다. 음식의 구성과 차림새를 바탕으로 ${fallbackScore}점을 부여했습니다.`,
+      'heuristic-rule'
+    ),
   };
 }

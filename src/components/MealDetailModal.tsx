@@ -22,6 +22,7 @@ interface MealDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   meal: MealEntry | null;
+  isAdmin?: boolean;
   onImageClick: (url: string, title: string) => void;
   onCommentAdded: (mealId: string, newComment: MealComment) => void;
   onCommentDeleted: (mealId: string, commentId: string) => void;
@@ -31,6 +32,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   isOpen,
   onClose,
   meal,
+  isAdmin = false,
   onImageClick,
   onCommentAdded,
   onCommentDeleted,
@@ -162,18 +164,46 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   };
 
   const handleDeleteComment = async (commentId: string) => {
+    if (!meal) return;
     if (!confirm('이 댓글을 삭제하시겠습니까?')) return;
 
     try {
       setDeletingCommentId(commentId);
-      const resp = await fetch(
-        `/api/comments?mealId=${encodeURIComponent(meal.id)}&commentId=${encodeURIComponent(
-          commentId
-        )}`,
-        { method: 'DELETE' }
-      );
 
-      const data = await resp.json();
+      const isUserAdmin =
+        isAdmin ||
+        (typeof window !== 'undefined' && sessionStorage.getItem('aial_is_admin') === 'true');
+
+      let url = `/api/comments?mealId=${encodeURIComponent(meal.id)}&commentId=${encodeURIComponent(
+        commentId
+      )}`;
+
+      // 관리자 로그인 상태면 관리자 자격 증명 동봉
+      if (isUserAdmin) {
+        url += `&adminId=aaa&adminPw=bbb`;
+      }
+
+      let resp = await fetch(url, { method: 'DELETE' });
+      let data = await resp.json();
+
+      // 본인 작성 기기(IP)가 아닌 경우 관리자 패스워드 입력 안내
+      if (!resp.ok && resp.status === 403 && data.requireAdmin && !isUserAdmin) {
+        const inputPw = prompt(
+          `${data.message}\n\n관리자이신 경우 비밀번호를 입력하시면 즉시 삭제할 수 있습니다:`
+        );
+        if (inputPw && inputPw.trim()) {
+          const adminUrl = `/api/comments?mealId=${encodeURIComponent(
+            meal.id
+          )}&commentId=${encodeURIComponent(
+            commentId
+          )}&adminId=aaa&adminPw=${encodeURIComponent(inputPw.trim())}`;
+          resp = await fetch(adminUrl, { method: 'DELETE' });
+          data = await resp.json();
+        } else {
+          return; // 취소 시 종료
+        }
+      }
+
       if (!resp.ok || !data.success) {
         throw new Error(data.message || '댓글 삭제 실패');
       }

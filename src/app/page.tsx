@@ -1139,6 +1139,7 @@ export default function Home() {
         isOpen={!!selectedDetailMeal}
         onClose={() => setSelectedDetailMeal(null)}
         meal={selectedDetailMeal}
+        isAdmin={isAdmin}
         onImageClick={(url, title) => setViewerImage({ url, title })}
         onCommentAdded={handleCommentAdded}
         onCommentDeleted={handleCommentDeleted}

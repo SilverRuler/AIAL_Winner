@@ -23,17 +23,24 @@ export function getClientIp(request: NextRequest): string {
 }
 
 /**
+ * IP 문자열 정규화 (IPv6 매핑 접두사 ::ffff: 제거 및 공백 정리)
+ */
+export function normalizeIp(ip?: string | null): string {
+  if (!ip) return '';
+  let clean = ip.trim().toLowerCase();
+  if (clean.startsWith('::ffff:')) {
+    clean = clean.substring(7);
+  }
+  return clean;
+}
+
+/**
  * 디시인사이드 스타일 IP 마스킹: 앞 2개 옥텟만 표시
  * 예시: 211.123.123.123 -> 211.123
  */
 export function maskIp(ip?: string | null): string {
   if (!ip) return '';
-  let cleanIp = ip.trim();
-
-  // IPv6 매핑 IPv4 (::ffff:211.123.123.123) 접두사 제거
-  if (cleanIp.startsWith('::ffff:')) {
-    cleanIp = cleanIp.substring(7);
-  }
+  const cleanIp = normalizeIp(ip);
 
   // IPv4 포맷: a.b.c.d (또는 기존 마스킹 a.b.X.X)
   if (cleanIp.includes('.')) {

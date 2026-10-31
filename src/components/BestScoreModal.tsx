@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BestScoreInfo, MealEntry, RankedScoreMeal } from '@/types/meal';
-import { getMemberInfo } from '@/constants/members';
+import { getMemberInfo, isLegacyEvaluation } from '@/constants/members';
 
 interface BestScoreModalProps {
   isOpen: boolean;
@@ -276,7 +276,7 @@ export const BestScoreModal: React.FC<BestScoreModalProps> = ({
                             <span>{m.rankText}</span>
                             {m.isWinner && (
                               <span className="px-1.5 py-0.2 rounded bg-black/20 text-[10px] font-bold">
-                                👑 WIN
+                                {isLegacyEvaluation(m.date, m.slot) ? '👑 (구) WIN' : '👑 WIN'}
                               </span>
                             )}
                           </div>

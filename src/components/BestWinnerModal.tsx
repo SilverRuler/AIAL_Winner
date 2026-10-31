@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BestWinnerInfo, MealEntry } from '@/types/meal';
-import { getMemberInfo } from '@/constants/members';
+import { getMemberInfo, getWinnerHeaderText } from '@/constants/members';
 
 interface BestWinnerModalProps {
   isOpen: boolean;
@@ -245,7 +245,7 @@ export const BestWinnerModal: React.FC<BestWinnerModalProps> = ({
                         <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-3 py-1 flex items-center justify-between text-slate-950 font-black text-xs">
                           <div className="flex items-center space-x-1">
                             <Crown className="w-3.5 h-3.5 text-slate-950 fill-slate-950" />
-                            <span>AI 미식 WINNER</span>
+                            <span>{getWinnerHeaderText(m.date, m.slot)}</span>
                           </div>
                           {m.score !== undefined && (
                             <span className="bg-black/20 px-2 py-0.5 rounded-full text-[10px]">

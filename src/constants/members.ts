@@ -280,3 +280,25 @@ export function getMemberInfo(name: string): Member {
     borderColor: 'border-slate-600',
   };
 }
+
+/**
+ * 2026-10-30 점심 타임까지의 구형 AI 모델 평가 여부 확인
+ * (2026-10-30 저녁 타임부터 NVIDIA NIM 비전 모델 적용)
+ */
+export function isLegacyEvaluation(date?: string, slot?: MealSlot | string): boolean {
+  if (!date) return false;
+  if (date < '2026-10-30') return true;
+  if (date === '2026-10-30') {
+    return slot !== '저녁';
+  }
+  return false;
+}
+
+/**
+ * AI 우승 배너 헤더 텍스트 반환
+ * - 2026-10-30 점심까지: '(구)AI 심사 WINNER'
+ * - 2026-10-30 저녁부터: 'AI 심사 WINNER'
+ */
+export function getWinnerHeaderText(date?: string, slot?: MealSlot | string): string {
+  return isLegacyEvaluation(date, slot) ? '(구)AI 심사 WINNER' : 'AI 심사 WINNER';
+}

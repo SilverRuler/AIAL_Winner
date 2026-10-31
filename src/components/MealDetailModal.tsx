@@ -15,7 +15,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { MealEntry, MealComment, Member } from '@/types/meal';
-import { MEMBERS, getMemberInfo } from '@/constants/members';
+import { MEMBERS, getMemberInfo, isLegacyEvaluation } from '@/constants/members';
 import { maskIp } from '@/lib/ip';
 
 interface MealDetailModalProps {
@@ -245,7 +245,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 {meal.isWinner && (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black">
                     <Crown className="w-3 h-3 text-amber-400" />
-                    WINNER
+                    {isLegacyEvaluation(meal.date, meal.slot) ? '(구) WINNER' : 'WINNER'}
                   </span>
                 )}
                 {meal.score !== undefined && (

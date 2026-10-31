@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { MealEntry } from '@/types/meal';
-import { getMemberInfo } from '@/constants/members';
+import { getMemberInfo, getWinnerHeaderText } from '@/constants/members';
 import { Crown, Sparkles, MoreVertical, Edit2, Trash2, Award, MessageSquare } from 'lucide-react';
 
 interface MealCardProps {
@@ -38,7 +38,7 @@ export const MealCard: React.FC<MealCardProps> = ({
         <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 px-3 py-1.5 flex items-center justify-between text-slate-950 font-black text-xs shadow-sm rounded-t-2xl">
           <div className="flex items-center space-x-1.5">
             <Crown className="w-4 h-4 text-slate-950 fill-slate-950 animate-bounce" />
-            <span className="tracking-wide">AI 심사 WINNER</span>
+            <span className="tracking-wide">{getWinnerHeaderText(meal.date, meal.slot)}</span>
           </div>
           {meal.score !== undefined && (
             <div className="inline-flex items-center space-x-1 bg-black/20 px-2.5 py-0.5 rounded-full text-slate-950 text-[11px] font-bold">

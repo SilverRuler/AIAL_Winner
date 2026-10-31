@@ -41,16 +41,18 @@ export async function GET(request: NextRequest) {
       _id: undefined,
       ip: undefined, // UI 노출 방지 (몽고디비 내부에만 기록)
       comments: Array.isArray(m.comments)
-        ? m.comments.map((c: any) => {
-            const isMember = MEMBERS.some((mem) => mem.name === c.author);
-            return {
-              id: c.id,
-              author: c.author,
-              content: c.content,
-              createdAt: c.createdAt,
-              maskedIp: isMember ? undefined : (maskIp(c.maskedIp || c.ip) || undefined),
-            };
-          })
+        ? m.comments
+            .filter((c: any) => !c.isDeleted)
+            .map((c: any) => {
+              const isMember = MEMBERS.some((mem) => mem.name === c.author);
+              return {
+                id: c.id,
+                author: c.author,
+                content: c.content,
+                createdAt: c.createdAt,
+                maskedIp: isMember ? undefined : (maskIp(c.maskedIp || c.ip) || undefined),
+              };
+            })
         : [],
     }));
 

@@ -274,7 +274,7 @@ def main():
                 for c in meal.get("comments", []):
                     c_id = c.get("id")
                     c_ts = float(c.get("createdAt", 0))
-                    if c_ts > last_comment_ts and (not c_id or c_id not in seen_comment_ids):
+                    if c_ts > last_comment_ts and not c.get("isDeleted") and (not c_id or c_id not in seen_comment_ids):
                         new_comments.append((c_ts, meal, c))
 
             # Process comments chronologically

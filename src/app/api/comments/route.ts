@@ -97,9 +97,18 @@ export async function DELETE(request: NextRequest) {
 
     const db = await getDatabase();
     if (db) {
+      // 몽고디비 원본 기록 보존을 위해 완전 삭제($pull) 대신 소프트 딜리트(isDeleted: true) 적용
       await db.collection('meals').updateOne(
-        { $or: [{ id: mealId }, { _id: mealId as any }] },
-        { $pull: { comments: { id: commentId } } as any }
+        {
+          $or: [{ id: mealId }, { _id: mealId as any }],
+          'comments.id': commentId,
+        },
+        {
+          $set: {
+            'comments.$.isDeleted': true,
+            'comments.$.deletedAt': Date.now(),
+          },
+        } as any
       );
     }
 

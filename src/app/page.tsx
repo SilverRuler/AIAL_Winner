@@ -18,9 +18,10 @@ import {
   Users,
   Clock,
   Moon,
+  Flame,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { MealEntry, MealSlot, MealComment, BestWinnerInfo } from '@/types/meal';
+import { MealEntry, MealSlot, MealComment, BestWinnerInfo, BestScoreInfo } from '@/types/meal';
 import {
   getCurrentMealSlot,
   MEAL_SLOTS,
@@ -40,6 +41,7 @@ import { AdminAuthModal, AdminActionType } from '@/components/AdminAuthModal';
 import { MemberFilterPopover } from '@/components/MemberFilterPopover';
 import { ScoreFilterPopover, ScoreRange } from '@/components/ScoreFilterPopover';
 import { BestWinnerModal } from '@/components/BestWinnerModal';
+import { BestScoreModal } from '@/components/BestScoreModal';
 import { MealDetailModal } from '@/components/MealDetailModal';
 import { getLocalMeals, saveLocalMeals, calculateMemberWinStats } from '@/lib/storage';
 
@@ -69,6 +71,7 @@ export default function Home() {
   const [isNoticeOpen, setIsNoticeOpen] = useState<boolean>(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState<boolean>(false);
   const [isBestWinnerOpen, setIsBestWinnerOpen] = useState<boolean>(false);
+  const [isBestScoreOpen, setIsBestScoreOpen] = useState<boolean>(false);
   const [viewerImage, setViewerImage] = useState<{ url: string; title: string } | null>(null);
   const [selectedDetailMeal, setSelectedDetailMeal] = useState<MealEntry | null>(null);
 
@@ -428,6 +431,62 @@ export default function Home() {
     };
   }, [meals]);
 
+  // BEST SCORE 계산:
+  // 역대 출품작 중 최고 득점작 1등부터 3등까지 산출 (동등 점수면 공동 1위, 공동 2위 등 동일 순위 처리)
+  const bestScoreData = useMemo<BestScoreInfo | null>(() => {
+    const scoredMeals = meals.filter(
+      (m): m is MealEntry & { score: number } =>
+        typeof m.score === 'number' && !isNaN(m.score) && m.score > 0
+    );
+
+    if (scoredMeals.length === 0) return null;
+
+    // 고유 점수 내림차순 정렬 (동점자 동일 순위 처리를 위한 Dense ranking 기준)
+    const uniqueScores = Array.from(new Set(scoredMeals.map((m) => m.score))).sort(
+      (a, b) => b - a
+    );
+
+    // 최고 득점 1등부터 3등까지의 점수 추출
+    const top3Scores = uniqueScores.slice(0, 3);
+    const tiers: BestScoreInfo['tiers'] = [];
+    const allRankedMeals: BestScoreInfo['allRankedMeals'] = [];
+
+    top3Scores.forEach((score, index) => {
+      const rank = index + 1; // 1, 2, 3
+      const mealsForScore = scoredMeals
+        .filter((m) => m.score === score)
+        .sort((a, b) => getMealTimestamp(b) - getMealTimestamp(a));
+
+      const isTie = mealsForScore.length > 1;
+      const rankText = isTie ? `공동 ${rank}위` : `${rank}위`;
+
+      const rankedMealsForScore = mealsForScore.map((m) => ({
+        ...m,
+        rank,
+        isTie,
+        rankText,
+      }));
+
+      tiers.push({
+        rank,
+        score,
+        isTie,
+        meals: rankedMealsForScore,
+      });
+
+      allRankedMeals.push(...rankedMealsForScore);
+    });
+
+    if (tiers.length === 0) return null;
+
+    return {
+      tiers,
+      allRankedMeals,
+      topScore: tiers[0]?.score || 0,
+      totalRankedMeals: allRankedMeals.length,
+    };
+  }, [meals]);
+
   // AI 맛 평가 심사 진행 (관리자만 실행 가능)
   const handleRunEvaluation = async () => {
     if (!isAdmin) {
@@ -757,6 +816,17 @@ export default function Home() {
             >
               <Trophy className="w-4 h-4 text-amber-400 animate-pulse" />
               <span>BEST WINNER</span>
+            </button>
+
+            {/* BEST SCORE 버튼 */}
+            <button
+              type="button"
+              onClick={() => setIsBestScoreOpen(true)}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-rose-500/20 via-pink-500/20 to-amber-500/20 border border-rose-500/60 hover:border-rose-400 text-rose-300 hover:text-rose-100 transition-all text-xs sm:text-sm font-black shadow-sm hover:shadow-rose-500/20 cursor-pointer shrink-0"
+              title="역대 최고 득점작 1등~3등 보기"
+            >
+              <Flame className="w-4 h-4 text-rose-400 animate-pulse" />
+              <span>BEST SCORE</span>
             </button>
           </div>
 
@@ -1131,6 +1201,17 @@ export default function Home() {
         onImageClick={(url, title) => setViewerImage({ url, title })}
         onMealClick={(meal) => {
           setIsBestWinnerOpen(false);
+          setSelectedDetailMeal(meal);
+        }}
+      />
+
+      <BestScoreModal
+        isOpen={isBestScoreOpen}
+        onClose={() => setIsBestScoreOpen(false)}
+        bestScore={bestScoreData}
+        onImageClick={(url, title) => setViewerImage({ url, title })}
+        onMealClick={(meal) => {
+          setIsBestScoreOpen(false);
           setSelectedDetailMeal(meal);
         }}
       />

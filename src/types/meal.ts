@@ -69,3 +69,23 @@ export interface BestWinnerInfo {
   winningMeals: MealEntry[];
   allMeals: MealEntry[];
 }
+
+export interface RankedScoreMeal extends MealEntry {
+  rank: number;
+  isTie: boolean;
+  rankText: string;
+}
+
+export interface BestScoreTier {
+  rank: number;
+  score: number;
+  isTie: boolean;
+  meals: RankedScoreMeal[];
+}
+
+export interface BestScoreInfo {
+  tiers: BestScoreTier[];
+  allRankedMeals: RankedScoreMeal[];
+  topScore: number;
+  totalRankedMeals: number;
+}

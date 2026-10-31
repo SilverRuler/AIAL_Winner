@@ -186,22 +186,12 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
       let resp = await fetch(url, { method: 'DELETE' });
       let data = await resp.json();
 
-      // 본인 작성 기기(IP)가 아닌 경우 관리자 패스워드 입력 안내
+      // 본인 작성 기기(IP)가 아닌 경우 관리자 로그인 안내
       if (!resp.ok && resp.status === 403 && data.requireAdmin && !isUserAdmin) {
-        const inputPw = prompt(
-          `${data.message}\n\n관리자이신 경우 비밀번호를 입력하시면 즉시 삭제할 수 있습니다:`
+        alert(
+          `${data.message || '본인이 작성한 기기(IP)에서만 삭제할 수 있습니다. (작성 기기 IP 불일치)'}\n관리자이신 경우 로그인을 하시기 바랍니다`
         );
-        if (inputPw && inputPw.trim()) {
-          const adminUrl = `/api/comments?mealId=${encodeURIComponent(
-            meal.id
-          )}&commentId=${encodeURIComponent(
-            commentId
-          )}&adminId=aaa&adminPw=${encodeURIComponent(inputPw.trim())}`;
-          resp = await fetch(adminUrl, { method: 'DELETE' });
-          data = await resp.json();
-        } else {
-          return; // 취소 시 종료
-        }
+        return;
       }
 
       if (!resp.ok || !data.success) {

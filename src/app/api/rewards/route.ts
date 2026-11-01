@@ -1,9 +1,84 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
-import { RewardItem } from '@/types/meal';
+import { RewardItem, OnChainSnapshot } from '@/types/meal';
 
 const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
 const ADMIN_PW = process.env.ADMIN_PW || 'bbb';
+
+/**
+ * 솔라나 RPC를 통해 온체인 트랜잭션 영구 증빙 스냅샷 추출
+ */
+async function fetchSolanaTxSnapshot(txHash: string): Promise<OnChainSnapshot | null> {
+  const rpcs = [
+    'https://api.mainnet-beta.solana.com',
+    'https://solana-mainnet.rpc.extrnode.com',
+    'https://rpc.ankr.com/solana',
+  ];
+
+  for (const rpc of rpcs) {
+    try {
+      const resp = await fetch(rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getTransaction',
+          params: [
+            txHash,
+            { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
+          ],
+        }),
+        signal: AbortSignal.timeout(6000),
+      });
+
+      const data = await resp.json();
+      if (data.result) {
+        const res = data.result;
+        const blockTime = res.blockTime;
+        const dateObj = blockTime ? new Date(blockTime * 1000) : null;
+        const keys = res.transaction?.message?.accountKeys || [];
+        const signer =
+          keys.find((k: any) => k.signer)?.pubkey ||
+          (typeof keys[0] === 'string' ? keys[0] : keys[0]?.pubkey) ||
+          '';
+
+        let recipient = '';
+        const instructions = res.transaction?.message?.instructions || [];
+        for (const inst of instructions) {
+          if (inst.parsed?.type === 'transfer' && inst.parsed?.info?.destination) {
+            recipient = inst.parsed.info.destination;
+            break;
+          }
+        }
+        if (!recipient && keys.length > 1) {
+          recipient = typeof keys[1] === 'string' ? keys[1] : keys[1]?.pubkey || '';
+        }
+
+        return {
+          status: res.meta?.err ? 'Failed' : 'Success',
+          verified: !res.meta?.err,
+          slot: res.slot,
+          blockTime: res.blockTime,
+          blockTimeFormatted: dateObj
+            ? dateObj.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })
+            : '',
+          fee: ((res.meta?.fee || 0) / 1e9).toFixed(6) + ' SOL',
+          feeLamports: res.meta?.fee || 0,
+          sender: signer,
+          recipient: recipient,
+          signature: txHash,
+          capturedAt: Date.now(),
+          capturedAtFormatted: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
+          explorerUrl: `https://solscan.io/tx/${txHash}`,
+        };
+      }
+    } catch (e) {
+      // 다음 RPC로 폴백 시도
+    }
+  }
+  return null;
+}
 
 /**
  * GET /api/rewards
@@ -40,6 +115,7 @@ export async function GET(request: NextRequest) {
       date: doc.date || '',
       memo: doc.memo || '',
       recipientWallet: doc.recipientWallet || '',
+      onChainSnapshot: doc.onChainSnapshot || undefined,
       createdAt: doc.createdAt || Date.now(),
       updatedAt: doc.updatedAt,
     }));
@@ -59,7 +135,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/rewards
- * 관리자 전용: 솔라나 리워드 지급 내역 신규 등록
+ * 관리자 전용: 솔라나 리워드 지급 내역 신규 등록 (온체인 스냅샷 자동 박제)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -105,6 +181,15 @@ export async function POST(request: NextRequest) {
 
     const cleanTxHash = String(txHash).trim();
     const now = Date.now();
+
+    // 온체인 영구 증빙 스냅샷 자동 추출
+    let snapshot: OnChainSnapshot | null = null;
+    try {
+      snapshot = await fetchSolanaTxSnapshot(cleanTxHash);
+    } catch (e) {
+      console.warn('Could not fetch snapshot immediately:', e);
+    }
+
     const newReward: RewardItem = {
       id: `rew_${now}_${Math.random().toString(36).substring(2, 9)}`,
       member: String(member).trim(),
@@ -115,6 +200,7 @@ export async function POST(request: NextRequest) {
       date: date || new Date().toISOString().split('T')[0],
       memo: memo ? String(memo).trim() : '',
       recipientWallet: recipientWallet ? String(recipientWallet).trim() : '',
+      onChainSnapshot: snapshot || undefined,
       createdAt: now,
       updatedAt: now,
     };
@@ -123,7 +209,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '리워드 지급 내역이 성공적으로 등록되었습니다.',
+      message: '리워드 지급 내역 및 온체인 스냅샷이 성공적으로 등록되었습니다.',
       reward: newReward,
     });
   } catch (error: any) {
@@ -188,7 +274,15 @@ export async function PUT(request: NextRequest) {
     if (amount !== undefined) updateFields.amount = parseFloat(String(amount)) || 0;
     if (unit) updateFields.unit = String(unit).trim();
     if (title) updateFields.title = String(title).trim();
-    if (txHash) updateFields.txHash = String(txHash).trim();
+    if (txHash) {
+      const cleanTx = String(txHash).trim();
+      updateFields.txHash = cleanTx;
+      // txHash가 변경된 경우 스냅샷 재추출
+      try {
+        const snap = await fetchSolanaTxSnapshot(cleanTx);
+        if (snap) updateFields.onChainSnapshot = snap;
+      } catch (e) {}
+    }
     if (date) updateFields.date = String(date).trim();
     if (memo !== undefined) updateFields.memo = String(memo).trim();
     if (recipientWallet !== undefined) updateFields.recipientWallet = String(recipientWallet).trim();
@@ -213,6 +307,53 @@ export async function PUT(request: NextRequest) {
     console.error('Failed to update reward:', error);
     return NextResponse.json(
       { success: false, message: '리워드 수정 실패', error: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * PATCH /api/rewards
+ * 온체인 스냅샷 새로고침 및 DB 영구 박제
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { id, txHash } = body;
+
+    if (!id || !txHash) {
+      return NextResponse.json(
+        { success: false, message: 'id와 txHash가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    const snapshot = await fetchSolanaTxSnapshot(txHash.trim());
+    if (!snapshot) {
+      return NextResponse.json(
+        { success: false, message: '솔라나 RPC에서 해당 트랜잭션을 찾지 못했습니다.' },
+        { status: 404 }
+      );
+    }
+
+    const db = await getDatabase();
+    if (!db) {
+      return NextResponse.json({ success: false, message: 'DB 연결 실패' }, { status: 500 });
+    }
+
+    await db.collection('rewards').updateOne(
+      { $or: [{ id }, { _id: id as any }] },
+      { $set: { onChainSnapshot: snapshot, updatedAt: Date.now() } }
+    );
+
+    return NextResponse.json({
+      success: true,
+      message: '온체인 스냅샷이 성공적으로 박제되었습니다.',
+      snapshot,
+    });
+  } catch (error: any) {
+    return NextResponse.json(
+      { success: false, message: '스냅샷 갱신 실패', error: error.message },
       { status: 500 }
     );
   }

@@ -90,6 +90,22 @@ export interface BestScoreInfo {
   totalRankedMeals: number;
 }
 
+export interface OnChainSnapshot {
+  status: string; // 'Success' | 'Failed'
+  verified: boolean;
+  slot: number; // 블록 슬롯 번호
+  blockTime?: number; // 온체인 블록 타임스탬프 (초)
+  blockTimeFormatted?: string; // 포맷된 일시
+  fee?: string; // 수수료 (예: 0.000005 SOL)
+  feeLamports?: number;
+  sender?: string; // 보낸 지갑 주소
+  recipient?: string; // 수신 지갑 주소
+  signature: string; // 트랜잭션 해시
+  capturedAt: number; // 스냅샷 박제 시각
+  capturedAtFormatted?: string;
+  explorerUrl?: string;
+}
+
 export interface RewardItem {
   id: string;
   member: string; // 멤버 이름 (12명 중 1명)
@@ -100,6 +116,7 @@ export interface RewardItem {
   date: string; // 지급일자 (YYYY-MM-DD)
   memo?: string; // 관리자 메모
   recipientWallet?: string; // 수신자 솔라나 지갑 주소 (선택)
+  onChainSnapshot?: OnChainSnapshot; // 만료 대비 온체인 영구 박제 스냅샷
   createdAt: number;
   updatedAt?: number;
 }

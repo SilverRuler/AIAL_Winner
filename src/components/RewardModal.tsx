@@ -52,6 +52,39 @@ export const RewardModal: React.FC<RewardModalProps> = ({
   const [formRecipientWallet, setFormRecipientWallet] = useState<string>('');
   const [formError, setFormError] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [expandedSnapshots, setExpandedSnapshots] = useState<Record<string, boolean>>({});
+  const [isRefreshingSnapshot, setIsRefreshingSnapshot] = useState<Record<string, boolean>>({});
+
+  const toggleSnapshot = (id: string) => {
+    setExpandedSnapshots((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
+  const handleRefreshSnapshot = async (reward: RewardItem) => {
+    setIsRefreshingSnapshot((prev) => ({ ...prev, [reward.id]: true }));
+    try {
+      const res = await fetch('/api/rewards', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: reward.id, txHash: reward.txHash }),
+      });
+      const data = await res.json();
+      if (data.success && data.snapshot) {
+        setRewards((prev) =>
+          prev.map((r) => (r.id === reward.id ? { ...r, onChainSnapshot: data.snapshot } : r))
+        );
+        setExpandedSnapshots((prev) => ({ ...prev, [reward.id]: true }));
+      } else {
+        alert(data.message || '스냅샷 박제 실패');
+      }
+    } catch (e: any) {
+      alert('스냅샷 추출 중 오류가 발생했습니다.');
+    } finally {
+      setIsRefreshingSnapshot((prev) => ({ ...prev, [reward.id]: false }));
+    }
+  };
 
   // 모달 열릴 때 초기 멤버 동기화 및 오늘 날짜 설정
   useEffect(() => {
@@ -90,6 +123,11 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       const data = await res.json();
       if (data.success && Array.isArray(data.rewards)) {
         setRewards(data.rewards);
+        const expMap: Record<string, boolean> = {};
+        data.rewards.forEach((r: RewardItem) => {
+          if (r.onChainSnapshot) expMap[r.id] = true;
+        });
+        setExpandedSnapshots((prev) => ({ ...expMap, ...prev }));
       }
     } catch (err) {
       console.error('Failed to fetch rewards:', err);
@@ -592,6 +630,106 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                       <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
                     </a>
                   </div>
+
+                  {/* 온체인 영구 박제 영수증 영역 (트랜잭션 만료/Truncate 대비 DB 영구 보존) */}
+                  {reward.onChainSnapshot ? (
+                    <div className="rounded-xl bg-gradient-to-r from-emerald-950/40 via-slate-900 to-indigo-950/40 border border-emerald-500/30 text-xs space-y-2 p-3">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                          </span>
+                          <span className="font-bold text-emerald-300">
+                            온체인 영수증 영구 박제 완료
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+                            Slot #{reward.onChainSnapshot.slot}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center space-x-2">
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleRefreshSnapshot(reward)}
+                              disabled={isRefreshingSnapshot[reward.id]}
+                              className="text-[10px] text-slate-400 hover:text-emerald-300 transition-colors cursor-pointer"
+                              title="솔라나 RPC에서 스냅샷 다시 가져오기"
+                            >
+                              {isRefreshingSnapshot[reward.id] ? '동기화 중...' : '새로고침'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => toggleSnapshot(reward.id)}
+                            className="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold cursor-pointer underline flex items-center gap-1"
+                          >
+                            {expandedSnapshots[reward.id] ? '영수증 접기 ▲' : '영수증 상세 보기 ▼'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* 영수증 상세 패널 (펼쳤을 때) */}
+                      {expandedSnapshots[reward.id] && (
+                        <div className="pt-2 border-t border-slate-800/80 space-y-1.5 font-mono text-[11px] text-slate-300">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            <p>
+                              <span className="text-slate-400">승인 상태: </span>
+                              <span className="text-emerald-400 font-bold">✅ {reward.onChainSnapshot.status} (Finalized)</span>
+                            </p>
+                            <p>
+                              <span className="text-slate-400">블록 슬롯: </span>
+                              <span className="text-amber-300">#{reward.onChainSnapshot.slot}</span>
+                            </p>
+                            <p>
+                              <span className="text-slate-400">온체인 승인 일시: </span>
+                              <span>{reward.onChainSnapshot.blockTimeFormatted || '확인됨'}</span>
+                            </p>
+                            <p>
+                              <span className="text-slate-400">트랜잭션 수수료: </span>
+                              <span className="text-slate-200">{reward.onChainSnapshot.fee || '0.000005 SOL'}</span>
+                            </p>
+                          </div>
+
+                          {reward.onChainSnapshot.sender && (
+                            <p className="truncate" title={reward.onChainSnapshot.sender}>
+                              <span className="text-slate-400">보낸 지갑 (Sender): </span>
+                              <span className="text-cyan-300 select-all">{reward.onChainSnapshot.sender}</span>
+                            </p>
+                          )}
+
+                          {reward.onChainSnapshot.recipient && (
+                            <p className="truncate" title={reward.onChainSnapshot.recipient}>
+                              <span className="text-slate-400">수신 지갑 (Recipient): </span>
+                              <span className="text-cyan-300 select-all">{reward.onChainSnapshot.recipient}</span>
+                            </p>
+                          )}
+
+                          <div className="pt-1.5 text-[10px] text-slate-400 border-t border-slate-900 flex items-center gap-1 font-sans">
+                            <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>
+                              블록체인에서 추출하여 MongoDB에 영구 박제된 데이터입니다. 향후 Solscan에서 해당 트랜잭션이 만료(Truncate)되더라도 증빙 효력을 유지합니다.
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    isAdmin && (
+                      <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-400">
+                        <span>온체인 스냅샷이 아직 박제되지 않았습니다.</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRefreshSnapshot(reward)}
+                          disabled={isRefreshingSnapshot[reward.id]}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          <span>{isRefreshingSnapshot[reward.id] ? '스냅샷 추출 중...' : '온체인 스냅샷 박제'}</span>
+                        </button>
+                      </div>
+                    )
+                  )}
 
                   {/* 관리자 수정/삭제 버튼 */}
                   {isAdmin && (

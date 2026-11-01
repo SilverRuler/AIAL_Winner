@@ -123,11 +123,6 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       const data = await res.json();
       if (data.success && Array.isArray(data.rewards)) {
         setRewards(data.rewards);
-        const expMap: Record<string, boolean> = {};
-        data.rewards.forEach((r: RewardItem) => {
-          if (r.onChainSnapshot) expMap[r.id] = true;
-        });
-        setExpandedSnapshots((prev) => ({ ...expMap, ...prev }));
       }
     } catch (err) {
       console.error('Failed to fetch rewards:', err);

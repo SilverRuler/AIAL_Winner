@@ -38,8 +38,8 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
         </div>
 
         {/* 본문 안내 */}
-        <div className="p-5 space-y-4 text-xs sm:text-sm text-slate-200">
-          {/* 공지 카드 */}
+        <div className="p-5 space-y-4 text-xs sm:text-sm text-slate-200 max-h-[75vh] overflow-y-auto">
+          {/* 261030 공지 카드 */}
           <div className="bg-slate-950/80 p-4 rounded-xl border border-blue-500/30 space-y-3">
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30">
@@ -64,6 +64,36 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
               <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
                 <Award className="w-4 h-4 text-amber-400 shrink-0" />
                 각 게시글마다 0점부터 100점까지 다채롭고 객관적인 평가 기준을 도입했습니다.
+              </p>
+            </div>
+          </div>
+
+          {/* 261101 공지 카드 */}
+          <div className="bg-slate-950/80 p-4 rounded-xl border border-indigo-500/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                📌 261101 공지
+              </span>
+              <span className="text-[11px] text-slate-400">2026-11-01</span>
+            </div>
+
+            <div className="space-y-2.5 pt-1 text-slate-200 leading-relaxed font-medium">
+              <p className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
+                출품한 작품은 3가지 폴백 모델에 의해 평가됩니다.
+              </p>
+              <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] sm:text-xs text-slate-300">
+                <p><span className="text-indigo-400 font-bold">1.</span> mistralai/mistral-large-4-1t-a52b</p>
+                <p><span className="text-indigo-400 font-bold">2.</span> meta/muse-glimmer-30b</p>
+                <p><span className="text-indigo-400 font-bold">3.</span> sr-combo</p>
+              </div>
+              <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
+                <Info className="w-4 h-4 text-blue-400 shrink-0" />
+                각 평가의 코멘트 끝에 평가 모델이 기재됩니다.
+              </p>
+              <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                다른 모델이 평가해서 점수가 마음에 안들면 관리자에게 이의신청을 할 수 있습니다.
               </p>
             </div>
           </div>

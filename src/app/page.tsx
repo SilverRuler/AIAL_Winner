@@ -19,6 +19,7 @@ import {
   Clock,
   Moon,
   Flame,
+  Search,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MealEntry, MealSlot, MealComment, BestWinnerInfo, BestScoreInfo } from '@/types/meal';
@@ -42,6 +43,7 @@ import { MemberFilterPopover } from '@/components/MemberFilterPopover';
 import { ScoreFilterPopover, ScoreRange } from '@/components/ScoreFilterPopover';
 import { BestWinnerModal } from '@/components/BestWinnerModal';
 import { BestScoreModal } from '@/components/BestScoreModal';
+import { SearchModal } from '@/components/SearchModal';
 import { MealDetailModal } from '@/components/MealDetailModal';
 import { getLocalMeals, saveLocalMeals, calculateMemberWinStats } from '@/lib/storage';
 
@@ -72,6 +74,9 @@ export default function Home() {
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState<boolean>(false);
   const [isBestWinnerOpen, setIsBestWinnerOpen] = useState<boolean>(false);
   const [isBestScoreOpen, setIsBestScoreOpen] = useState<boolean>(false);
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchFilterScope, setSearchFilterScope] = useState<'current' | 'all'>('all');
   const [viewerImage, setViewerImage] = useState<{ url: string; title: string } | null>(null);
   const [selectedDetailMeal, setSelectedDetailMeal] = useState<MealEntry | null>(null);
 
@@ -326,8 +331,45 @@ export default function Home() {
       });
   }, [currentSlotMeals, selectedScoreFilter]);
 
+  // 검색 필터: 전체 기간 대상 목록 (최신순)
+  const searchAllMeals = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return meals
+      .filter((m) => {
+        if (m.menuName && m.menuName.toLowerCase().includes(q)) return true;
+        if (m.comment && m.comment.toLowerCase().includes(q)) return true;
+        if (m.aiReview && m.aiReview.toLowerCase().includes(q)) return true;
+        if (m.member && m.member.toLowerCase().includes(q)) return true;
+        if (m.comments && Array.isArray(m.comments)) {
+          if (m.comments.some((c) => !c.isDeleted && c.content && c.content.toLowerCase().includes(q))) return true;
+        }
+        return false;
+      })
+      .sort((a, b) => getMealTimestamp(b) - getMealTimestamp(a));
+  }, [meals, searchQuery]);
+
+  // 검색 필터: 선택 날짜/슬롯 대상 목록
+  const searchDateSlotMeals = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return currentSlotMeals.filter((m) => {
+      if (m.menuName && m.menuName.toLowerCase().includes(q)) return true;
+      if (m.comment && m.comment.toLowerCase().includes(q)) return true;
+      if (m.aiReview && m.aiReview.toLowerCase().includes(q)) return true;
+      if (m.member && m.member.toLowerCase().includes(q)) return true;
+      if (m.comments && Array.isArray(m.comments)) {
+        if (m.comments.some((c) => !c.isDeleted && c.content && c.content.toLowerCase().includes(q))) return true;
+      }
+      return false;
+    });
+  }, [currentSlotMeals, searchQuery]);
+
   // 화면에 최종 렌더링할 식사 목록
   const displayedMeals = useMemo(() => {
+    if (searchQuery.trim()) {
+      return searchFilterScope === 'all' ? searchAllMeals : searchDateSlotMeals;
+    }
     if (selectedMemberFilter) {
       return filterScope === 'all' ? memberAllMeals : memberDateSlotMeals;
     }
@@ -336,6 +378,10 @@ export default function Home() {
     }
     return currentSlotMeals;
   }, [
+    searchQuery,
+    searchFilterScope,
+    searchAllMeals,
+    searchDateSlotMeals,
     selectedMemberFilter,
     filterScope,
     memberAllMeals,
@@ -677,8 +723,10 @@ export default function Home() {
   const handleGoHome = useCallback(() => {
     setSelectedMemberFilter(null);
     setSelectedScoreFilter(null);
+    setSearchQuery('');
     setFilterScope('all');
     setScoreFilterScope('all');
+    setSearchFilterScope('all');
     const kst = getKSTNow();
     setSelectedDate(kst.date);
     setSelectedSlot(getCurrentMealSlot());
@@ -789,6 +837,7 @@ export default function Home() {
                 if (member) {
                   setFilterScope('all');
                   setSelectedScoreFilter(null);
+                  setSearchQuery('');
                 }
               }}
               meals={meals}
@@ -802,6 +851,7 @@ export default function Home() {
                 if (scoreRange) {
                   setScoreFilterScope('all');
                   setSelectedMemberFilter(null);
+                  setSearchQuery('');
                 }
               }}
               meals={meals}
@@ -811,7 +861,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setIsBestWinnerOpen(true)}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border border-amber-500/60 hover:border-amber-400 text-amber-300 hover:text-amber-100 transition-all text-xs sm:text-sm font-black shadow-sm hover:shadow-amber-500/20 cursor-pointer shrink-0"
+              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border border-amber-500/60 hover:border-amber-400 text-amber-300 hover:text-amber-100 transition-all text-xs sm:text-sm font-black shadow-sm hover:shadow-amber-500/20 cursor-pointer shrink-0"
               title="최다 WIN 달성 BEST WINNER의 음식들 보기"
             >
               <Trophy className="w-4 h-4 text-amber-400 animate-pulse" />
@@ -822,11 +872,26 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setIsBestScoreOpen(true)}
-              className="inline-flex items-center space-x-1.5 px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-rose-500/20 via-pink-500/20 to-amber-500/20 border border-rose-500/60 hover:border-rose-400 text-rose-300 hover:text-rose-100 transition-all text-xs sm:text-sm font-black shadow-sm hover:shadow-rose-500/20 cursor-pointer shrink-0"
+              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-rose-500/20 via-pink-500/20 to-amber-500/20 border border-rose-500/60 hover:border-rose-400 text-rose-300 hover:text-rose-100 transition-all text-xs sm:text-sm font-black shadow-sm hover:shadow-rose-500/20 cursor-pointer shrink-0"
               title="역대 최고 득점작 1등~3등 보기"
             >
               <Flame className="w-4 h-4 text-rose-400 animate-pulse" />
               <span>BEST SCORE</span>
+            </button>
+
+            {/* 검색 버튼 */}
+            <button
+              type="button"
+              onClick={() => setIsSearchOpen(true)}
+              className={`inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border transition-all text-xs sm:text-sm font-black shadow-sm cursor-pointer shrink-0 ${
+                searchQuery.trim()
+                  ? 'bg-cyan-500 text-slate-950 border-cyan-400 shadow-cyan-500/30 font-extrabold'
+                  : 'bg-gradient-to-r from-cyan-500/20 via-sky-500/20 to-blue-500/20 border-cyan-500/60 hover:border-cyan-400 text-cyan-300 hover:text-cyan-100 hover:shadow-cyan-500/20'
+              }`}
+              title="제목, 코멘트, 댓글, AI평가 통합 검색"
+            >
+              <Search className={`w-4 h-4 ${searchQuery.trim() ? 'text-slate-950 font-bold' : 'text-cyan-400'}`} />
+              <span>{searchQuery.trim() ? `검색: ${searchQuery.length > 4 ? searchQuery.slice(0, 4) + '…' : searchQuery}` : '검색'}</span>
             </button>
           </div>
 
@@ -959,9 +1024,79 @@ export default function Home() {
           </div>
         )}
 
-        {/* 3. 식사 타임대 탭 (멤버/점수 전체날짜 모아보기가 아닐 때 표시) */}
+        {/* 2-3. 검색 필터링 안내 배너 (검색어 활성화 시 표시) */}
+        {searchQuery.trim() && (
+          <div className="p-3.5 sm:p-4 bg-gradient-to-r from-cyan-500/15 via-sky-500/10 to-slate-900 border border-cyan-500/40 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md animate-fade-in">
+            <div className="flex items-center space-x-2.5">
+              <span className="p-2 rounded-xl bg-cyan-500/20 text-cyan-300 shrink-0">
+                <Search className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-1.5 flex-wrap">
+                  <span className="text-cyan-400 font-extrabold">&quot;{searchQuery}&quot;</span> 검색 결과
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-mono font-bold">
+                    총 {displayedMeals.length}건
+                  </span>
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  {searchFilterScope === 'all'
+                    ? `전체 기간의 출품작(제목, 코멘트, 댓글, AI평가) 중에서 "${searchQuery}"가 포함된 게시물입니다.`
+                    : `${selectedDate} ${selectedSlot} 타임 출품작 중 검색 결과입니다.`}
+                </p>
+              </div>
+            </div>
+
+            {/* 범위 토글 버튼 및 검색창 다시 열기 / 검색 해제 */}
+            <div className="flex items-center space-x-2 w-full sm:w-auto justify-end flex-wrap gap-y-1.5">
+              <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSearchFilterScope('all')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                    searchFilterScope === 'all'
+                      ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  전체 날짜 ({searchAllMeals.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchFilterScope('current')}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition-all cursor-pointer ${
+                    searchFilterScope === 'current'
+                      ? 'bg-cyan-500 text-slate-950 shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  선택 날짜 ({searchDateSlotMeals.length})
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsSearchOpen(true)}
+                className="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 hover:text-cyan-100 text-xs font-bold transition-colors shrink-0 cursor-pointer flex items-center gap-1"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>검색창 열기</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-colors shrink-0 cursor-pointer"
+              >
+                검색 해제 ✕
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 3. 식사 타임대 탭 (멤버/점수/검색 전체날짜 모아보기가 아닐 때 표시) */}
         {(!selectedMemberFilter || filterScope === 'date') &&
-          (!selectedScoreFilter || scoreFilterScope === 'date') && (
+          (!selectedScoreFilter || scoreFilterScope === 'date') &&
+          (!searchQuery.trim() || searchFilterScope === 'current') && (
             <MealSlotTabs
               selectedSlot={selectedSlot}
               onSelectSlot={setSelectedSlot}
@@ -972,7 +1107,8 @@ export default function Home() {
 
         {/* 4. AI 심사 상태 및 우승자 공지 배너 (타임대별 뷰일 때만 표시) */}
         {(!selectedMemberFilter || filterScope === 'date') &&
-          (!selectedScoreFilter || scoreFilterScope === 'date') && (
+          (!selectedScoreFilter || scoreFilterScope === 'date') &&
+          (!searchQuery.trim() || searchFilterScope === 'current') && (
           <div className="relative overflow-hidden rounded-2xl border transition-all">
             {currentSlotWinner ? (
               /* 우승자 발표 완료 배너 */
@@ -1213,6 +1349,23 @@ export default function Home() {
         onMealClick={(meal) => {
           setIsBestScoreOpen(false);
           setSelectedDetailMeal(meal);
+        }}
+      />
+
+      <SearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        meals={meals}
+        initialQuery={searchQuery}
+        onMealClick={(meal) => {
+          setIsSearchOpen(false);
+          setSelectedDetailMeal(meal);
+        }}
+        onApplyToMain={(query) => {
+          setSearchQuery(query);
+          setSearchFilterScope('all');
+          setSelectedMemberFilter(null);
+          setSelectedScoreFilter(null);
         }}
       />
 

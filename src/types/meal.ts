@@ -37,6 +37,8 @@ export interface MealEntry {
   createdAt: number;
   updatedAt?: number;
   comments?: MealComment[]; // 게시글 댓글 목록
+  views?: number; // 게시글 조회수 (1개 IP당 1회 카운트)
+  viewedIps?: string[]; // 몽고디비 내부 중복 방지용 IP 목록 (UI 비공개)
   ip?: string; // 몽고디비 내부 기록용 작성자 원본 IP (UI 비공개)
 }
 

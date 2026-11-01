@@ -12,6 +12,7 @@ import {
   ExternalLink,
   MessageSquare,
   Trophy,
+  Eye,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BestScoreInfo, MealEntry, RankedScoreMeal } from '@/types/meal';
@@ -360,21 +361,27 @@ export const BestScoreModal: React.FC<BestScoreModalProps> = ({
 
                           {/* 카드 하단 액션 */}
                           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
-                            {onMealClick ? (
-                              <button
-                                type="button"
-                                onClick={() => onMealClick(m)}
-                                className="inline-flex items-center space-x-1 text-slate-400 hover:text-rose-300 transition-colors cursor-pointer text-[11px] font-semibold"
-                              >
-                                <MessageSquare className="w-3.5 h-3.5" />
-                                <span>댓글 {m.comments?.length || 0}개 · 상세보기 &gt;</span>
-                              </button>
-                            ) : (
+                            <div className="flex items-center space-x-2.5">
                               <div className="inline-flex items-center space-x-1 text-slate-400 text-[11px]">
-                                <MessageSquare className="w-3.5 h-3.5" />
-                                <span>댓글 {m.comments?.length || 0}개</span>
+                                <Eye className="w-3.5 h-3.5 text-slate-500" />
+                                <span>조회 {m.views || 0}</span>
                               </div>
-                            )}
+                              {onMealClick ? (
+                                <button
+                                  type="button"
+                                  onClick={() => onMealClick(m)}
+                                  className="inline-flex items-center space-x-1 text-slate-400 hover:text-rose-300 transition-colors cursor-pointer text-[11px] font-semibold"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                  <span>댓글 {m.comments?.length || 0}개 · 상세보기 &gt;</span>
+                                </button>
+                              ) : (
+                                <div className="inline-flex items-center space-x-1 text-slate-400 text-[11px]">
+                                  <MessageSquare className="w-3.5 h-3.5" />
+                                  <span>댓글 {m.comments?.length || 0}개</span>
+                                </div>
+                              )}
+                            </div>
 
                             <button
                               type="button"

@@ -40,6 +40,8 @@ export async function GET(request: NextRequest) {
       id: m.id || m._id.toString(),
       _id: undefined,
       ip: undefined, // UI 노출 방지 (몽고디비 내부에만 기록)
+      viewedIps: undefined, // UI 노출 방지 (몽고디비 내부에만 기록)
+      views: typeof m.views === 'number' ? m.views : 0,
       comments: Array.isArray(m.comments)
         ? m.comments
             .filter((c: any) => !c.isDeleted)
@@ -150,6 +152,8 @@ export async function POST(request: NextRequest) {
       comment: (comment || '').trim(),
       imageUrl: finalImageUrl,
       isWinner: false,
+      views: 0,
+      viewedIps: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
       ip: clientIp, // 몽고디비 원본 전체 IP 기록

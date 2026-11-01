@@ -649,6 +649,39 @@ export default function Home() {
     });
   };
 
+  // 게시글 조회수 1회 집계 핸들러 (1개 IP당 1회만 카운트)
+  const handleRecordMealView = async (mealId: string) => {
+    try {
+      const resp = await fetch('/api/meals/view', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mealId }),
+      });
+      const data = await resp.json();
+      if (data.success && typeof data.views === 'number') {
+        const newViews = data.views;
+        setMeals((prev) => {
+          const updated = prev.map((m) =>
+            m.id === mealId ? { ...m, views: newViews } : m
+          );
+          saveLocalMeals(updated);
+          return updated;
+        });
+        setSelectedDetailMeal((prev) =>
+          prev && prev.id === mealId ? { ...prev, views: newViews } : prev
+        );
+      }
+    } catch (e) {
+      console.warn('Failed to record view count:', e);
+    }
+  };
+
+  // 상세 모달 열기 및 조회수 집계
+  const handleOpenMealDetail = (meal: MealEntry) => {
+    setSelectedDetailMeal(meal);
+    handleRecordMealView(meal.id);
+  };
+
   // 관리자 수정/삭제 핸들러
   const handleAdminConfirm = async (
     adminId: string,
@@ -1266,8 +1299,11 @@ export default function Home() {
               <MealCard
                 key={meal.id}
                 meal={meal}
-                onImageClick={(url, title) => setViewerImage({ url, title })}
-                onDetailClick={(target) => setSelectedDetailMeal(target)}
+                onImageClick={(url, title) => {
+                  setViewerImage({ url, title });
+                  handleRecordMealView(meal.id);
+                }}
+                onDetailClick={(target) => handleOpenMealDetail(target)}
                 onEdit={(target) => {
                   setAdminTargetMeal(target);
                   setAdminAction('edit');
@@ -1344,7 +1380,7 @@ export default function Home() {
         onImageClick={(url, title) => setViewerImage({ url, title })}
         onMealClick={(meal) => {
           setIsBestWinnerOpen(false);
-          setSelectedDetailMeal(meal);
+          handleOpenMealDetail(meal);
         }}
       />
 
@@ -1355,7 +1391,7 @@ export default function Home() {
         onImageClick={(url, title) => setViewerImage({ url, title })}
         onMealClick={(meal) => {
           setIsBestScoreOpen(false);
-          setSelectedDetailMeal(meal);
+          handleOpenMealDetail(meal);
         }}
       />
 
@@ -1366,7 +1402,7 @@ export default function Home() {
         initialQuery={searchQuery}
         onMealClick={(meal) => {
           setIsSearchOpen(false);
-          setSelectedDetailMeal(meal);
+          handleOpenMealDetail(meal);
         }}
         onApplyToMain={(query) => {
           setSearchQuery(query);

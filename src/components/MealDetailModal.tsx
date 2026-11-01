@@ -13,6 +13,7 @@ import {
   Award,
   Loader2,
   ExternalLink,
+  Eye,
 } from 'lucide-react';
 import { MealEntry, MealComment, Member } from '@/types/meal';
 import { MEMBERS, getMemberInfo, isLegacyEvaluation } from '@/constants/members';
@@ -255,7 +256,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                   </span>
                 )}
               </div>
-              <div className="flex items-center space-x-2 text-[11px] text-slate-400 mt-0.5">
+              <div className="flex items-center space-x-2.5 text-[11px] text-slate-400 mt-0.5 flex-wrap gap-y-1">
                 <span className="flex items-center gap-1 font-medium">
                   <Calendar className="w-3 h-3 text-slate-500" />
                   {formattedMealDate} · {meal.slot}
@@ -266,6 +267,10 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                     {meal.time}
                   </span>
                 )}
+                <span className="flex items-center gap-1 text-slate-400 font-medium">
+                  <Eye className="w-3 h-3 text-slate-500" />
+                  조회 {meal.views || 0}
+                </span>
               </div>
             </div>
           </div>

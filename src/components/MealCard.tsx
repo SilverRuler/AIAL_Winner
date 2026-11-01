@@ -3,7 +3,7 @@
 import React from 'react';
 import { MealEntry } from '@/types/meal';
 import { getMemberInfo, getWinnerHeaderText } from '@/constants/members';
-import { Crown, Sparkles, MoreVertical, Edit2, Trash2, Award, MessageSquare } from 'lucide-react';
+import { Crown, Sparkles, MoreVertical, Edit2, Trash2, Award, MessageSquare, Eye } from 'lucide-react';
 
 interface MealCardProps {
   meal: MealEntry;
@@ -200,13 +200,21 @@ export const MealCard: React.FC<MealCardProps> = ({
           </div>
         )}
 
-        {/* 하단 댓글 개수 및 상세 모달 열기 안내 */}
+        {/* 하단 조회수, 댓글 개수 및 상세 모달 열기 안내 */}
         <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-          <div className="inline-flex items-center space-x-1.5 text-slate-400 group-hover/body:text-amber-300 transition-colors">
-            <MessageSquare className="w-3.5 h-3.5" />
-            <span className="font-semibold text-[11px]">
-              댓글 {meal.comments && meal.comments.length > 0 ? meal.comments.length : 0}개
-            </span>
+          <div className="flex items-center space-x-2.5">
+            <div className="inline-flex items-center space-x-1 text-slate-400 group-hover/body:text-amber-300 transition-colors">
+              <Eye className="w-3.5 h-3.5 text-slate-500 group-hover/body:text-amber-400" />
+              <span className="font-semibold text-[11px]">
+                조회 {meal.views || 0}
+              </span>
+            </div>
+            <div className="inline-flex items-center space-x-1 text-slate-400 group-hover/body:text-amber-300 transition-colors">
+              <MessageSquare className="w-3.5 h-3.5 text-slate-500 group-hover/body:text-amber-400" />
+              <span className="font-semibold text-[11px]">
+                댓글 {meal.comments && meal.comments.length > 0 ? meal.comments.length : 0}개
+              </span>
+            </div>
           </div>
           <span className="text-[11px] text-slate-500 group-hover/body:text-amber-400/90 transition-colors font-medium">
             상세보기 & 댓글 💬

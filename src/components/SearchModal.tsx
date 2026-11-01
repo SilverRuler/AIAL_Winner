@@ -14,6 +14,7 @@ import {
   Tag,
   Flame,
   ArrowUpDown,
+  Eye,
 } from 'lucide-react';
 import { MealEntry } from '@/types/meal';
 import { getMemberInfo } from '@/constants/members';
@@ -479,12 +480,18 @@ export const SearchModal: React.FC<SearchModalProps> = ({
                         </div>
                       )}
 
-                      {/* 하단 댓글 개수 및 상세 링크 */}
+                      {/* 하단 조회수, 댓글 개수 및 상세 링크 */}
                       <div className="pt-1 flex items-center justify-between text-[11px] text-slate-400">
-                        <span className="flex items-center gap-1">
-                          <MessageSquare className="w-3 h-3 text-slate-500" />
-                          댓글 {meal.comments?.length || 0}개
-                        </span>
+                        <div className="flex items-center space-x-2.5">
+                          <span className="flex items-center gap-1">
+                            <Eye className="w-3 h-3 text-slate-500" />
+                            조회 {meal.views || 0}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MessageSquare className="w-3 h-3 text-slate-500" />
+                            댓글 {meal.comments?.length || 0}개
+                          </span>
+                        </div>
                         <span className="text-cyan-400 group-hover:text-cyan-300 font-bold flex items-center gap-0.5">
                           상세보기 & 댓글 작성 &gt;
                         </span>

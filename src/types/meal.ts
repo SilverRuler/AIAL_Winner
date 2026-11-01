@@ -89,3 +89,17 @@ export interface BestScoreInfo {
   topScore: number;
   totalRankedMeals: number;
 }
+
+export interface RewardItem {
+  id: string;
+  member: string; // 멤버 이름 (12명 중 1명)
+  amount: number; // SOL 수량 (예: 0.05, 0.1)
+  unit?: string; // 통화 단위 (기본 'SOL')
+  title: string; // 지급 사유 / 타이틀 (예: 10월 4주차 우승 상금)
+  txHash: string; // 솔라나 트랜잭션 해시 (Signature)
+  date: string; // 지급일자 (YYYY-MM-DD)
+  memo?: string; // 관리자 메모
+  recipientWallet?: string; // 수신자 솔라나 지갑 주소 (선택)
+  createdAt: number;
+  updatedAt?: number;
+}

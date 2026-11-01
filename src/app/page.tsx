@@ -44,6 +44,7 @@ import { ScoreFilterPopover, ScoreRange } from '@/components/ScoreFilterPopover'
 import { BestWinnerModal } from '@/components/BestWinnerModal';
 import { BestScoreModal } from '@/components/BestScoreModal';
 import { SearchModal } from '@/components/SearchModal';
+import { RewardModal } from '@/components/RewardModal';
 import { MealDetailModal } from '@/components/MealDetailModal';
 import { getLocalMeals, saveLocalMeals, calculateMemberWinStats } from '@/lib/storage';
 
@@ -75,6 +76,8 @@ export default function Home() {
   const [isBestWinnerOpen, setIsBestWinnerOpen] = useState<boolean>(false);
   const [isBestScoreOpen, setIsBestScoreOpen] = useState<boolean>(false);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+  const [isRewardOpen, setIsRewardOpen] = useState<boolean>(false);
+  const [rewardTargetMember, setRewardTargetMember] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchFilterScope, setSearchFilterScope] = useState<'current' | 'all'>('all');
   const [viewerImage, setViewerImage] = useState<{ url: string; title: string } | null>(null);
@@ -1312,6 +1315,10 @@ export default function Home() {
         isOpen={isLeaderboardOpen}
         onClose={() => setIsLeaderboardOpen(false)}
         stats={memberWinStats}
+        onSelectMemberReward={(member) => {
+          setRewardTargetMember(member);
+          setIsRewardOpen(true);
+        }}
       />
 
       <HowToModal
@@ -1367,6 +1374,16 @@ export default function Home() {
           setSelectedMemberFilter(null);
           setSelectedScoreFilter(null);
         }}
+      />
+
+      <RewardModal
+        isOpen={isRewardOpen}
+        onClose={() => {
+          setIsRewardOpen(false);
+          setRewardTargetMember(null);
+        }}
+        initialMember={rewardTargetMember}
+        isAdmin={isAdmin}
       />
 
       <MealDetailModal

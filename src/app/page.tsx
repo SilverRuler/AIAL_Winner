@@ -20,6 +20,8 @@ import {
   Moon,
   Flame,
   Search,
+  ArrowDown,
+  CheckCircle2,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MealEntry, MealSlot, MealComment, BestWinnerInfo, BestScoreInfo } from '@/types/meal';
@@ -118,7 +120,9 @@ export default function Home() {
         return prev;
       });
 
-      const resp = await fetch('/api/meals');
+      const resp = await fetch(`/api/meals?_t=${Date.now()}`, {
+        cache: 'no-store',
+      });
       const data = await resp.json();
 
       if (data.success && Array.isArray(data.meals)) {
@@ -145,6 +149,222 @@ export default function Home() {
   useEffect(() => {
     fetchMeals();
   }, [fetchMeals]);
+
+  // 끌어당겨 새로고침 (Pull to Refresh) 상태
+  const [pullDistance, setPullDistance] = useState<number>(0);
+  const [isPullRefreshing, setIsPullRefreshing] = useState<boolean>(false);
+  const [pullState, setPullState] = useState<'pull' | 'ready' | 'refreshing' | 'complete'>('pull');
+
+  const touchStartRef = useRef<{ y: number; x: number; active: boolean }>({ y: 0, x: 0, active: false });
+  const mouseStartRef = useRef<{ y: number; active: boolean }>({ y: 0, active: false });
+  const isDraggingRef = useRef<boolean>(false);
+  const pullDistanceRef = useRef<number>(0);
+
+  useEffect(() => {
+    pullDistanceRef.current = pullDistance;
+  }, [pullDistance]);
+
+  // 새로고침 실행 핸들러 (최신 데이터 패치 및 완료 피드백)
+  const triggerRefresh = useCallback(async () => {
+    setIsPullRefreshing(true);
+    setPullState('refreshing');
+    setPullDistance(52);
+
+    try {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(25);
+      }
+    } catch {}
+
+    const startTime = Date.now();
+    try {
+      await fetchMeals();
+    } catch (e) {
+      console.warn('Pull-to-refresh fetch failed:', e);
+    }
+
+    const elapsed = Date.now() - startTime;
+    if (elapsed < 500) {
+      await new Promise((r) => setTimeout(r, 500 - elapsed));
+    }
+
+    setPullState('complete');
+    await new Promise((r) => setTimeout(r, 350));
+
+    setPullDistance(0);
+    setIsPullRefreshing(false);
+    setPullState('pull');
+  }, [fetchMeals]);
+
+  useEffect(() => {
+    // 모달이 열려 있을 때는 새로고침 제스처 비활성화
+    const isAnyModalOpen =
+      isNewMealOpen ||
+      isLeaderboardOpen ||
+      isHowToOpen ||
+      isNoticeOpen ||
+      isAdminLoginOpen ||
+      isBestWinnerOpen ||
+      isBestScoreOpen ||
+      isSearchOpen ||
+      isRewardOpen ||
+      !!selectedDetailMeal ||
+      !!viewerImage ||
+      !!adminTargetMeal;
+
+    if (isAnyModalOpen) return;
+
+    const PULL_THRESHOLD = 65;
+    const MAX_PULL = 90;
+
+    // 터치 이벤트 핸들러 (모바일/태블릿)
+    const handleTouchStart = (e: TouchEvent) => {
+      if (window.scrollY > 5) return;
+      if (isPullRefreshing) return;
+
+      const touch = e.touches[0];
+      touchStartRef.current = {
+        y: touch.clientY,
+        x: touch.clientX,
+        active: true,
+      };
+      isDraggingRef.current = false;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!touchStartRef.current.active) return;
+      if (isPullRefreshing) return;
+
+      const touch = e.touches[0];
+      const deltaY = touch.clientY - touchStartRef.current.y;
+      const deltaX = touch.clientX - touchStartRef.current.x;
+
+      if (window.scrollY > 0) {
+        touchStartRef.current.active = false;
+        isDraggingRef.current = false;
+        setPullDistance(0);
+        return;
+      }
+
+      // 좌우 스와이프가 상하 드래그보다 큰 경우 제스처 무시
+      if (Math.abs(deltaX) > deltaY && !isDraggingRef.current) {
+        touchStartRef.current.active = false;
+        return;
+      }
+
+      if (deltaY > 0) {
+        isDraggingRef.current = true;
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        const damped = Math.min(Math.pow(deltaY, 0.82) * 1.6, MAX_PULL);
+        setPullDistance(damped);
+        setPullState(damped >= PULL_THRESHOLD ? 'ready' : 'pull');
+      } else {
+        setPullDistance(0);
+        setPullState('pull');
+      }
+    };
+
+    const handleTouchEnd = async () => {
+      if (!touchStartRef.current.active && !isDraggingRef.current) return;
+      touchStartRef.current.active = false;
+
+      const currentDistance = pullDistanceRef.current;
+      if (isDraggingRef.current && currentDistance >= PULL_THRESHOLD) {
+        isDraggingRef.current = false;
+        await triggerRefresh();
+      } else {
+        isDraggingRef.current = false;
+        setPullDistance(0);
+        setPullState('pull');
+      }
+    };
+
+    // 마우스 드래그 핸들러 (데스크톱 마우스 지원)
+    const handleMouseDown = (e: MouseEvent) => {
+      if (window.scrollY > 5) return;
+      if (isPullRefreshing) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('button, input, textarea, select, a, [role="button"]')) {
+        return;
+      }
+      if (e.clientY > 220) return;
+
+      mouseStartRef.current = { y: e.clientY, active: true };
+      isDraggingRef.current = false;
+    };
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!mouseStartRef.current.active) return;
+      if (isPullRefreshing) return;
+
+      if (window.scrollY > 0) {
+        mouseStartRef.current.active = false;
+        isDraggingRef.current = false;
+        setPullDistance(0);
+        return;
+      }
+
+      const deltaY = e.clientY - mouseStartRef.current.y;
+      if (deltaY > 8) {
+        isDraggingRef.current = true;
+        const damped = Math.min(Math.pow(deltaY, 0.82) * 1.6, MAX_PULL);
+        setPullDistance(damped);
+        setPullState(damped >= PULL_THRESHOLD ? 'ready' : 'pull');
+      }
+    };
+
+    const handleMouseUp = async () => {
+      if (!mouseStartRef.current.active) return;
+      mouseStartRef.current.active = false;
+
+      const currentDistance = pullDistanceRef.current;
+      if (isDraggingRef.current && currentDistance >= PULL_THRESHOLD) {
+        isDraggingRef.current = false;
+        await triggerRefresh();
+      } else {
+        isDraggingRef.current = false;
+        setPullDistance(0);
+        setPullState('pull');
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', handleTouchEnd);
+    window.addEventListener('touchcancel', handleTouchEnd);
+
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', handleTouchEnd);
+      window.removeEventListener('touchcancel', handleTouchEnd);
+
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [
+    isNewMealOpen,
+    isLeaderboardOpen,
+    isHowToOpen,
+    isNoticeOpen,
+    isAdminLoginOpen,
+    isBestWinnerOpen,
+    isBestScoreOpen,
+    isSearchOpen,
+    isRewardOpen,
+    selectedDetailMeal,
+    viewerImage,
+    adminTargetMeal,
+    isPullRefreshing,
+    triggerRefresh,
+  ]);
 
   // 달력 아이콘 또는 인풋 클릭 시 브라우저 네이티브 달력 팝업 열기
   const handleOpenCalendar = () => {
@@ -772,7 +992,65 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-x-hidden">
+    <div
+      className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-x-hidden relative"
+      style={{
+        transform: pullDistance > 0 ? `translateY(${pullDistance}px)` : undefined,
+        transition: isDraggingRef.current
+          ? 'none'
+          : 'transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
+      }}
+    >
+      {/* 상단 끌어당겨 새로고침 (Pull to Refresh) 플로팅 뱃지 */}
+      {(pullDistance > 0 || isPullRefreshing) && (
+        <div
+          className="fixed top-2.5 left-0 right-0 z-50 flex justify-center pointer-events-none select-none transition-all duration-150"
+          style={{
+            transform: `translateY(${Math.max(pullDistance - 50, 0)}px)`,
+            opacity: pullDistance > 10 ? Math.min((pullDistance - 10) / 25, 1) : 0,
+          }}
+        >
+          <div
+            className={`px-4 py-2 rounded-full backdrop-blur-md shadow-2xl flex items-center space-x-2 text-xs font-bold border transition-all ${
+              pullState === 'complete'
+                ? 'bg-emerald-950/95 border-emerald-500 text-emerald-300 shadow-emerald-500/30'
+                : pullState === 'ready'
+                ? 'bg-amber-950/95 border-amber-400 text-amber-200 shadow-amber-500/40 scale-105 ring-2 ring-amber-400/30'
+                : pullState === 'refreshing'
+                ? 'bg-slate-900/95 border-amber-500/80 text-amber-300 shadow-orange-500/30'
+                : 'bg-slate-900/90 border-slate-700 text-slate-300 shadow-slate-950/80'
+            }`}
+          >
+            {pullState === 'complete' ? (
+              <>
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 animate-bounce" />
+                <span>새로고침 완료!</span>
+              </>
+            ) : pullState === 'refreshing' ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
+                <span>최신 식사 데이터 갱신 중...</span>
+              </>
+            ) : pullState === 'ready' ? (
+              <>
+                <ArrowDown className="w-4 h-4 text-amber-300 -rotate-180 transition-transform duration-200" />
+                <span className="text-amber-200 font-extrabold">손을 놓으면 새로고침</span>
+              </>
+            ) : (
+              <>
+                <ArrowDown
+                  className="w-4 h-4 text-slate-400 transition-transform duration-100"
+                  style={{
+                    transform: `rotate(${Math.min((pullDistance / 65) * 180, 180)}deg)`,
+                  }}
+                />
+                <span className="text-slate-300">당겨서 새로고침</span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* 상단 글로벌 헤더 */}
       <Header
         onOpenNewMeal={() => setIsNewMealOpen(true)}

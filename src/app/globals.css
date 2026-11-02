@@ -5,6 +5,11 @@
   --foreground: #f8fafc;
 }
 
+html,
+body {
+  overscroll-behavior-y: contain;
+}
+
 body {
   background: #020617;
   color: #f8fafc;

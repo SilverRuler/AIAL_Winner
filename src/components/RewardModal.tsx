@@ -574,6 +574,11 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                       <div className="text-sm sm:text-base font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-teal-300 to-emerald-400 font-mono flex items-center justify-end gap-1">
                         <span>+ {reward.amount} {reward.unit || 'SOL'}</span>
                       </div>
+                      {reward.onChainSnapshot?.approxKrwValue && (
+                        <div className="text-[10px] text-emerald-400/90 font-medium font-sans">
+                          {reward.onChainSnapshot.approxKrwValue}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -684,6 +689,34 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                               <span className="text-slate-400">트랜잭션 수수료: </span>
                               <span className="text-slate-200">{reward.onChainSnapshot.fee || '0.000005 SOL'}</span>
                             </p>
+                          </div>
+
+                          {/* 온체인 실제 전송 수량 및 업비트 한화 환산 가치 */}
+                          <div className="p-2.5 rounded-xl bg-slate-950/90 border border-emerald-500/30 space-y-1.5 my-1.5 font-sans">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-slate-400 flex items-center gap-1 font-medium">
+                                <span>💰 실제 전송 수량 (On-Chain):</span>
+                              </span>
+                              <span className="text-amber-300 font-bold font-mono">
+                                {reward.onChainSnapshot.transferredSolFormatted || `${reward.amount} SOL`}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-800/80">
+                              <span className="text-slate-400 flex items-center gap-1 font-medium">
+                                <span>🇰🇷 업비트 기준 환산 가치:</span>
+                              </span>
+                              <div className="text-right">
+                                <span className="text-emerald-400 font-black font-mono text-xs sm:text-sm">
+                                  {reward.onChainSnapshot.approxKrwValue || '시세 계산 완료'}
+                                </span>
+                                {reward.onChainSnapshot.upbitSolPriceFormatted && (
+                                  <div className="text-[10px] text-slate-400 font-mono">
+                                    (당시 업비트 시세: {reward.onChainSnapshot.upbitSolPriceFormatted} / SOL)
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
 
                           {reward.onChainSnapshot.sender && (

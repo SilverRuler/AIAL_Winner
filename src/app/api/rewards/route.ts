@@ -6,9 +6,71 @@ const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
 const ADMIN_PW = process.env.ADMIN_PW || 'bbb';
 
 /**
- * 솔라나 RPC를 통해 온체인 트랜잭션 영구 증빙 스냅샷 추출
+ * 업비트 API를 통해 특정 시점(또는 최근)의 SOL 원화(KRW) 시세 조회
  */
-async function fetchSolanaTxSnapshot(txHash: string): Promise<OnChainSnapshot | null> {
+async function fetchUpbitSolPrice(timestampSec?: number): Promise<{ price: number; dateStr: string } | null> {
+  try {
+    if (timestampSec) {
+      const dt = new Date(timestampSec * 1000).toISOString();
+
+      // 1. 60분봉 캔들 조회 (가장 근접한 시간대 시세)
+      try {
+        const minResp = await fetch(
+          `https://api.upbit.com/v1/candles/minutes/60?market=KRW-SOL&to=${dt}&count=1`,
+          { signal: AbortSignal.timeout(4000) }
+        );
+        if (minResp.ok) {
+          const data = await minResp.json();
+          if (Array.isArray(data) && data[0]?.trade_price) {
+            return {
+              price: data[0].trade_price,
+              dateStr: data[0].candle_date_time_kst?.replace('T', ' ') || '',
+            };
+          }
+        }
+      } catch (e) {}
+
+      // 2. 일봉 캔들 조회 (날짜 기준)
+      try {
+        const dayResp = await fetch(
+          `https://api.upbit.com/v1/candles/days?market=KRW-SOL&to=${dt}&count=1`,
+          { signal: AbortSignal.timeout(4000) }
+        );
+        if (dayResp.ok) {
+          const data = await dayResp.json();
+          if (Array.isArray(data) && data[0]?.trade_price) {
+            return {
+              price: data[0].trade_price,
+              dateStr: data[0].candle_date_time_kst?.substring(0, 10) || '',
+            };
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 3. Fallback: 현재 업비트 실시간 시세
+    const tickerResp = await fetch('https://api.upbit.com/v1/ticker?markets=KRW-SOL', {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (tickerResp.ok) {
+      const data = await tickerResp.json();
+      if (Array.isArray(data) && data[0]?.trade_price) {
+        return {
+          price: data[0].trade_price,
+          dateStr: '실시간 시세',
+        };
+      }
+    }
+  } catch (err) {
+    console.warn('Failed to query Upbit SOL price:', err);
+  }
+  return null;
+}
+
+/**
+ * 솔라나 RPC를 통해 온체인 트랜잭션 영구 증빙 스냅샷 추출 및 업비트 환산 가치 계산
+ */
+async function fetchSolanaTxSnapshot(txHash: string, registeredAmount?: number): Promise<OnChainSnapshot | null> {
   const rpcs = [
     'https://api.mainnet-beta.solana.com',
     'https://solana-mainnet.rpc.extrnode.com',
@@ -44,15 +106,91 @@ async function fetchSolanaTxSnapshot(txHash: string): Promise<OnChainSnapshot | 
           '';
 
         let recipient = '';
+        let transferredLamports = 0;
+
+        // 1. 최상위 transfer 명령어 탐색
         const instructions = res.transaction?.message?.instructions || [];
         for (const inst of instructions) {
-          if (inst.parsed?.type === 'transfer' && inst.parsed?.info?.destination) {
-            recipient = inst.parsed.info.destination;
-            break;
+          if (inst.parsed?.type === 'transfer' && inst.parsed?.info) {
+            if (inst.parsed.info.destination && !recipient) {
+              recipient = inst.parsed.info.destination;
+            }
+            if (inst.parsed.info.lamports) {
+              transferredLamports += Number(inst.parsed.info.lamports);
+            }
           }
         }
+
+        // 2. 내부 명령어(innerInstructions) 탐색 (CPI 호출 등)
+        const innerInstructions = res.meta?.innerInstructions || [];
+        for (const inner of innerInstructions) {
+          for (const inst of inner.instructions || []) {
+            if (inst.parsed?.type === 'transfer' && inst.parsed?.info) {
+              if (inst.parsed.info.destination && !recipient) {
+                recipient = inst.parsed.info.destination;
+              }
+              if (transferredLamports === 0 && inst.parsed.info.lamports) {
+                transferredLamports = Number(inst.parsed.info.lamports);
+              }
+            }
+          }
+        }
+
         if (!recipient && keys.length > 1) {
           recipient = typeof keys[1] === 'string' ? keys[1] : keys[1]?.pubkey || '';
+        }
+
+        // 3. 수신자 계정 잔액 변화량 계산 (보조 확인)
+        if (transferredLamports === 0 && recipient && res.meta?.preBalances && res.meta?.postBalances) {
+          const recIdx = keys.findIndex((k: any) =>
+            (typeof k === 'string' ? k : k?.pubkey) === recipient
+          );
+          if (recIdx !== -1) {
+            const diff = res.meta.postBalances[recIdx] - res.meta.preBalances[recIdx];
+            if (diff > 0) {
+              transferredLamports = diff;
+            }
+          }
+        }
+
+        // 실제로 전송된 SOL 수량 판단
+        let transferredSol: number | undefined = undefined;
+        let transferredSolFormatted: string | undefined = undefined;
+
+        if (transferredLamports > 0) {
+          transferredSol = transferredLamports / 1e9;
+        } else if (registeredAmount && registeredAmount > 0) {
+          transferredSol = registeredAmount;
+        }
+
+        if (transferredSol !== undefined && transferredSol > 0) {
+          if (transferredSol >= 0.001) {
+            transferredSolFormatted = `${parseFloat(transferredSol.toFixed(4))} SOL`;
+          } else {
+            transferredSolFormatted = `${parseFloat(transferredSol.toFixed(9))} SOL`;
+          }
+        }
+
+        // 업비트 시세 조회 및 한화 환산 가치 계산
+        let upbitSolPriceKrw: number | undefined = undefined;
+        let upbitSolPriceFormatted: string | undefined = undefined;
+        let approxKrwValue: string | undefined = undefined;
+        let priceReferenceDate: string | undefined = undefined;
+
+        const upbitInfo = await fetchUpbitSolPrice(blockTime);
+        if (upbitInfo && transferredSol && transferredSol > 0) {
+          upbitSolPriceKrw = upbitInfo.price;
+          upbitSolPriceFormatted = `${upbitInfo.price.toLocaleString('ko-KR')}원`;
+          priceReferenceDate = upbitInfo.dateStr;
+
+          const krw = transferredSol * upbitInfo.price;
+          if (krw >= 100) {
+            approxKrwValue = `약 ${Math.round(krw).toLocaleString('ko-KR')}원`;
+          } else if (krw >= 1) {
+            approxKrwValue = `약 ${krw.toFixed(1)}원`;
+          } else {
+            approxKrwValue = `약 ${krw.toFixed(2)}원`;
+          }
         }
 
         return {
@@ -68,6 +206,12 @@ async function fetchSolanaTxSnapshot(txHash: string): Promise<OnChainSnapshot | 
           sender: signer,
           recipient: recipient,
           signature: txHash,
+          transferredSol,
+          transferredSolFormatted,
+          upbitSolPriceKrw,
+          upbitSolPriceFormatted,
+          approxKrwValue,
+          priceReferenceDate,
           capturedAt: Date.now(),
           capturedAtFormatted: new Date().toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' }),
           explorerUrl: `https://solscan.io/tx/${txHash}`,
@@ -184,8 +328,9 @@ export async function POST(request: NextRequest) {
 
     // 온체인 영구 증빙 스냅샷 자동 추출
     let snapshot: OnChainSnapshot | null = null;
+    const numAmount = parseFloat(String(amount)) || 0;
     try {
-      snapshot = await fetchSolanaTxSnapshot(cleanTxHash);
+      snapshot = await fetchSolanaTxSnapshot(cleanTxHash, numAmount);
     } catch (e) {
       console.warn('Could not fetch snapshot immediately:', e);
     }
@@ -279,7 +424,7 @@ export async function PUT(request: NextRequest) {
       updateFields.txHash = cleanTx;
       // txHash가 변경된 경우 스냅샷 재추출
       try {
-        const snap = await fetchSolanaTxSnapshot(cleanTx);
+        const snap = await fetchSolanaTxSnapshot(cleanTx, updateFields.amount);
         if (snap) updateFields.onChainSnapshot = snap;
       } catch (e) {}
     }
@@ -328,17 +473,20 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const snapshot = await fetchSolanaTxSnapshot(txHash.trim());
+    const db = await getDatabase();
+    if (!db) {
+      return NextResponse.json({ success: false, message: 'DB 연결 실패' }, { status: 500 });
+    }
+
+    const currentDoc = await db.collection('rewards').findOne({ $or: [{ id }, { _id: id as any }] });
+    const registeredAmount = currentDoc?.amount;
+
+    const snapshot = await fetchSolanaTxSnapshot(txHash.trim(), registeredAmount);
     if (!snapshot) {
       return NextResponse.json(
         { success: false, message: '솔라나 RPC에서 해당 트랜잭션을 찾지 못했습니다.' },
         { status: 404 }
       );
-    }
-
-    const db = await getDatabase();
-    if (!db) {
-      return NextResponse.json({ success: false, message: 'DB 연결 실패' }, { status: 500 });
     }
 
     await db.collection('rewards').updateOne(

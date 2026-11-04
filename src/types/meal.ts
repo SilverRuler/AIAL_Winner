@@ -103,6 +103,12 @@ export interface OnChainSnapshot {
   sender?: string; // 보낸 지갑 주소
   recipient?: string; // 수신 지갑 주소
   signature: string; // 트랜잭션 해시
+  transferredSol?: number; // 온체인에서 실제로 전송된 SOL 수량
+  transferredSolFormatted?: string; // 포맷된 전송 수량 (예: '0.05 SOL')
+  upbitSolPriceKrw?: number; // 전송 시점 업비트 SOL 시세 (원)
+  upbitSolPriceFormatted?: string; // 포맷된 업비트 시세 (예: '128,900원')
+  approxKrwValue?: string; // 보낸 SOL 양 대비 한화 환산 금액 (예: '약 6,445원')
+  priceReferenceDate?: string; // 시세 기준 일시
   capturedAt: number; // 스냅샷 박제 시각
   capturedAtFormatted?: string;
   explorerUrl?: string;

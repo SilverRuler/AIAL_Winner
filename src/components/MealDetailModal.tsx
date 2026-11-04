@@ -16,7 +16,7 @@ import {
   Eye,
 } from 'lucide-react';
 import { MealEntry, MealComment, Member } from '@/types/meal';
-import { MEMBERS, getMemberInfo, isLegacyEvaluation } from '@/constants/members';
+import { MEMBERS, LEGACY_MEMBERS, getMemberInfo, isLegacyEvaluation } from '@/constants/members';
 import { maskIp } from '@/lib/ip';
 
 interface MealDetailModalProps {
@@ -483,7 +483,9 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                 </div>
               ) : (
                 comments.map((cmt) => {
-                  const cmtMember = MEMBERS.find((m) => m.name === cmt.author);
+                  const cmtMember =
+                    MEMBERS.find((m) => m.name === cmt.author) ||
+                    LEGACY_MEMBERS.find((m) => m.name === cmt.author);
                   const isDeleting = deletingCommentId === cmt.id;
                   const displayIp = !cmtMember ? maskIp(cmt.maskedIp || cmt.ip) : '';
 

@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Users, X, Check, ChevronDown, Sparkles } from 'lucide-react';
-import { MEMBERS, getMemberInfo } from '@/constants/members';
+import { MEMBERS, LEGACY_MEMBERS, getMemberInfo } from '@/constants/members';
 import { MealEntry } from '@/types/meal';
 
 interface MemberFilterPopoverProps {
@@ -20,10 +20,10 @@ export const MemberFilterPopover: React.FC<MemberFilterPopoverProps> = ({
   const [popoverStyle, setPopoverStyle] = useState<React.CSSProperties>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // 멤버별 총 등록 건수 집계
+  // 멤버별 총 등록 건수 집계 (활동 멤버 및 과거 기록 멤버)
   const memberCountMap = React.useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const m of MEMBERS) {
+    for (const m of [...MEMBERS, ...LEGACY_MEMBERS]) {
       counts[m.name] = 0;
     }
     for (const meal of meals) {
@@ -164,7 +164,7 @@ export const MemberFilterPopover: React.FC<MemberFilterPopoverProps> = ({
             <span className="text-[11px] opacity-80">총 {meals.length}건</span>
           </button>
 
-          {/* 12인 멤버 그리드 */}
+          {/* 12인 멤버 그리드 및 과거 활동 멤버 */}
           <div className="grid grid-cols-2 gap-1.5 max-h-60 overflow-y-auto pr-0.5">
             {MEMBERS.map((m) => {
               const isSelected = selectedMember === m.name;
@@ -185,6 +185,41 @@ export const MemberFilterPopover: React.FC<MemberFilterPopoverProps> = ({
                   }`}
                 >
                   <span className="truncate">{m.name}</span>
+                  <span
+                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-medium ${
+                      isSelected ? 'bg-black/20 text-slate-950' : 'bg-slate-900/60 text-slate-300'
+                    }`}
+                  >
+                    {count}건
+                  </span>
+                </button>
+              );
+            })}
+
+            {/* 과거 활동 멤버 (실버 등 과거 식사 기록이 존재하는 경우 표시) */}
+            {LEGACY_MEMBERS.filter((lm) => (memberCountMap[lm.name] || 0) > 0).map((m) => {
+              const isSelected = selectedMember === m.name;
+              const count = memberCountMap[m.name] || 0;
+
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => {
+                    onSelectMember(m.name);
+                    setIsOpen(false);
+                  }}
+                  className={`p-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-between cursor-pointer ${
+                    isSelected
+                      ? 'bg-slate-300 text-slate-950 border-white shadow-md font-extrabold scale-102'
+                      : `${m.avatarBg} ${m.borderColor} hover:border-slate-500 hover:scale-101 opacity-80 hover:opacity-100`
+                  }`}
+                  title={`${m.name} (과거 활동 이력)`}
+                >
+                  <span className="truncate flex items-center gap-1">
+                    <span>{m.name}</span>
+                    <span className="text-[9px] text-slate-400 font-normal">(이전)</span>
+                  </span>
                   <span
                     className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono font-medium ${
                       isSelected ? 'bg-black/20 text-slate-950' : 'bg-slate-900/60 text-slate-300'

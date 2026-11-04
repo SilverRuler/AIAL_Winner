@@ -19,7 +19,7 @@ import {
   Info,
 } from 'lucide-react';
 import { RewardItem } from '@/types/meal';
-import { MEMBERS, getMemberInfo } from '@/constants/members';
+import { MEMBERS, LEGACY_MEMBERS, getMemberInfo } from '@/constants/members';
 
 interface RewardModalProps {
   isOpen: boolean;
@@ -89,13 +89,22 @@ export const RewardModal: React.FC<RewardModalProps> = ({
   // 모달 열릴 때 초기 멤버 동기화 및 오늘 날짜 설정
   useEffect(() => {
     if (isOpen) {
-      if (initialMember && MEMBERS.some((m) => m.name === initialMember)) {
+      const isKnownMember =
+        initialMember &&
+        (MEMBERS.some((m) => m.name === initialMember) ||
+          LEGACY_MEMBERS.some((m) => m.name === initialMember));
+
+      if (initialMember && isKnownMember) {
         setSelectedMember(initialMember);
-        setFormMember(initialMember);
       } else {
         setSelectedMember('all');
-        setFormMember(MEMBERS[0].name);
       }
+      // 신규 등록 폼의 대상 멤버는 활동 멤버(MEMBERS)만 지정
+      setFormMember(
+        initialMember && MEMBERS.some((m) => m.name === initialMember)
+          ? initialMember
+          : MEMBERS[0].name
+      );
       const today = new Date().toISOString().split('T')[0];
       setFormDate(today);
       setIsFormOpen(false);
@@ -305,7 +314,15 @@ export const RewardModal: React.FC<RewardModalProps> = ({
             >
               전체 보기 ({rewards.length})
             </button>
-            {MEMBERS.map((m) => {
+            {/* 활동 멤버 및 과거 리워드 이력/선택된 레거시 멤버 탭 */}
+            {[
+              ...MEMBERS,
+              ...LEGACY_MEMBERS.filter(
+                (lm) =>
+                  rewards.some((r) => r.member === lm.name) ||
+                  selectedMember === lm.name
+              ),
+            ].map((m) => {
               const count = rewards.filter((r) => r.member === m.name).length;
               const isSelected = selectedMember === m.name;
 

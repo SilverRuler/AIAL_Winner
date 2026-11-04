@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MealEntry } from '@/types/meal';
-import { MEMBERS, checkCanRegisterMeal, getKSTNow } from '@/constants/members';
+import { MEMBERS, LEGACY_MEMBERS, checkCanRegisterMeal, getKSTNow } from '@/constants/members';
 import { getClientIp, maskIp } from '@/lib/ip';
 
 const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
@@ -46,7 +46,9 @@ export async function GET(request: NextRequest) {
         ? m.comments
             .filter((c: any) => !c.isDeleted)
             .map((c: any) => {
-              const isMember = MEMBERS.some((mem) => mem.name === c.author);
+              const isMember =
+                MEMBERS.some((mem) => mem.name === c.author) ||
+                LEGACY_MEMBERS.some((mem) => mem.name === c.author);
               return {
                 id: c.id,
                 author: c.author,
@@ -84,10 +86,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { date, time, slot, member, menuName, comment, imageUrl } = body;
 
-    // 필수는 멤버 선택과 사진입니다.
-    if (!member) {
+    // 필수는 멤버 선택과 사진입니다. (활동 멤버만 신규 등록 가능, 실버 등 레거시 멤버 제외)
+    if (!member || !MEMBERS.some((m) => m.name === member.trim())) {
       return NextResponse.json(
-        { success: false, message: '멤버(올리는 사람)를 선택해주세요.' },
+        { success: false, message: '유효한 활동 멤버를 선택해주세요.' },
         { status: 400 }
       );
     }

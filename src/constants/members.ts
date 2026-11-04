@@ -15,6 +15,15 @@ export const MEMBERS: Member[] = [
   { id: 'iricorp', name: '주식회사이리', avatarBg: 'bg-indigo-500/20 text-indigo-400', textColor: 'text-indigo-400', borderColor: 'border-indigo-500/40' },
   { id: 'samsungkim', name: '삼성킴', avatarBg: 'bg-sky-500/20 text-sky-400', textColor: 'text-sky-400', borderColor: 'border-sky-500/40' },
   { id: 'munth', name: '문탷', avatarBg: 'bg-fuchsia-500/20 text-fuchsia-400', textColor: 'text-fuchsia-400', borderColor: 'border-fuchsia-500/40' },
+  { id: 'okhyeong', name: '옥형', avatarBg: 'bg-lime-500/20 text-lime-400', textColor: 'text-lime-400', borderColor: 'border-lime-500/40' },
+];
+
+/**
+ * 과거 활동 이력이 보존되는 레거시 멤버 목록
+ * - 명예의 전당 및 과거 식사 기록의 WIN 내역 유지
+ * - 신규 등록 및 선택에서는 제외 (실버 -> 옥형 대체)
+ */
+export const LEGACY_MEMBERS: Member[] = [
   { id: 'silver', name: '실버', avatarBg: 'bg-slate-300/20 text-slate-200', textColor: 'text-slate-200', borderColor: 'border-slate-400/40' },
 ];
 
@@ -267,11 +276,13 @@ export function checkCanRegisterMeal(targetDate: string, targetSlot: MealSlot): 
 }
 
 /**
- * 멤버 이름으로 스타일 정보 찾기
+ * 멤버 이름으로 스타일 정보 찾기 (현재 멤버 및 실버 등 레거시 멤버 지원)
  */
 export function getMemberInfo(name: string): Member {
   const found = MEMBERS.find((m) => m.name === name);
   if (found) return found;
+  const legacy = LEGACY_MEMBERS.find((m) => m.name === name);
+  if (legacy) return legacy;
   return {
     id: 'unknown',
     name,

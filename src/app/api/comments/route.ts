@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MealComment } from '@/types/meal';
 import { getClientIp, maskIp, normalizeIp } from '@/lib/ip';
-import { MEMBERS } from '@/constants/members';
+import { MEMBERS, LEGACY_MEMBERS } from '@/constants/members';
 
 const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
 const ADMIN_PW = process.env.ADMIN_PW || 'bbb';
@@ -38,7 +38,9 @@ export async function POST(request: NextRequest) {
 
     // 클라이언트 IP 추출 (12인 멤버 칩 선택 시 화면 노출용 maskedIp는 생략)
     const clientIp = getClientIp(request);
-    const isMember = MEMBERS.some((m) => m.name === trimmedAuthor);
+    const isMember =
+      MEMBERS.some((m) => m.name === trimmedAuthor) ||
+      LEGACY_MEMBERS.some((m) => m.name === trimmedAuthor);
     const maskedIp = isMember ? undefined : maskIp(clientIp);
 
     const newComment: MealComment = {

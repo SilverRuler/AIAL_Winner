@@ -53,7 +53,11 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
   const [comment, setComment] = useState<string>('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [exifInfo, setExifInfo] = useState<{ photoDate: string; photoTime: string } | null>(null);
+  const [exifInfo, setExifInfo] = useState<{
+    photoDate: string;
+    photoTime: string;
+    sourceType?: 'camera' | 'kakaotalk';
+  } | null>(null);
   const [exifRejectInfo, setExifRejectInfo] = useState<{
     photoDate?: string;
     photoTime?: string;
@@ -155,10 +159,11 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
 
       // 검증 통과 시 거부 로그 초기화 및 승인 정보 저장
       setExifRejectInfo(null);
-      if (exifCheck.hasExif && exifCheck.photoDate && exifCheck.photoTime) {
+      if (exifCheck.isValid && exifCheck.photoDate && exifCheck.photoTime) {
         setExifInfo({
           photoDate: exifCheck.photoDate,
           photoTime: exifCheck.photoTime,
+          sourceType: exifCheck.sourceType,
         });
       } else {
         setExifInfo(null);
@@ -217,10 +222,11 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
         setExifInfo(null);
       } else {
         setExifRejectInfo(null);
-        if (reCheck.hasExif && reCheck.photoDate && reCheck.photoTime) {
+        if (reCheck.isValid && reCheck.photoDate && reCheck.photoTime) {
           setExifInfo({
             photoDate: reCheck.photoDate,
             photoTime: reCheck.photoTime,
+            sourceType: reCheck.sourceType,
           });
         } else {
           setExifInfo(null);
@@ -547,7 +553,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                       <span className="text-amber-400 font-bold">사진 선택 또는 촬영</span> (모바일 카메라 지원)
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      카메라 직접 촬영 또는 앨범 원본 사진 (스크린샷 업로드 불가)
+                      카메라 원본 또는 카카오톡 다운로드 사진 (스크린샷 업로드 불가)
                     </p>
                   </div>
                 )}
@@ -569,7 +575,9 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
               <div className="mt-2.5 flex items-center space-x-2 text-xs font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-3.5 py-2.5 rounded-xl animate-fade-in shadow-sm">
                 <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
                 <span>
-                  카메라 원본 촬영 일시 확인 완료 : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
+                  {exifInfo.sourceType === 'kakaotalk'
+                    ? '카카오톡 저장 사진 일시 확인 완료'
+                    : '카메라 원본 촬영 일시 확인 완료'} : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
                 </span>
               </div>
             )}

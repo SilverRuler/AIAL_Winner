@@ -40,15 +40,16 @@ NIM_MODEL = os.environ.get("NIM_MODEL", "mistralai/mistral-large-4-1t-a52b")
 NIM_FALLBACK_MODEL = os.environ.get("NIM_FALLBACK_MODEL", "meta/muse-glimmer-30b")
 NIM_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 
-# 로컬 .env 파일 보조 로드
-env_file_path = os.path.join(os.path.dirname(__file__), ".env")
-if os.path.exists(env_file_path):
-    with open(env_file_path, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line and not line.startswith("#") and "=" in line:
-                k, v = line.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip())
+# 로컬 .env 및 .env.local 파일 보조 로드
+for env_name in [".env", ".env.local", os.path.join("..", ".env.local"), os.path.join("..", ".env")]:
+    env_file_path = os.path.join(os.path.dirname(__file__), env_name)
+    if os.path.exists(env_file_path):
+        with open(env_file_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip())
 
 MONGO_URI = os.environ.get("MONGODB_URI", MONGO_URI)
 API_KEY = os.environ.get("LLM_API_KEY", API_KEY)

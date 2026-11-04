@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Bell, Sparkles, ShieldCheck, Info, Award, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Bell, Sparkles, ShieldCheck, Info, Award, ChevronDown, ChevronUp, Gift } from 'lucide-react';
 
 interface NoticeModalProps {
   isOpen: boolean;
@@ -11,6 +11,7 @@ interface NoticeModalProps {
 export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => {
   const [open261030, setOpen261030] = useState(false);
   const [open261101, setOpen261101] = useState(false);
+  const [open261102, setOpen261102] = useState(false);
 
   if (!isOpen) return null;
 
@@ -136,6 +137,45 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                 <p className="text-amber-300 text-xs sm:text-sm flex items-center gap-2 pt-1 border-t border-slate-800/80 font-bold">
                   <Award className="w-4 h-4 text-amber-400 shrink-0" />
                   명예의 전당에서 리워드 지급현황을 확인할 수 있습니다
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 261102 공지 카드 (접은 형태 / 아코디언) */}
+          <div className="bg-slate-950/80 rounded-xl border border-purple-500/30 overflow-hidden transition-all">
+            <button
+              type="button"
+              onClick={() => setOpen261102(!open261102)}
+              className="w-full p-4 flex items-center justify-between gap-2 text-left hover:bg-slate-900/60 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
+                  📌 261102 공지
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-white truncate">
+                  리워드 시스템 구축
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <span className="text-[11px] text-slate-400 hidden xs:inline">2026-11-02</span>
+                {open261102 ? (
+                  <ChevronUp className="w-4 h-4 text-purple-400 shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                )}
+              </div>
+            </button>
+
+            {open261102 && (
+              <div className="px-4 pb-4 pt-1 space-y-2.5 border-t border-slate-800/80 text-slate-200 leading-relaxed font-medium">
+                <p className="text-sm sm:text-base font-bold text-white flex items-center gap-2 pt-2">
+                  <Gift className="w-4 h-4 text-purple-400 shrink-0" />
+                  간단한 솔라나 문제를 풀고 관리자에게 리워드를 신청할 수 있습니다.
+                </p>
+                <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                  관리자를 제외하고 히든 멤버를 추가하였습니다.
                 </p>
               </div>
             )}

@@ -54,7 +54,11 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [exifInfo, setExifInfo] = useState<{ photoDate: string; photoTime: string } | null>(null);
-  const [exifRejectInfo, setExifRejectInfo] = useState<{ photoDate: string; photoTime: string } | null>(null);
+  const [exifRejectInfo, setExifRejectInfo] = useState<{
+    photoDate?: string;
+    photoTime?: string;
+    reason: string;
+  } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -134,17 +138,14 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       setErrorMsg('');
       setIsCompressing(true);
 
-      // 1번 정책: EXIF 메타데이터 검증 (카메라 원본 사진의 촬영 일자 및 타임대 일치 여부)
+      // EXIF 메타데이터 & 스크린샷 우회 차단 검증
       const exifCheck = await validateMealImageExif(file, date, slot);
       if (!exifCheck.isValid) {
-        if (exifCheck.photoDate && exifCheck.photoTime) {
-          setExifRejectInfo({
-            photoDate: exifCheck.photoDate,
-            photoTime: exifCheck.photoTime,
-          });
-        } else {
-          setExifRejectInfo(null);
-        }
+        setExifRejectInfo({
+          photoDate: exifCheck.photoDate,
+          photoTime: exifCheck.photoTime,
+          reason: exifCheck.errorMessage || '해당 날짜 및 시간대의 사진이 아닙니다.',
+        });
         setErrorMsg(exifCheck.errorMessage || '해당 날짜 및 시간대의 사진이 아닙니다.');
         setImagePreview(null);
         setSelectedFile(null);
@@ -205,12 +206,11 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     if (selectedFile) {
       const reCheck = await validateMealImageExif(selectedFile, date, newSlot);
       if (!reCheck.isValid) {
-        if (reCheck.photoDate && reCheck.photoTime) {
-          setExifRejectInfo({
-            photoDate: reCheck.photoDate,
-            photoTime: reCheck.photoTime,
-          });
-        }
+        setExifRejectInfo({
+          photoDate: reCheck.photoDate,
+          photoTime: reCheck.photoTime,
+          reason: reCheck.errorMessage || '변경된 타임대에 맞지 않는 사진입니다.',
+        });
         setErrorMsg(reCheck.errorMessage || '변경된 타임대에 맞지 않는 사진입니다.');
         setImagePreview(null);
         setSelectedFile(null);
@@ -547,19 +547,19 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                       <span className="text-amber-400 font-bold">사진 선택 또는 촬영</span> (모바일 카메라 지원)
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      JPG, PNG, HEIC 등 모든 사진 지원 (자동 최적화)
+                      카메라 직접 촬영 또는 앨범 원본 사진 (스크린샷 업로드 불가)
                     </p>
                   </div>
                 )}
               </label>
             )}
 
-            {/* 업로드 거부 로그 (촬영 일시 불일치 시 사진 영역 바로 밑에 출력) */}
+            {/* 업로드 거부 로그 (스크린샷 감지, EXIF 누락, 촬영 일시 불일치 시 사진 영역 바로 밑에 출력) */}
             {exifRejectInfo && (
               <div className="mt-2.5 flex items-center space-x-2 text-xs font-semibold text-rose-400 bg-rose-950/60 border border-rose-500/40 px-3.5 py-2.5 rounded-xl animate-fade-in shadow-sm">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
                 <span>
-                  해당 타임대에 촬영된 사진이 아닙니다 : <strong className="text-white">{exifRejectInfo.photoDate} {exifRejectInfo.photoTime}</strong>
+                  {exifRejectInfo.reason}
                 </span>
               </div>
             )}

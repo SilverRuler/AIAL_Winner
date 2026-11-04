@@ -7,43 +7,104 @@ export interface ExifValidationResult {
   photoDate?: string; // YYYY-MM-DD
   photoTime?: string; // HH:mm
   errorMessage?: string;
+  isScreenshot?: boolean;
 }
 
+// 스크린샷 파일명 감지 패턴 (안드로이드, iOS, 윈도우, 맥 공통)
+const SCREENSHOT_FILENAME_REGEX =
+  /(screenshot|screen_shot|screen shot|screen-shot|스크린샷|화면캡처|화면_캡처|화면 캡처|screencapture)/i;
+
+// 스크린샷 소프트웨어 감지 패턴
+const SCREENSHOT_SOFTWARE_REGEX =
+  /(screenshot|screen capture|screencapture|snipping tool|snip|lightshot|sharex)/i;
+
 /**
- * 이미지 파일에서 EXIF 메타데이터(DateTimeOriginal, CreateDate, ModifyDate 등)를 추출하여
- * 등록하려는 식사 날짜 및 타임대(아침/점심/저녁)와 일치하는지 검증합니다.
- *
- * [1번 정책 적용]
- * - 카메라 원본 등 EXIF 촬영 일시 정보가 존재하는 사진:
- *   1) 촬영 날짜가 선택한 식사 날짜(오늘)와 일치해야 함
- *   2) 촬영 시간이 해당 식사 타임대 범위 내여야 함 (식사 전후 여유 버퍼 ±30분 포함)
- *   -> 일치하지 않으면 등록 거부 (isValid = false)
- *
- * - 메신저 다운로드(카카오톡, 텔레그램), 캡처본 등 EXIF 메타데이터가 없는 사진:
- *   -> 2번 정책 미적용(사용자 요청: "2번은 너무 까다로우니 1번만 도입")에 따라 유연하게 통과 (isValid = true, hasExif = false)
+ * 이미지 파일에서 EXIF 메타데이터 및 하드웨어 센서 정보를 추출하여
+ * 1) 스크린샷(화면 캡처) 우회 시도 차단
+ * 2) 촬영 날짜(오늘) 및 해당 식사 타임대(아침/점심/저녁) 허용 범위 일치 여부를 정밀 검증합니다.
  */
 export async function validateMealImageExif(
   file: File,
   targetDate: string,
   targetSlot: MealSlot
 ): Promise<ExifValidationResult> {
-  try {
-    // DateTimeOriginal, CreateDate, ModifyDate 파싱 (문자열 우선)
-    const exifData = await exifr.parse(file, {
-      pick: ['DateTimeOriginal', 'CreateDate', 'ModifyDate'],
-      reviveValues: false, // 원본 "YYYY:MM:DD HH:MM:SS" 문자열 유지하여 타임존 왜곡 방지
-    }).catch(() => null);
+  // 1. 파일명 기반 스크린샷 1차 차단
+  if (file.name && SCREENSHOT_FILENAME_REGEX.test(file.name)) {
+    return {
+      hasExif: false,
+      isValid: false,
+      isScreenshot: true,
+      errorMessage: '스크린샷(화면 캡처) 사진은 등록할 수 없습니다. 카메라 원본 사진을 올려주세요.',
+    };
+  }
 
+  try {
+    // 2. EXIF 촬영 일시 및 카메라 하드웨어/광학 센서 태그 파싱
+    const exifData = await exifr
+      .parse(file, {
+        pick: [
+          'DateTimeOriginal',
+          'CreateDate',
+          'ModifyDate',
+          'Make',
+          'Model',
+          'Software',
+          'FNumber',
+          'ExposureTime',
+          'ISO',
+          'FocalLength',
+        ],
+        reviveValues: false, // 원본 "YYYY:MM:DD HH:MM:SS" 문자열 유지하여 타임존 왜곡 방지
+      })
+      .catch(() => null);
+
+    // 3. EXIF 메타데이터 자체가 없거나 촬영 일시 정보가 없는 경우 -> 스크린샷 또는 메타데이터 삭제본으로 차단
     const rawDate = exifData?.DateTimeOriginal || exifData?.CreateDate || exifData?.ModifyDate;
 
-    // EXIF 촬영 일시 정보가 없는 경우 -> 검증 통과 (1번 정책)
-    if (!rawDate) {
+    if (!exifData || !rawDate) {
       return {
         hasExif: false,
-        isValid: true,
+        isValid: false,
+        isScreenshot: true,
+        errorMessage: '카메라 원본 촬영 정보(EXIF)가 없습니다. 스크린샷이 아닌 카메라 원본 사진을 올려주세요.',
       };
     }
 
+    // 4. Software 태그에 스크린샷 관련 흔적이 있는 경우 차단
+    if (
+      exifData.Software &&
+      typeof exifData.Software === 'string' &&
+      SCREENSHOT_SOFTWARE_REGEX.test(exifData.Software)
+    ) {
+      return {
+        hasExif: true,
+        isValid: false,
+        isScreenshot: true,
+        errorMessage: '스크린샷 도구로 캡처된 사진은 등록할 수 없습니다. 카메라로 직접 촬영한 원본을 올려주세요.',
+      };
+    }
+
+    // 5. 카메라 하드웨어/광학 센서 정보 검증 (스크린샷 지능적 우회 차단)
+    // 스마트폰/DSLR 카메라로 직접 촬영한 사진은 Make(제조사), Model(기종), FNumber(조리개), ExposureTime(셔터속도), ISO, FocalLength 중 최소 1개 이상 존재함
+    const hasCameraHardware = Boolean(
+      exifData.Make ||
+      exifData.Model ||
+      exifData.FNumber !== undefined ||
+      exifData.ExposureTime !== undefined ||
+      exifData.ISO !== undefined ||
+      exifData.FocalLength !== undefined
+    );
+
+    if (!hasCameraHardware) {
+      return {
+        hasExif: true,
+        isValid: false,
+        isScreenshot: true,
+        errorMessage: '카메라 센서 정보가 없는 스크린샷 사진입니다. 카메라로 직접 촬영한 원본을 올려주세요.',
+      };
+    }
+
+    // 6. 촬영 일시(날짜 및 시각) 파싱
     let photoDate = '';
     let photoTime = '';
     let hours = 0;
@@ -69,15 +130,15 @@ export async function validateMealImageExif(
       minutes = rawDate.getMinutes();
     }
 
-    // 날짜 파싱이 불가능한 포맷인 경우 강제 차단하지 않고 통과
     if (!photoDate || !photoTime) {
       return {
         hasExif: false,
-        isValid: true,
+        isValid: false,
+        errorMessage: '촬영 일시 형식을 확인할 수 없습니다. 카메라 원본 사진을 올려주세요.',
       };
     }
 
-    // 1. 촬영 날짜 일치 검증
+    // 7. 촬영 날짜 일치 검증 (한국 시간 오늘 날짜)
     if (photoDate !== targetDate) {
       return {
         hasExif: true,
@@ -88,29 +149,24 @@ export async function validateMealImageExif(
       };
     }
 
-    // 2. 촬영 시간대(아침/점심/저녁) 검증
-    // - 식사 준비 및 촬영 편차를 감안하여 공식 시간 대비 전후 30분 여유 버퍼 허용
+    // 8. 촬영 시간대(아침/점심/저녁) 검증 (±30분 버퍼)
     const photoTotalMins = hours * 60 + minutes;
 
     let minAllowed = 0;
     let maxAllowed = 0;
-    let slotDisplayRange = '';
 
     if (targetSlot === '아침') {
       // 공식 05:00 ~ 10:00 (버퍼 04:30 ~ 10:30)
       minAllowed = 270;
       maxAllowed = 630;
-      slotDisplayRange = '05:00 ~ 10:00';
     } else if (targetSlot === '점심') {
       // 공식 11:00 ~ 13:30 (버퍼 10:30 ~ 14:00)
       minAllowed = 630;
       maxAllowed = 840;
-      slotDisplayRange = '11:00 ~ 13:30';
     } else if (targetSlot === '저녁') {
       // 공식 17:00 ~ 22:00 (버퍼 16:30 ~ 22:30)
       minAllowed = 990;
       maxAllowed = 1350;
-      slotDisplayRange = '17:00 ~ 22:00';
     }
 
     if (photoTotalMins < minAllowed || photoTotalMins > maxAllowed) {
@@ -123,7 +179,7 @@ export async function validateMealImageExif(
       };
     }
 
-    // 검증 성공 (EXIF 인증 완료)
+    // 모든 검증 통과 (카메라 원본 & 당일 해당 타임대 확인 완료)
     return {
       hasExif: true,
       isValid: true,
@@ -132,10 +188,10 @@ export async function validateMealImageExif(
     };
   } catch (error) {
     console.error('EXIF extraction error:', error);
-    // 예외 발생 시 업로드를 부당하게 차단하지 않도록 허용
     return {
       hasExif: false,
-      isValid: true,
+      isValid: false,
+      errorMessage: '사진 메타데이터 분석 중 오류가 발생했습니다. 카메라 원본 사진으로 다시 시도해주세요.',
     };
   }
 }

@@ -117,6 +117,51 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 카메라 원본 촬영 일시(EXIF) 및 타임대 일치 서버 레벨 이중 검증 (스크린샷 우회 차단)
+    if (!exifTakenAt || typeof exifTakenAt !== 'string') {
+      return NextResponse.json(
+        { success: false, message: '카메라 원본 촬영 정보(EXIF)가 확인되지 않는 사진(스크린샷 등)은 등록할 수 없습니다.' },
+        { status: 400 }
+      );
+    }
+
+    const exifMatch = exifTakenAt.match(/^(\d{4}-\d{2}-\d{2})\s+(\d{2}):(\d{2})/);
+    if (!exifMatch) {
+      return NextResponse.json(
+        { success: false, message: '유효하지 않은 촬영 일시 형식입니다.' },
+        { status: 400 }
+      );
+    }
+
+    const [, photoDate, hoursStr, minsStr] = exifMatch;
+    if (photoDate !== mealDate) {
+      return NextResponse.json(
+        { success: false, message: `해당 타임대에 촬영된 사진이 아닙니다 : ${exifTakenAt}` },
+        { status: 400 }
+      );
+    }
+
+    const totalMins = parseInt(hoursStr, 10) * 60 + parseInt(minsStr, 10);
+    let minAllowed = 0;
+    let maxAllowed = 0;
+    if (targetSlot === '아침') {
+      minAllowed = 270;
+      maxAllowed = 630;
+    } else if (targetSlot === '점심') {
+      minAllowed = 630;
+      maxAllowed = 840;
+    } else if (targetSlot === '저녁') {
+      minAllowed = 990;
+      maxAllowed = 1350;
+    }
+
+    if (totalMins < minAllowed || totalMins > maxAllowed) {
+      return NextResponse.json(
+        { success: false, message: `해당 타임대에 촬영된 사진이 아닙니다 : ${exifTakenAt}` },
+        { status: 400 }
+      );
+    }
+
     // oci2 이미지 스토리지 연동 (/root/winner_aial/YYYY-MM-DD/)
     let finalImageUrl = imageUrl;
     if (imageUrl && imageUrl.startsWith('data:image/')) {

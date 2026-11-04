@@ -1698,6 +1698,7 @@ export default function Home() {
         }}
         initialMember={rewardTargetMember}
         isAdmin={isAdmin}
+        memberWinStats={memberWinStats}
       />
 
       <MealDetailModal

@@ -128,3 +128,15 @@ export interface RewardItem {
   createdAt: number;
   updatedAt?: number;
 }
+
+export interface RewardApplication {
+  id: string;
+  member: string; // 신청 멤버
+  totalWins: number; // 신청 당시 총 승수
+  requestedWins: number; // 신청 승수 (5의 배수)
+  walletAddress?: string; // 솔라나 지갑 주소
+  memo?: string; // 신청 메모
+  status: 'pending' | 'completed' | 'rejected';
+  createdAt: number;
+  date: string;
+}

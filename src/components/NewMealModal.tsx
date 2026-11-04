@@ -24,6 +24,7 @@ import {
   checkCanRegisterMeal,
 } from '@/constants/members';
 import { compressImageToDataUrl } from '@/lib/storage';
+import { validateMealImageExif } from '@/lib/exif';
 
 interface NewMealModalProps {
   isOpen: boolean;
@@ -51,6 +52,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
   const [menuName, setMenuName] = useState<string>('');
   const [comment, setComment] = useState<string>('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [exifInfo, setExifInfo] = useState<{ photoDate: string; photoTime: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -87,6 +90,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       setMenuName('');
       setComment('');
       setImagePreview(null);
+      setSelectedFile(null);
+      setExifInfo(null);
 
       const check = checkCanRegisterMeal(kst.date, initialSlot);
       if (!check.canRegister) {
@@ -126,6 +131,27 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     try {
       setErrorMsg('');
       setIsCompressing(true);
+
+      // 1번 정책: EXIF 메타데이터 검증 (카메라 원본 사진의 촬영 일자 및 타임대 일치 여부)
+      const exifCheck = await validateMealImageExif(file, date, slot);
+      if (!exifCheck.isValid) {
+        setErrorMsg(exifCheck.errorMessage || '해당 날짜 및 시간대의 사진이 아닙니다.');
+        setImagePreview(null);
+        setSelectedFile(null);
+        setExifInfo(null);
+        return;
+      }
+
+      if (exifCheck.hasExif && exifCheck.photoDate && exifCheck.photoTime) {
+        setExifInfo({
+          photoDate: exifCheck.photoDate,
+          photoTime: exifCheck.photoTime,
+        });
+      } else {
+        setExifInfo(null);
+      }
+      setSelectedFile(file);
+
       const dataUrl = await compressImageToDataUrl(file);
       if (dataUrl) {
         setImagePreview(dataUrl);
@@ -158,6 +184,23 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     setSelectedMember(memberName);
   };
 
+  const handleSlotChange = async (newSlot: MealSlot) => {
+    setSlot(newSlot);
+    setSelectedMember('');
+    setErrorMsg('');
+
+    // 이미 업로드된 파일이 있다면 새 슬롯 기준으로 EXIF 재검증
+    if (selectedFile) {
+      const reCheck = await validateMealImageExif(selectedFile, date, newSlot);
+      if (!reCheck.isValid) {
+        setErrorMsg(reCheck.errorMessage || '변경된 타임대에 맞지 않는 사진입니다.');
+        setImagePreview(null);
+        setSelectedFile(null);
+        setExifInfo(null);
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
@@ -167,6 +210,15 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     if (!timeCheck.canRegister) {
       setErrorMsg(timeCheck.reason || '현재 시간대에는 등록할 수 없습니다.');
       return;
+    }
+
+    // 1번 정책: 최종 EXIF 재검증 (선택된 파일의 촬영 일시와 슬롯 일치 여부)
+    if (selectedFile) {
+      const finalExifCheck = await validateMealImageExif(selectedFile, date, slot);
+      if (!finalExifCheck.isValid) {
+        setErrorMsg(finalExifCheck.errorMessage || '사진의 촬영 일시가 선택된 날짜 및 시간대와 맞지 않습니다.');
+        return;
+      }
     }
 
     // 필수 항목 검증
@@ -347,11 +399,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                       key={s.slot}
                       type="button"
                       disabled={isBlocked}
-                      onClick={() => {
-                        setSlot(s.slot);
-                        setSelectedMember('');
-                        setErrorMsg('');
-                      }}
+                      onClick={() => handleSlotChange(s.slot)}
                       className={`py-1.5 px-1 rounded-lg text-xs font-bold transition-all flex flex-col items-center justify-center ${
                         isBlocked
                           ? 'opacity-35 bg-slate-900/60 text-slate-600 cursor-not-allowed'
@@ -418,30 +466,44 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
             </label>
 
             {imagePreview ? (
-              <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-slate-950 border border-amber-500/40 group">
-                <img
-                  src={imagePreview}
-                  alt="미리보기"
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
-                  <label className="px-3 py-1.5 rounded-lg bg-slate-900/90 text-white text-xs font-semibold hover:bg-slate-800 border border-slate-700 cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="sr-only"
-                    />
-                    사진 교체
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setImagePreview(null)}
-                    className="px-3 py-1.5 rounded-lg bg-rose-600/90 text-white text-xs font-semibold hover:bg-rose-500 cursor-pointer"
-                  >
-                    사진 삭제
-                  </button>
+              <div>
+                <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-slate-950 border border-amber-500/40 group">
+                  <img
+                    src={imagePreview}
+                    alt="미리보기"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
+                    <label className="px-3 py-1.5 rounded-lg bg-slate-900/90 text-white text-xs font-semibold hover:bg-slate-800 border border-slate-700 cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="sr-only"
+                      />
+                      사진 교체
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setImagePreview(null);
+                        setSelectedFile(null);
+                        setExifInfo(null);
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-rose-600/90 text-white text-xs font-semibold hover:bg-rose-500 cursor-pointer"
+                    >
+                      사진 삭제
+                    </button>
+                  </div>
                 </div>
+                {exifInfo && (
+                  <div className="mt-2 flex items-center space-x-1.5 text-[11px] font-medium text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-3 py-1.5 rounded-lg">
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    <span>
+                      카메라 원본 촬영 일시 확인 완료: <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
               <label className="border-2 border-dashed border-slate-700 hover:border-amber-500/60 rounded-xl p-6 text-center cursor-pointer transition-colors bg-slate-950/50 hover:bg-slate-950 block relative">

@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { date, time, slot, member, menuName, comment, imageUrl } = body;
+    const { date, time, slot, member, menuName, comment, imageUrl, exifTakenAt } = body;
 
     // 필수는 멤버 선택과 사진입니다. (활동 멤버만 신규 등록 가능, 실버 등 레거시 멤버 제외)
     if (!member || !MEMBERS.some((m) => m.name === member.trim())) {
@@ -153,6 +153,7 @@ export async function POST(request: NextRequest) {
       menuName: finalMenuName,
       comment: (comment || '').trim(),
       imageUrl: finalImageUrl,
+      exifTakenAt: exifTakenAt || undefined,
       isWinner: false,
       views: 0,
       viewedIps: [],

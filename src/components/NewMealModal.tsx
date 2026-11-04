@@ -54,6 +54,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [exifInfo, setExifInfo] = useState<{ photoDate: string; photoTime: string } | null>(null);
+  const [exifRejectInfo, setExifRejectInfo] = useState<{ photoDate: string; photoTime: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -92,6 +93,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       setImagePreview(null);
       setSelectedFile(null);
       setExifInfo(null);
+      setExifRejectInfo(null);
 
       const check = checkCanRegisterMeal(kst.date, initialSlot);
       if (!check.canRegister) {
@@ -135,6 +137,14 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       // 1번 정책: EXIF 메타데이터 검증 (카메라 원본 사진의 촬영 일자 및 타임대 일치 여부)
       const exifCheck = await validateMealImageExif(file, date, slot);
       if (!exifCheck.isValid) {
+        if (exifCheck.photoDate && exifCheck.photoTime) {
+          setExifRejectInfo({
+            photoDate: exifCheck.photoDate,
+            photoTime: exifCheck.photoTime,
+          });
+        } else {
+          setExifRejectInfo(null);
+        }
         setErrorMsg(exifCheck.errorMessage || '해당 날짜 및 시간대의 사진이 아닙니다.');
         setImagePreview(null);
         setSelectedFile(null);
@@ -142,6 +152,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
         return;
       }
 
+      // 검증 통과 시 거부 로그 초기화 및 승인 정보 저장
+      setExifRejectInfo(null);
       if (exifCheck.hasExif && exifCheck.photoDate && exifCheck.photoTime) {
         setExifInfo({
           photoDate: exifCheck.photoDate,
@@ -193,10 +205,26 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     if (selectedFile) {
       const reCheck = await validateMealImageExif(selectedFile, date, newSlot);
       if (!reCheck.isValid) {
+        if (reCheck.photoDate && reCheck.photoTime) {
+          setExifRejectInfo({
+            photoDate: reCheck.photoDate,
+            photoTime: reCheck.photoTime,
+          });
+        }
         setErrorMsg(reCheck.errorMessage || '변경된 타임대에 맞지 않는 사진입니다.');
         setImagePreview(null);
         setSelectedFile(null);
         setExifInfo(null);
+      } else {
+        setExifRejectInfo(null);
+        if (reCheck.hasExif && reCheck.photoDate && reCheck.photoTime) {
+          setExifInfo({
+            photoDate: reCheck.photoDate,
+            photoTime: reCheck.photoTime,
+          });
+        } else {
+          setExifInfo(null);
+        }
       }
     }
   };
@@ -248,6 +276,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
         menuName: menuName.trim() || '오늘의 한 끼',
         comment: comment.trim(),
         imageUrl: imagePreview,
+        exifTakenAt: exifInfo ? `${exifInfo.photoDate} ${exifInfo.photoTime}` : undefined,
       };
 
       const resp = await fetch('/api/meals', {
@@ -466,44 +495,35 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
             </label>
 
             {imagePreview ? (
-              <div>
-                <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-slate-950 border border-amber-500/40 group">
-                  <img
-                    src={imagePreview}
-                    alt="미리보기"
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
-                    <label className="px-3 py-1.5 rounded-lg bg-slate-900/90 text-white text-xs font-semibold hover:bg-slate-800 border border-slate-700 cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileChange}
-                        className="sr-only"
-                      />
-                      사진 교체
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setImagePreview(null);
-                        setSelectedFile(null);
-                        setExifInfo(null);
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-rose-600/90 text-white text-xs font-semibold hover:bg-rose-500 cursor-pointer"
-                    >
-                      사진 삭제
-                    </button>
-                  </div>
+              <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-slate-950 border border-amber-500/40 group">
+                <img
+                  src={imagePreview}
+                  alt="미리보기"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
+                  <label className="px-3 py-1.5 rounded-lg bg-slate-900/90 text-white text-xs font-semibold hover:bg-slate-800 border border-slate-700 cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileChange}
+                      className="sr-only"
+                    />
+                    사진 교체
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImagePreview(null);
+                      setSelectedFile(null);
+                      setExifInfo(null);
+                      setExifRejectInfo(null);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-rose-600/90 text-white text-xs font-semibold hover:bg-rose-500 cursor-pointer"
+                  >
+                    사진 삭제
+                  </button>
                 </div>
-                {exifInfo && (
-                  <div className="mt-2 flex items-center space-x-1.5 text-[11px] font-medium text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-3 py-1.5 rounded-lg">
-                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                    <span>
-                      카메라 원본 촬영 일시 확인 완료: <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
-                    </span>
-                  </div>
-                )}
               </div>
             ) : (
               <label className="border-2 border-dashed border-slate-700 hover:border-amber-500/60 rounded-xl p-6 text-center cursor-pointer transition-colors bg-slate-950/50 hover:bg-slate-950 block relative">
@@ -532,6 +552,26 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                   </div>
                 )}
               </label>
+            )}
+
+            {/* 업로드 거부 로그 (촬영 일시 불일치 시 사진 영역 바로 밑에 출력) */}
+            {exifRejectInfo && (
+              <div className="mt-2.5 flex items-center space-x-2 text-xs font-semibold text-rose-400 bg-rose-950/60 border border-rose-500/40 px-3.5 py-2.5 rounded-xl animate-fade-in shadow-sm">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>
+                  해당 타임대에 촬영된 사진이 아닙니다 : <strong className="text-white">{exifRejectInfo.photoDate} {exifRejectInfo.photoTime}</strong>
+                </span>
+              </div>
+            )}
+
+            {/* 업로드 승인 로그 (촬영 일시 확인 완료 시 사진 영역 바로 밑에 출력) */}
+            {exifInfo && imagePreview && (
+              <div className="mt-2.5 flex items-center space-x-2 text-xs font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-3.5 py-2.5 rounded-xl animate-fade-in shadow-sm">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span>
+                  카메라 원본 촬영 일시 확인 완료 : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
+                </span>
+              </div>
             )}
           </div>
 

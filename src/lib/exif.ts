@@ -84,7 +84,7 @@ export async function validateMealImageExif(
         isValid: false,
         photoDate,
         photoTime,
-        errorMessage: `[촬영 일자 불일치] 선택한 날짜(${targetDate})에 촬영된 사진이 아닙니다. (사진 촬영일: ${photoDate})`,
+        errorMessage: `해당 타임대에 촬영된 사진이 아닙니다 : ${photoDate} ${photoTime}`,
       };
     }
 
@@ -119,7 +119,7 @@ export async function validateMealImageExif(
         isValid: false,
         photoDate,
         photoTime,
-        errorMessage: `[촬영 시간 불일치] ${targetSlot} 식사 시간대(${slotDisplayRange})에 촬영된 사진이 아닙니다. (사진 촬영 시간: ${photoTime})`,
+        errorMessage: `해당 타임대에 촬영된 사진이 아닙니다 : ${photoDate} ${photoTime}`,
       };
     }
 

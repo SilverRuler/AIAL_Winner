@@ -428,6 +428,8 @@ export default function Home() {
     setIsAdmin(true);
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('aial_is_admin', 'true');
+      sessionStorage.setItem('aial_admin_id', 'aaa');
+      sessionStorage.setItem('aial_admin_pw', 'bbb');
     }
   };
 
@@ -435,6 +437,8 @@ export default function Home() {
     setIsAdmin(false);
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('aial_is_admin');
+      sessionStorage.removeItem('aial_admin_id');
+      sessionStorage.removeItem('aial_admin_pw');
     }
   };
 

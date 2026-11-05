@@ -35,6 +35,11 @@ export const AdminLoginModal: React.FC<AdminLoginModalProps> = ({
 
     if (adminId.trim() === 'aaa' && adminPw.trim() === 'bbb') {
       setIsSubmitting(true);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('aial_is_admin', 'true');
+        sessionStorage.setItem('aial_admin_id', adminId.trim());
+        sessionStorage.setItem('aial_admin_pw', adminPw.trim());
+      }
       setTimeout(() => {
         setIsSubmitting(false);
         onSuccess();

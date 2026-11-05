@@ -477,6 +477,14 @@ export const RewardModal: React.FC<RewardModalProps> = ({
     setIsFormOpen(true);
   };
 
+  // 관리자 인증 정보 취득 헬퍼
+  const getAdminCredentials = () => {
+    if (typeof window === 'undefined') return { adminId: 'aaa', adminPw: 'bbb' };
+    const adminId = sessionStorage.getItem('aial_admin_id') || 'aaa';
+    const adminPw = sessionStorage.getItem('aial_admin_pw') || 'bbb';
+    return { adminId, adminPw };
+  };
+
   // 관리자 저장 처리
   const handleSaveReward = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -498,6 +506,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
 
     setIsSubmitting(true);
     try {
+      const { adminId, adminPw } = getAdminCredentials();
       const payload = {
         member: formMember.trim(),
         amount: amt,
@@ -507,19 +516,29 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         date: formDate.trim() || new Date().toISOString().split('T')[0],
         memo: formMemo.trim(),
         recipientWallet: formRecipientWallet.trim(),
+        adminId,
+        adminPw,
       };
 
       let res;
       if (editingRewardId) {
         res = await fetch('/api/rewards', {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-id': adminId,
+            'x-admin-pw': adminPw,
+          },
           body: JSON.stringify({ id: editingRewardId, ...payload }),
         });
       } else {
         res = await fetch('/api/rewards', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-id': adminId,
+            'x-admin-pw': adminPw,
+          },
           body: JSON.stringify(payload),
         });
       }
@@ -543,8 +562,13 @@ export const RewardModal: React.FC<RewardModalProps> = ({
   const handleDeleteReward = async (id: string) => {
     if (!confirm('이 리워드 지급 내역을 삭제하시겠습니까?')) return;
     try {
-      const res = await fetch(`/api/rewards?id=${encodeURIComponent(id)}`, {
+      const { adminId, adminPw } = getAdminCredentials();
+      const res = await fetch(`/api/rewards?id=${encodeURIComponent(id)}&adminId=${encodeURIComponent(adminId)}&adminPw=${encodeURIComponent(adminPw)}`, {
         method: 'DELETE',
+        headers: {
+          'x-admin-id': adminId,
+          'x-admin-pw': adminPw,
+        },
       });
       const data = await res.json();
       if (data.success) {

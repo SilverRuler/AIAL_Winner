@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { RewardItem, MemberWinStats } from '@/types/meal';
 import { MEMBERS, LEGACY_MEMBERS, getMemberInfo } from '@/constants/members';
+import { getRandomQuizzes, QuizQuestion, REWARD_QUIZ_POOL } from '@/constants/quizzes';
 
 interface RewardModalProps {
   isOpen: boolean;
@@ -51,11 +52,17 @@ export const RewardModal: React.FC<RewardModalProps> = ({
   // 화면 모드: 'history' (Page A) | 'intro' (최소 승수/신청 안내) | 'quiz1' (문제 1) | 'quiz2' (문제 2) | 'apply' (승수 신청)
   const [viewMode, setViewMode] = useState<'history' | 'intro' | 'quiz1' | 'quiz2' | 'apply'>('history');
 
-  // 퀴즈 1 (주관식: 업비트 SOL 최소 입금 금액 = 0.01)
+  // 활성화된 랜덤 퀴즈 2문제
+  const [activeQuizzes, setActiveQuizzes] = useState<QuizQuestion[]>([]);
+  const [quizBackNotice, setQuizBackNotice] = useState<string>('');
+
+  // 퀴즈 1 (주관식/객관식 공용)
   const [quiz1Answer, setQuiz1Answer] = useState<string>('');
+  const [quiz1Selected, setQuiz1Selected] = useState<number | null>(null);
   const [quiz1Error, setQuiz1Error] = useState<string>('');
 
-  // 퀴즈 2 (객관식: 솔라나 트랜잭션 소멸 이유 = 3번)
+  // 퀴즈 2 (주관식/객관식 공용)
+  const [quiz2Answer, setQuiz2Answer] = useState<string>('');
   const [quiz2Selected, setQuiz2Selected] = useState<number | null>(null);
   const [quiz2Error, setQuiz2Error] = useState<string>('');
 
@@ -194,10 +201,14 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         setViewMode('history');
       }
 
+      setActiveQuizzes(getRandomQuizzes(2));
       setQuiz1Answer('');
+      setQuiz1Selected(null);
       setQuiz1Error('');
+      setQuiz2Answer('');
       setQuiz2Selected(null);
       setQuiz2Error('');
+      setQuizBackNotice('');
       setApplySuccessMsg('');
       setApplyError('');
       setIsImageZoomed(false);
@@ -280,34 +291,84 @@ export const RewardModal: React.FC<RewardModalProps> = ({
     }, 2000);
   };
 
-  // 퀴즈 1 검증: 업비트 SOL 최소 입금 금액 = 0.01 (패널티 없음)
-  const handleCheckQuiz1 = () => {
-    const clean = quiz1Answer
-      .trim()
-      .toLowerCase()
-      .replace(/sol/g, '')
-      .replace(/개/g, '')
-      .trim();
+  // 4문제 중 2문제 무작위 추출하여 퀴즈 시작
+  const handleStartQuiz = () => {
+    setActiveQuizzes(getRandomQuizzes(2));
+    setQuiz1Answer('');
+    setQuiz1Selected(null);
+    setQuiz1Error('');
+    setQuiz2Answer('');
+    setQuiz2Selected(null);
+    setQuiz2Error('');
+    setQuizBackNotice('');
+    setViewMode('quiz1');
+  };
 
-    if (clean === '0.01') {
-      setQuiz1Error('');
-      setViewMode('quiz2');
+  // 퀴즈 1 검증: 주관식/객관식 범용 처리 (패널티 없음)
+  const handleCheckQuiz1 = () => {
+    const currentQuiz = activeQuizzes[0];
+    if (!currentQuiz) return;
+
+    if (currentQuiz.type === 'subjective') {
+      const isValid = currentQuiz.validateSubjective
+        ? currentQuiz.validateSubjective(quiz1Answer)
+        : false;
+
+      if (isValid) {
+        setQuiz1Error('');
+        setQuizBackNotice('');
+        setViewMode('quiz2');
+      } else {
+        setQuiz1Error('정답이 아닙니다. 다시 입력해주세요! (패널티 없음)');
+      }
     } else {
-      setQuiz1Error('정답이 아닙니다. 다시 입력해주세요! (패널티 없음)');
+      if (quiz1Selected === null) {
+        setQuiz1Error('보기를 선택한 후 정답을 제출해주세요.');
+        return;
+      }
+      if (quiz1Selected === currentQuiz.correctOption) {
+        setQuiz1Error('');
+        setQuizBackNotice('');
+        setViewMode('quiz2');
+      } else {
+        setQuiz1Error('오답입니다. 다시 선택해보세요! (패널티 없음)');
+      }
     }
   };
 
-  // 퀴즈 2 검증: 솔라나 트랜잭션 소멸 이유 = 3번 (정답 제출 버튼 클릭 시 판별, 패널티 없음)
+  // 퀴즈 2 검증: 정답 시 apply 단계 진입, 오답 시 "첫 번째 문제로 돌아간다" (패널티 없음, 재배치)
   const handleSubmitQuiz2 = () => {
-    if (quiz2Selected === null) {
-      setQuiz2Error('보기를 선택한 후 정답을 제출해주세요.');
-      return;
+    const currentQuiz = activeQuizzes[1];
+    if (!currentQuiz) return;
+
+    let isCorrect = false;
+    if (currentQuiz.type === 'subjective') {
+      isCorrect = currentQuiz.validateSubjective
+        ? currentQuiz.validateSubjective(quiz2Answer)
+        : false;
+    } else {
+      if (quiz2Selected === null) {
+        setQuiz2Error('보기를 선택한 후 정답을 제출해주세요.');
+        return;
+      }
+      isCorrect = quiz2Selected === currentQuiz.correctOption;
     }
-    if (quiz2Selected === 3) {
+
+    if (isCorrect) {
       setQuiz2Error('');
+      setQuizBackNotice('');
       setViewMode('apply');
     } else {
-      setQuiz2Error('오답입니다. 다시 선택해보세요! (패널티 없음)');
+      // ⚠️ 두 번째 문제를 틀렸을 경우 첫 번째 문제로 돌아간다! (패널티 없음)
+      setQuizBackNotice('2번 문제 오답입니다! 규정에 따라 1번 문제로 돌아갑니다. (패널티 없음, 다시 도전해보세요!)');
+      setActiveQuizzes(getRandomQuizzes(2));
+      setQuiz1Answer('');
+      setQuiz1Selected(null);
+      setQuiz1Error('');
+      setQuiz2Answer('');
+      setQuiz2Selected(null);
+      setQuiz2Error('');
+      setViewMode('quiz1');
     }
   };
 
@@ -663,13 +724,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
               {availableWins >= 5 && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setQuiz1Answer('');
-                    setQuiz1Error('');
-                    setQuiz2Selected(null);
-                    setQuiz2Error('');
-                    setViewMode('quiz1');
-                  }}
+                  onClick={handleStartQuiz}
                   className="w-full sm:flex-1 px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white font-black text-sm shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Gift className="w-4 h-4" />
@@ -688,200 +743,300 @@ export const RewardModal: React.FC<RewardModalProps> = ({
           </div>
         )}
 
-        {/* 2. 문제 1 화면 (주관식: 업비트 SOL 최소 입금 금액 = 0.01) */}
-        {viewMode === 'quiz1' && (
-          <div className="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 animate-fade-in">
-            {/* 상단 스텝 프로그레스 */}
-            <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-800">
-              <span className="font-black text-purple-400 flex items-center gap-1.5">
-                <HelpCircle className="w-4 h-4" />
-                <span>리워드 신청 퀴즈 (1/2단계)</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setViewMode('history')}
-                className="text-slate-400 hover:text-white text-xs underline cursor-pointer"
-              >
-                지급 내역으로 돌아가기
-              </button>
-            </div>
-
-            {/* 안내 이미지 (/root/reward.png -> /public/reward.png) */}
-            <div className="space-y-1.5">
-              <div
-                className="relative rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-lg group cursor-pointer"
-                onClick={() => setIsImageZoomed(true)}
-                title="클릭하여 원본 크기로 확대 보기"
-              >
-                <img
-                  src="/reward.png"
-                  alt="리워드 안내"
-                  className="w-full max-h-56 sm:max-h-64 object-contain mx-auto transition-transform group-hover:scale-[1.01]"
-                />
-                <div className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/80 backdrop-blur-sm text-slate-300 text-[10px] flex items-center gap-1 border border-white/10 pointer-events-none">
-                  <ZoomIn className="w-3 h-3 text-cyan-300" />
-                  <span>클릭하여 사진 확대</span>
-                </div>
-              </div>
-              <p className="text-[11px] text-slate-400 text-center">
-                위 첨부된 이미지를 참고하여 아래 퀴즈를 풀어주세요.
-              </p>
-            </div>
-
-            {/* 문제 1 본문 박스 */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-purple-950/20 border border-purple-500/30 space-y-3 shadow-inner">
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[11px] font-black">
-                  문제 1 · 주관식
+        {/* 2. 문제 1 화면 (랜덤 출제: 주관식 or 객관식) */}
+        {viewMode === 'quiz1' && (() => {
+          const q1 = activeQuizzes[0] || REWARD_QUIZ_POOL[0];
+          return (
+            <div className="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 animate-fade-in">
+              {/* 상단 스텝 프로그레스 */}
+              <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-800">
+                <span className="font-black text-purple-400 flex items-center gap-1.5">
+                  <HelpCircle className="w-4 h-4" />
+                  <span>리워드 신청 퀴즈 (1/2단계)</span>
                 </span>
-                <span className="text-[11px] text-slate-400">틀려도 패널티 없음 (재입력 가능)</span>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('history')}
+                  className="text-slate-400 hover:text-white text-xs underline cursor-pointer"
+                >
+                  지급 내역으로 돌아가기
+                </button>
               </div>
 
-              <h3 className="text-sm sm:text-base font-extrabold text-white leading-relaxed">
-                업비트에서 요구하는 SOL 최소 입금 금액은 몇인가?
-              </h3>
+              {/* 2번 문제에서 틀려서 1번으로 돌아왔을 때의 안내 알림 */}
+              {quizBackNotice && (
+                <div className="p-3.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs flex items-center space-x-2 animate-fade-in shadow-sm">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                  <span>{quizBackNotice}</span>
+                </div>
+              )}
 
-              <div className="space-y-2 pt-1">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={quiz1Answer}
-                    onChange={(e) => {
-                      setQuiz1Answer(e.target.value);
-                      setQuiz1Error('');
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleCheckQuiz1();
-                    }}
-                    placeholder="정답 입력 (예: 0.003)"
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white text-sm outline-none focus:border-purple-400 font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCheckQuiz1}
-                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black transition-all shadow-md shadow-purple-600/30 cursor-pointer"
+              {/* 안내 이미지 (/reward.png) */}
+              {q1.showGuideImage !== false && (
+                <div className="space-y-1.5">
+                  <div
+                    className="relative rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-lg group cursor-pointer"
+                    onClick={() => setIsImageZoomed(true)}
+                    title="클릭하여 원본 크기로 확대 보기"
                   >
-                    정답 확인
-                  </button>
+                    <img
+                      src="/reward.png"
+                      alt="리워드 안내"
+                      className="w-full max-h-56 sm:max-h-64 object-contain mx-auto transition-transform group-hover:scale-[1.01]"
+                    />
+                    <div className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/80 backdrop-blur-sm text-slate-300 text-[10px] flex items-center gap-1 border border-white/10 pointer-events-none">
+                      <ZoomIn className="w-3 h-3 text-cyan-300" />
+                      <span>클릭하여 사진 확대</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400 text-center">
+                    위 첨부된 이미지를 참고하여 아래 퀴즈를 풀어주세요.
+                  </p>
+                </div>
+              )}
+
+              {/* 문제 1 본문 박스 */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-purple-950/20 border border-purple-500/30 space-y-3.5 shadow-inner">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/40 text-[11px] font-black">
+                    문제 1 · {q1.type === 'subjective' ? '주관식' : '객관식'}
+                  </span>
+                  <span className="text-[11px] text-slate-400">틀려도 패널티 없음 (재도전 가능)</span>
                 </div>
 
-                {quiz1Error && (
-                  <p className="text-xs text-rose-400 font-bold flex items-center gap-1.5 animate-fade-in">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span>{quiz1Error}</span>
-                  </p>
+                <h3 className="text-sm sm:text-base font-extrabold text-white leading-relaxed">
+                  {q1.question}
+                </h3>
+
+                {q1.type === 'subjective' ? (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={quiz1Answer}
+                        onChange={(e) => {
+                          setQuiz1Answer(e.target.value);
+                          setQuiz1Error('');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleCheckQuiz1();
+                        }}
+                        placeholder={q1.placeholder || '정답 입력'}
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white text-sm outline-none focus:border-purple-400 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCheckQuiz1}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-black transition-all shadow-md shadow-purple-600/30 cursor-pointer"
+                      >
+                        정답 확인
+                      </button>
+                    </div>
+
+                    {quiz1Error && (
+                      <p className="text-xs text-rose-400 font-bold flex items-center gap-1.5 animate-fade-in">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{quiz1Error}</span>
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2 pt-1">
+                    {q1.options?.map((opt) => {
+                      const isSelected = quiz1Selected === opt.no;
+                      return (
+                        <button
+                          key={opt.no}
+                          type="button"
+                          onClick={() => {
+                            setQuiz1Selected(opt.no);
+                            setQuiz1Error('');
+                          }}
+                          className={`w-full p-3 rounded-xl border text-left text-xs sm:text-sm font-bold transition-all flex items-center justify-between cursor-pointer ${
+                            isSelected
+                              ? 'bg-purple-600/25 border-purple-400 text-white shadow-md ring-1 ring-purple-400'
+                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-purple-400/60 hover:bg-slate-900'
+                          }`}
+                        >
+                          <span>
+                            {opt.no}) {opt.text}
+                          </span>
+                          {isSelected && (
+                            <div className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-sm" />
+                          )}
+                        </button>
+                      );
+                    })}
+
+                    {quiz1Error && (
+                      <p className="text-xs text-rose-400 font-bold flex items-center gap-1.5 animate-fade-in pt-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{quiz1Error}</span>
+                      </p>
+                    )}
+
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleCheckQuiz1}
+                        disabled={quiz1Selected === null}
+                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-black transition-all shadow-md shadow-purple-600/30 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                      >
+                        <span>정답 확인</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
-        {/* 3. 문제 2 화면 (객관식: 솔라나 트랜잭션 소멸 이유 = 3번) */}
-        {viewMode === 'quiz2' && (
-          <div className="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 animate-fade-in">
-            {/* 상단 스텝 프로그레스 */}
-            <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-800">
-              <span className="font-black text-cyan-400 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>리워드 신청 퀴즈 (2/2단계)</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setViewMode('quiz1')}
-                className="text-slate-400 hover:text-white text-xs underline cursor-pointer flex items-center gap-1"
-              >
-                <ArrowLeft className="w-3 h-3" />
-                <span>문제 1로</span>
-              </button>
-            </div>
-
-            {/* 안내 이미지 */}
-            <div className="space-y-1.5">
-              <div
-                className="relative rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-lg group cursor-pointer"
-                onClick={() => setIsImageZoomed(true)}
-                title="클릭하여 원본 크기로 확대 보기"
-              >
-                <img
-                  src="/reward.png"
-                  alt="리워드 안내"
-                  className="w-full max-h-56 sm:max-h-64 object-contain mx-auto transition-transform group-hover:scale-[1.01]"
-                />
-                <div className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/80 backdrop-blur-sm text-slate-300 text-[10px] flex items-center gap-1 border border-white/10 pointer-events-none">
-                  <ZoomIn className="w-3 h-3 text-cyan-300" />
-                  <span>클릭하여 사진 확대</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 문제 2 본문 박스 */}
-            <div className="p-4 sm:p-5 rounded-2xl bg-indigo-950/20 border border-indigo-500/30 space-y-3.5 shadow-inner">
-              <div className="flex items-center gap-2">
-                <span className="px-2.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[11px] font-black">
-                  문제 2 · 객관식
+        {/* 3. 문제 2 화면 (랜덤 출제: 주관식 or 객관식, 오답 시 1번 문제로 복귀) */}
+        {viewMode === 'quiz2' && (() => {
+          const q2 = activeQuizzes[1] || REWARD_QUIZ_POOL[1];
+          return (
+            <div className="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 animate-fade-in">
+              {/* 상단 스텝 프로그레스 */}
+              <div className="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-800">
+                <span className="font-black text-cyan-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>리워드 신청 퀴즈 (2/2단계)</span>
                 </span>
-                <span className="text-[11px] text-slate-400">보기를 선택하고 정답 제출을 눌러주세요.</span>
-              </div>
-
-              <h3 className="text-sm sm:text-base font-extrabold text-white leading-relaxed">
-                솔라나는 왜 전송기록(트랜잭션)이 일정 기간 후에 사라질까?
-              </h3>
-
-              <div className="space-y-2 pt-1">
-                {[
-                  { no: 1, text: '중앙화 체인이라서' },
-                  { no: 2, text: '익명성을 제공하고 싶어서' },
-                  { no: 3, text: '방대한 양의 트랜잭션을 전부 보관할 수 없어서' },
-                  { no: 4, text: '사토시 나카모토가 의도적으로 그렇게 만들어서' },
-                ].map((opt) => {
-                  const isSelected = quiz2Selected === opt.no;
-                  return (
-                    <button
-                      key={opt.no}
-                      type="button"
-                      onClick={() => {
-                        setQuiz2Selected(opt.no);
-                        setQuiz2Error('');
-                      }}
-                      className={`w-full p-3 rounded-xl border text-left text-xs sm:text-sm font-bold transition-all flex items-center justify-between cursor-pointer ${
-                        isSelected
-                          ? 'bg-purple-600/25 border-purple-400 text-white shadow-md ring-1 ring-purple-400'
-                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-purple-400/60 hover:bg-slate-900'
-                      }`}
-                    >
-                      <span>
-                        {opt.no}) {opt.text}
-                      </span>
-                      {isSelected && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-sm" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {quiz2Error && (
-                <p className="text-xs text-rose-400 font-bold flex items-center gap-1.5 animate-fade-in pt-1">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>{quiz2Error}</span>
-                </p>
-              )}
-
-              {/* 정답 제출 버튼 */}
-              <div className="pt-2">
                 <button
                   type="button"
-                  onClick={handleSubmitQuiz2}
-                  disabled={quiz2Selected === null}
-                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-black transition-all shadow-md shadow-purple-600/30 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                  onClick={() => setViewMode('quiz1')}
+                  className="text-slate-400 hover:text-white text-xs underline cursor-pointer flex items-center gap-1"
                 >
-                  <span>정답 제출</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowLeft className="w-3 h-3" />
+                  <span>문제 1로</span>
                 </button>
               </div>
+
+              {/* 안내 이미지 (/reward.png) */}
+              {q2.showGuideImage !== false && (
+                <div className="space-y-1.5">
+                  <div
+                    className="relative rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-lg group cursor-pointer"
+                    onClick={() => setIsImageZoomed(true)}
+                    title="클릭하여 원본 크기로 확대 보기"
+                  >
+                    <img
+                      src="/reward.png"
+                      alt="리워드 안내"
+                      className="w-full max-h-56 sm:max-h-64 object-contain mx-auto transition-transform group-hover:scale-[1.01]"
+                    />
+                    <div className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/80 backdrop-blur-sm text-slate-300 text-[10px] flex items-center gap-1 border border-white/10 pointer-events-none">
+                      <ZoomIn className="w-3 h-3 text-cyan-300" />
+                      <span>클릭하여 사진 확대</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400 text-center">
+                    위 첨부된 이미지를 참고하여 아래 퀴즈를 풀어주세요.
+                  </p>
+                </div>
+              )}
+
+              {/* 문제 2 본문 박스 */}
+              <div className="p-4 sm:p-5 rounded-2xl bg-indigo-950/20 border border-indigo-500/30 space-y-3.5 shadow-inner">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-md bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-[11px] font-black">
+                    문제 2 · {q2.type === 'subjective' ? '주관식' : '객관식'}
+                  </span>
+                  <span className="text-[11px] text-amber-300/90 font-semibold">
+                    * 틀릴 경우 1번 문제로 돌아갑니다 (패널티 없음)
+                  </span>
+                </div>
+
+                <h3 className="text-sm sm:text-base font-extrabold text-white leading-relaxed">
+                  {q2.question}
+                </h3>
+
+                {q2.type === 'subjective' ? (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={quiz2Answer}
+                        onChange={(e) => {
+                          setQuiz2Answer(e.target.value);
+                          setQuiz2Error('');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSubmitQuiz2();
+                        }}
+                        placeholder={q2.placeholder || '정답 입력'}
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-white text-sm outline-none focus:border-indigo-400 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSubmitQuiz2}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs font-black transition-all shadow-md shadow-purple-600/30 cursor-pointer"
+                      >
+                        정답 제출
+                      </button>
+                    </div>
+
+                    {quiz2Error && (
+                      <p className="text-xs text-rose-400 font-bold flex items-center gap-1.5 animate-fade-in">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{quiz2Error}</span>
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2 pt-1">
+                    {q2.options?.map((opt) => {
+                      const isSelected = quiz2Selected === opt.no;
+                      return (
+                        <button
+                          key={opt.no}
+                          type="button"
+                          onClick={() => {
+                            setQuiz2Selected(opt.no);
+                            setQuiz2Error('');
+                          }}
+                          className={`w-full p-3 rounded-xl border text-left text-xs sm:text-sm font-bold transition-all flex items-center justify-between cursor-pointer ${
+                            isSelected
+                              ? 'bg-purple-600/25 border-purple-400 text-white shadow-md ring-1 ring-purple-400'
+                              : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-purple-400/60 hover:bg-slate-900'
+                          }`}
+                        >
+                          <span>
+                            {opt.no}) {opt.text}
+                          </span>
+                          {isSelected && (
+                            <div className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-sm" />
+                          )}
+                        </button>
+                      );
+                    })}
+
+                    {quiz2Error && (
+                      <p className="text-xs text-rose-400 font-bold flex items-center gap-1.5 animate-fade-in pt-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{quiz2Error}</span>
+                      </p>
+                    )}
+
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={handleSubmitQuiz2}
+                        disabled={quiz2Selected === null}
+                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 text-white text-xs sm:text-sm font-black transition-all shadow-md shadow-purple-600/30 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+                      >
+                        <span>정답 제출</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* 4. 리워드 승수 신청 화면 (2문제 모두 정답 통과 후) */}
         {viewMode === 'apply' && (

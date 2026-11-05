@@ -138,6 +138,8 @@ export interface RewardApplication {
   walletAddress?: string; // 솔라나 지갑 주소
   memo?: string; // 신청 메모
   status: 'pending' | 'completed' | 'rejected';
+  notified?: boolean; // 텔레그램 발송 완료 여부
+  notifiedAt?: number;
   createdAt: number;
   date: string;
 }

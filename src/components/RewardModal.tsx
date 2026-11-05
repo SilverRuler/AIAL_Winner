@@ -771,29 +771,27 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                 </div>
               )}
 
-              {/* 안내 이미지 (/reward.png) */}
-              {q1.showGuideImage !== false && (
-                <div className="space-y-1.5">
-                  <div
-                    className="relative rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-lg group cursor-pointer"
-                    onClick={() => setIsImageZoomed(true)}
-                    title="클릭하여 원본 크기로 확대 보기"
-                  >
-                    <img
-                      src="/reward.png"
-                      alt="리워드 안내"
-                      className="w-full max-h-56 sm:max-h-64 object-contain mx-auto transition-transform group-hover:scale-[1.01]"
-                    />
-                    <div className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/80 backdrop-blur-sm text-slate-300 text-[10px] flex items-center gap-1 border border-white/10 pointer-events-none">
-                      <ZoomIn className="w-3 h-3 text-cyan-300" />
-                      <span>클릭하여 사진 확대</span>
-                    </div>
+              {/* 안내 이미지 (/reward.png - 모든 문제에서 항상 표시) */}
+              <div className="space-y-1.5">
+                <div
+                  className="relative rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-lg group cursor-pointer"
+                  onClick={() => setIsImageZoomed(true)}
+                  title="클릭하여 원본 크기로 확대 보기"
+                >
+                  <img
+                    src="/reward.png"
+                    alt="리워드 안내"
+                    className="w-full max-h-56 sm:max-h-64 object-contain mx-auto transition-transform group-hover:scale-[1.01]"
+                  />
+                  <div className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/80 backdrop-blur-sm text-slate-300 text-[10px] flex items-center gap-1 border border-white/10 pointer-events-none">
+                    <ZoomIn className="w-3 h-3 text-cyan-300" />
+                    <span>클릭하여 사진 확대</span>
                   </div>
-                  <p className="text-[11px] text-slate-400 text-center">
-                    위 첨부된 이미지를 참고하여 아래 퀴즈를 풀어주세요.
-                  </p>
                 </div>
-              )}
+                <p className="text-[11px] text-slate-400 text-center">
+                  위 첨부된 이미지를 참고하여 아래 퀴즈를 풀어주세요.
+                </p>
+              </div>
 
               {/* 문제 1 본문 박스 */}
               <div className="p-4 sm:p-5 rounded-2xl bg-purple-950/20 border border-purple-500/30 space-y-3.5 shadow-inner">
@@ -914,29 +912,27 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                 </button>
               </div>
 
-              {/* 안내 이미지 (/reward.png) */}
-              {q2.showGuideImage !== false && (
-                <div className="space-y-1.5">
-                  <div
-                    className="relative rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-lg group cursor-pointer"
-                    onClick={() => setIsImageZoomed(true)}
-                    title="클릭하여 원본 크기로 확대 보기"
-                  >
-                    <img
-                      src="/reward.png"
-                      alt="리워드 안내"
-                      className="w-full max-h-56 sm:max-h-64 object-contain mx-auto transition-transform group-hover:scale-[1.01]"
-                    />
-                    <div className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/80 backdrop-blur-sm text-slate-300 text-[10px] flex items-center gap-1 border border-white/10 pointer-events-none">
-                      <ZoomIn className="w-3 h-3 text-cyan-300" />
-                      <span>클릭하여 사진 확대</span>
-                    </div>
+              {/* 안내 이미지 (/reward.png - 모든 문제에서 항상 표시) */}
+              <div className="space-y-1.5">
+                <div
+                  className="relative rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-lg group cursor-pointer"
+                  onClick={() => setIsImageZoomed(true)}
+                  title="클릭하여 원본 크기로 확대 보기"
+                >
+                  <img
+                    src="/reward.png"
+                    alt="리워드 안내"
+                    className="w-full max-h-56 sm:max-h-64 object-contain mx-auto transition-transform group-hover:scale-[1.01]"
+                  />
+                  <div className="absolute bottom-2 right-2 px-2 py-1 rounded-lg bg-black/80 backdrop-blur-sm text-slate-300 text-[10px] flex items-center gap-1 border border-white/10 pointer-events-none">
+                    <ZoomIn className="w-3 h-3 text-cyan-300" />
+                    <span>클릭하여 사진 확대</span>
                   </div>
-                  <p className="text-[11px] text-slate-400 text-center">
-                    위 첨부된 이미지를 참고하여 아래 퀴즈를 풀어주세요.
-                  </p>
                 </div>
-              )}
+                <p className="text-[11px] text-slate-400 text-center">
+                  위 첨부된 이미지를 참고하여 아래 퀴즈를 풀어주세요.
+                </p>
+              </div>
 
               {/* 문제 2 본문 박스 */}
               <div className="p-4 sm:p-5 rounded-2xl bg-indigo-950/20 border border-indigo-500/30 space-y-3.5 shadow-inner">

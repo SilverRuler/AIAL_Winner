@@ -17,7 +17,7 @@ export interface QuizQuestion {
 }
 
 /**
- * 온체인 리워드 신청 퀴즈 풀 (총 4문제, 향후 문제 추가 확장 가능)
+ * 온체인 리워드 신청 퀴즈 풀 (총 4문제, 모든 문제에서 reward.png 안내 이미지 노출)
  */
 export const REWARD_QUIZ_POOL: QuizQuestion[] = [
   {
@@ -48,7 +48,7 @@ export const REWARD_QUIZ_POOL: QuizQuestion[] = [
     id: 'solana_consensus',
     question: '솔라나의 합의 알고리즘은?',
     type: 'objective',
-    showGuideImage: false,
+    showGuideImage: true,
     options: [
       { no: 1, text: '작업증명' },
       { no: 2, text: '지분증명' },
@@ -61,7 +61,7 @@ export const REWARD_QUIZ_POOL: QuizQuestion[] = [
     id: 'solana_slot_speed',
     question: '솔라나의 1슬롯(블록) 평균 생성 속도는?',
     type: 'objective',
-    showGuideImage: false,
+    showGuideImage: true,
     options: [
       { no: 1, text: '10분에 1슬롯' },
       { no: 2, text: '250ms에 1슬롯' },

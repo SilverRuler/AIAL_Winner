@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
     // 5의 배수 검증
     if (!parsedWins || isNaN(parsedWins) || parsedWins < 5 || parsedWins % 5 !== 0) {
       return NextResponse.json(
-        { success: false, message: '리워드 신청은 최소 5Win 이상, 5Win 단위로만 가능합니다.' },
+        { success: false, message: '리워드 신청은 최소 5WIN 이상, 5WIN 단위로만 가능합니다.' },
         { status: 400 }
       );
     }
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: `남은 신청 가능 승수(${availableWins}Win)가 최소 요구치(5Win)에 미달합니다. (총 ${actualWins}Win 중 ${usedWins}Win 기신청)`,
+          message: `남은 신청 가능 승수(${availableWins}WIN)가 최소 요구치(5WIN)에 미달합니다. (총 ${actualWins}WIN 중 ${usedWins}WIN 기신청)`,
         },
         { status: 400 }
       );
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: `신청 승수(${parsedWins}Win)가 남은 신청 가능 승수(${maxAllowedWins}Win)를 초과했습니다. (총 ${actualWins}Win 중 ${usedWins}Win 기신청, 잔여 ${availableWins}Win)`,
+          message: `신청 승수(${parsedWins}WIN)가 남은 신청 가능 승수(${maxAllowedWins}WIN)를 초과했습니다. (총 ${actualWins}WIN 중 ${usedWins}WIN 기신청, 잔여 ${availableWins}WIN)`,
         },
         { status: 400 }
       );
@@ -185,9 +185,9 @@ export async function POST(request: NextRequest) {
       `🎁 <b>[AIAL Winner] 신규 리워드 신청 접수!</b>\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
       `👤 <b>신청 멤버:</b> <b>${trimmedMember}</b>\n` +
-      `🏆 <b>보유 총 승수:</b> ${actualWins} Win\n` +
-      `📉 <b>남은 신청 가능 승수:</b> <b>${remainingAfterThis} Win</b> (신청 전 ${availableWins} Win)\n` +
-      `🎯 <b>이번 신청 차감 승수:</b> <b>${parsedWins} Win</b> (5Win 단위)\n` +
+      `🏆 <b>보유 총 승수:</b> ${actualWins} WIN\n` +
+      `📉 <b>남은 신청 가능 승수:</b> <b>${remainingAfterThis} WIN</b> (신청 전 ${availableWins} WIN)\n` +
+      `🎯 <b>이번 신청 차감 승수:</b> <b>${parsedWins} WIN</b> (5WIN 단위)\n` +
       `💳 <b>지갑 주소 (SOL):</b> ${cleanWallet}\n` +
       `📝 <b>신청자 메모:</b> ${cleanMemo}\n` +
       `⏰ <b>신청 일시:</b> ${kstDate} (KST)\n` +

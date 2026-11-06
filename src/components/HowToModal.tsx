@@ -89,7 +89,7 @@ export const HowToModal: React.FC<HowToModalProps> = ({ isOpen, onClose }) => {
             <div>
               <h4 className="font-bold text-amber-300 text-xs">💡 미식가 Tip</h4>
               <p className="text-amber-200/90 text-xs mt-0.5 leading-relaxed">
-                음식에 대한 코멘트나 맛 소개를 군침 돌게 잘 적으면 AI의 선택을 받을 확률(Win 확률)이 올라갑니다! (안 적어도 무방합니다)
+                음식에 대한 코멘트나 맛 소개를 군침 돌게 잘 적으면 AI의 선택을 받을 확률(WIN 확률)이 올라갑니다! (안 적어도 무방합니다)
               </p>
             </div>
           </div>

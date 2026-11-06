@@ -114,12 +114,12 @@ export const RewardModal: React.FC<RewardModalProps> = ({
     return Math.max(0, userWins - usedWins);
   }, [userWins, usedWins]);
 
-  // 5Win 단위 최대 신청 가능 승수
+  // 5WIN 단위 최대 신청 가능 승수
   const maxClaimableWins = useMemo(() => {
     return Math.floor(availableWins / 5) * 5;
   }, [availableWins]);
 
-  // 신청 가능한 5Win 단위 옵션 목록
+  // 신청 가능한 5WIN 단위 옵션 목록
   const allowedWinOptions = useMemo(() => {
     if (maxClaimableWins < 5) return [5];
     const opts: number[] = [];
@@ -382,15 +382,15 @@ export const RewardModal: React.FC<RewardModalProps> = ({
     }
 
     if (availableWins < 5) {
-      setApplyError(`남은 신청 가능 리워드가 5Win 미만(현재 ${availableWins}Win)이므로 신청할 수 없습니다.`);
+      setApplyError(`남은 신청 가능 리워드가 5WIN 미만(현재 ${availableWins}WIN)이므로 신청할 수 없습니다.`);
       return;
     }
     if (!requestedWins || requestedWins < 5 || requestedWins % 5 !== 0) {
-      setApplyError('5Win 단위로만 신청 가능합니다.');
+      setApplyError('5WIN 단위로만 신청 가능합니다.');
       return;
     }
     if (requestedWins > maxClaimableWins) {
-      setApplyError(`최대 ${maxClaimableWins}Win까지만 신청 가능합니다. (남은 신청 가능 리워드: ${availableWins}Win)`);
+      setApplyError(`최대 ${maxClaimableWins}WIN까지만 신청 가능합니다. (남은 신청 가능 리워드: ${availableWins}WIN)`);
       return;
     }
 
@@ -415,7 +415,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         await fetchApplications();
         const remaining = typeof data.remainingAvailableWins === 'number' ? data.remainingAvailableWins : availableWins - requestedWins;
         setApplySuccessMsg(
-          `${selectedMember}님의 ${requestedWins}Win 리워드 신청이 성공적으로 접수되었습니다! (남은 신청 가능 리워드 WIN: ${remaining})`
+          `${selectedMember}님의 ${requestedWins}WIN 리워드 신청이 성공적으로 접수되었습니다! (남은 신청 가능 리워드 WIN: ${remaining})`
         );
         setViewMode('history');
       } else {
@@ -683,7 +683,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
           </div>
         </div>
 
-        {/* 1. 인트로 화면 (5Win 미만 안내 or 5Win 이상 신청 가능 안내) */}
+        {/* 1. 인트로 화면 (5WIN 미만 안내 or 5WIN 이상 신청 가능 안내) */}
         {viewMode === 'intro' && selectedMember !== 'all' && (
           <div className="p-6 sm:p-8 flex-1 overflow-y-auto flex flex-col justify-center items-center text-center space-y-5 animate-fade-in my-auto">
             <div
@@ -705,27 +705,27 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                 className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full border text-xs font-black shadow-sm ${selectedMemberInfo.avatarBg} ${selectedMemberInfo.borderColor}`}
               >
                 <span>{selectedMember}</span>
-                <span className="text-amber-400 font-mono">(총 {userWins} Win)</span>
+                <span className="text-amber-400 font-mono">(총 {userWins} WIN)</span>
                 <span className="text-cyan-300 font-mono font-bold">
-                  [신청 가능: {availableWins} Win]
+                  [신청 가능: {availableWins} WIN]
                 </span>
               </div>
 
               {availableWins < 5 ? (
                 <div className="space-y-2.5 pt-1">
                   <h3 className="text-base sm:text-lg font-black text-rose-400 leading-snug">
-                    5Win 미만은 리워드를 받기 위한 최소 승수를 채우지 못했습니다.
+                    5WIN 미만은 리워드를 받기 위한 최소 승수를 채우지 못했습니다.
                   </h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
-                    솔라나(SOL) 온체인 리워드는 <strong className="text-purple-300 font-bold">5Win 단위</strong>로 신청하실 수 있습니다.
-                    현재 {selectedMember}님의 총 승수는 <strong className="text-amber-400">{userWins}Win</strong>이며,
+                    솔라나(SOL) 온체인 리워드는 <strong className="text-purple-300 font-bold">5WIN 단위</strong>로 신청하실 수 있습니다.
+                    현재 {selectedMember}님의 총 승수는 <strong className="text-amber-400">{userWins}WIN</strong>이며,
                     {usedWins > 0 && (
-                      <span className="text-slate-300"> (기존에 {usedWins}Win 신청 완료) </span>
+                      <span className="text-slate-300"> (기존에 {usedWins}WIN 신청 완료) </span>
                     )}
                     <span className="block mt-1">
                       남은 신청 가능 리워드 WIN은 <strong className="text-cyan-300 font-bold">{availableWins}</strong>입니다.
                     </span>
-                    앞으로 <strong className="text-rose-300 font-bold">{5 - (availableWins % 5)}Win</strong>을 더 달성하시면 추가 리워드 신청이 가능합니다!
+                    앞으로 <strong className="text-rose-300 font-bold">{5 - (availableWins % 5)}WIN</strong>을 더 달성하시면 추가 리워드 신청이 가능합니다!
                   </p>
                 </div>
               ) : (
@@ -734,11 +734,11 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                     리워드를 신청할 수 있습니다.
                   </h3>
                   <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
-                    축하합니다! {selectedMember}님의 총 승수는 <strong className="text-amber-400 font-bold">{userWins}Win</strong>이며,
+                    축하합니다! {selectedMember}님의 총 승수는 <strong className="text-amber-400 font-bold">{userWins}WIN</strong>이며,
                     {usedWins > 0 && (
-                      <span className="text-slate-400"> (기신청 {usedWins}Win 제외) </span>
+                      <span className="text-slate-400"> (기신청 {usedWins}WIN 제외) </span>
                     )}
-                    현재 <strong className="text-cyan-300 font-bold">남은 신청 가능 리워드 WIN은 {availableWins}</strong> (최대 {maxClaimableWins}Win 신청 가능)입니다.
+                    현재 <strong className="text-cyan-300 font-bold">남은 신청 가능 리워드 WIN은 {availableWins}</strong> (최대 {maxClaimableWins}WIN 신청 가능)입니다.
                   </p>
                 </div>
               )}
@@ -1081,29 +1081,29 @@ export const RewardModal: React.FC<RewardModalProps> = ({
               <div className="flex items-center justify-between border-b border-slate-800 pb-3 flex-wrap gap-2">
                 <div>
                   <h3 className="text-sm sm:text-base font-black text-white">
-                    몇 Win에 대한 리워드를 신청 하시겠습니까?
+                    몇 WIN에 대한 리워드를 신청 하시겠습니까?
                   </h3>
                   <p className="text-[11px] text-slate-400">
-                    ※ 5Win 단위로 차감할 수 있습니다. (5의 배수가 아닌 숫자는 신청 불가)
+                    ※ 5WIN 단위로 차감할 수 있습니다. (5의 배수가 아닌 숫자는 신청 불가)
                   </p>
                 </div>
                 <div className="text-right">
-                  <span className="text-[10px] text-slate-400 block">총 {userWins} Win 보유</span>
+                  <span className="text-[10px] text-slate-400 block">총 {userWins} WIN 보유</span>
                   <span className="text-sm font-black text-cyan-300 font-mono">
                     남은 신청 가능 리워드 WIN: {availableWins}
                   </span>
                   {usedWins > 0 && (
                     <span className="text-[10px] text-slate-500 block">
-                      (기신청 {usedWins}Win 차감됨)
+                      (기신청 {usedWins}WIN 차감됨)
                     </span>
                   )}
                 </div>
               </div>
 
-              {/* 5Win 단위 선택 버튼 그리드 */}
+              {/* 5WIN 단위 선택 버튼 그리드 */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-slate-300">
-                  신청 차감 승수 선택 (5Win 단위) *
+                  신청 차감 승수 선택 (5WIN 단위) *
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {allowedWinOptions.map((win) => (
@@ -1117,7 +1117,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                           : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
                       }`}
                     >
-                      {win} Win 신청
+                      {win} WIN 신청
                     </button>
                   ))}
                 </div>
@@ -1185,7 +1185,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                   ) : (
                     <>
                       <Gift className="w-4 h-4" />
-                      <span>{requestedWins} Win 리워드 신청 완료</span>
+                      <span>{requestedWins} WIN 리워드 신청 완료</span>
                     </>
                   )}
                 </button>
@@ -1230,7 +1230,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                     {selectedMember !== 'all' && (
                       <>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono">
-                          총 {userWins} Win
+                          총 {userWins} WIN
                         </span>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold font-mono">
                           남은 신청 가능 리워드 WIN: {availableWins}

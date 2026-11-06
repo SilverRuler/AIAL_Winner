@@ -17,7 +17,7 @@ export interface QuizQuestion {
 }
 
 /**
- * 온체인 리워드 신청 퀴즈 풀 (총 4문제, 모든 문제에서 reward.png 안내 이미지 노출)
+ * 온체인 리워드 신청 퀴즈 풀 (총 6문제 중 2문제 무작위 출제, 모든 문제에서 reward.png 안내 이미지 노출)
  */
 export const REWARD_QUIZ_POOL: QuizQuestion[] = [
   {
@@ -69,6 +69,30 @@ export const REWARD_QUIZ_POOL: QuizQuestion[] = [
       { no: 4, text: '30초에 1슬롯' },
     ],
     correctOption: 2,
+  },
+  {
+    id: 'solana_outage_history',
+    question: '솔라나는 체인 출시 이후, 네트워크가 한 번이라도 중단된 적이 있다.',
+    type: 'objective',
+    showGuideImage: true,
+    options: [
+      { no: 1, text: 'YES' },
+      { no: 2, text: 'NO' },
+    ],
+    correctOption: 1,
+  },
+  {
+    id: 'solana_stablecoins',
+    question: '솔라나에는 USDT, USDC가 있다.',
+    type: 'objective',
+    showGuideImage: true,
+    options: [
+      { no: 1, text: 'USDC 만 있다.' },
+      { no: 2, text: 'USDT 만 있다.' },
+      { no: 3, text: 'USDT, USDC 모두 있다.' },
+      { no: 4, text: 'USDT, USDC 모두 없다.' },
+    ],
+    correctOption: 3,
   },
 ];
 

@@ -47,6 +47,7 @@ import { BestWinnerModal } from '@/components/BestWinnerModal';
 import { BestScoreModal } from '@/components/BestScoreModal';
 import { SearchModal } from '@/components/SearchModal';
 import { RewardModal } from '@/components/RewardModal';
+import { AdminQuizModal } from '@/components/AdminQuizModal';
 import { MealDetailModal } from '@/components/MealDetailModal';
 import { getLocalMeals, saveLocalMeals, calculateMemberWinStats } from '@/lib/storage';
 
@@ -75,6 +76,7 @@ export default function Home() {
   const [isHowToOpen, setIsHowToOpen] = useState<boolean>(false);
   const [isNoticeOpen, setIsNoticeOpen] = useState<boolean>(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState<boolean>(false);
+  const [isAdminQuizOpen, setIsAdminQuizOpen] = useState<boolean>(false);
   const [isBestWinnerOpen, setIsBestWinnerOpen] = useState<boolean>(false);
   const [isBestScoreOpen, setIsBestScoreOpen] = useState<boolean>(false);
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
@@ -1063,6 +1065,7 @@ export default function Home() {
         onOpenHowTo={() => setIsHowToOpen(true)}
         onOpenAdminLogin={() => setIsAdminLoginOpen(true)}
         onAdminLogout={handleAdminLogout}
+        onOpenAdminQuiz={() => setIsAdminQuizOpen(true)}
         onGoHome={handleGoHome}
         isAdmin={isAdmin}
         totalMealsCount={meals.length}
@@ -1703,6 +1706,11 @@ export default function Home() {
         initialMember={rewardTargetMember}
         isAdmin={isAdmin}
         memberWinStats={memberWinStats}
+      />
+
+      <AdminQuizModal
+        isOpen={isAdminQuizOpen}
+        onClose={() => setIsAdminQuizOpen(false)}
       />
 
       <MealDetailModal

@@ -10,14 +10,18 @@ export interface QuizQuestion {
   showGuideImage?: boolean;
   // 주관식
   placeholder?: string;
+  answer?: string; // 주관식 정답 문자열
   validateSubjective?: (answer: string) => boolean;
   // 객관식
   options?: QuizOption[];
   correctOption?: number;
+  // 메타데이터
+  isCustom?: boolean;
+  createdAt?: number;
 }
 
 /**
- * 온체인 리워드 신청 퀴즈 풀 (총 6문제 중 2문제 무작위 출제, 모든 문제에서 reward.png 안내 이미지 노출)
+ * 기본 온체인 리워드 신청 퀴즈 풀 (모든 문제에서 reward.png 안내 이미지 노출)
  */
 export const REWARD_QUIZ_POOL: QuizQuestion[] = [
   {
@@ -25,9 +29,10 @@ export const REWARD_QUIZ_POOL: QuizQuestion[] = [
     question: '업비트에서 요구하는 SOL 최소 입금 금액은 몇인가?',
     type: 'subjective',
     placeholder: '정답 입력 (예: 0.003)',
+    answer: '0.01',
     showGuideImage: true,
     validateSubjective: (ans: string) => {
-      const clean = ans.trim().toLowerCase().replace(/sol/g, '').replace(/개/g, '').trim();
+      const clean = ans.trim().toLowerCase().replace(/sol/g, '').replace(/개/g, '').replace(/\s+/g, '');
       return clean === '0.01';
     },
   },
@@ -97,9 +102,60 @@ export const REWARD_QUIZ_POOL: QuizQuestion[] = [
 ];
 
 /**
- * 퀴즈 풀에서 지정된 개수(기본 2문제)를 무작위로 추출하여 반환
+ * Fisher-Yates 알고리즘을 사용한 편향 없는 완벽한 무작위 셔플
  */
-export function getRandomQuizzes(count: number = 2): QuizQuestion[] {
-  const shuffled = [...REWARD_QUIZ_POOL].sort(() => Math.random() - 0.5);
+export function shuffleQuizzes<T>(array: T[]): T[] {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+/**
+ * 퀴즈 풀에서 지정된 개수(기본 2문제)를 무작위로 추출하여 반환 (편향 없는 균등 무작위 배정)
+ */
+export function getRandomQuizzes(
+  poolOrCount: QuizQuestion[] | number = REWARD_QUIZ_POOL,
+  maybeCount: number = 2
+): QuizQuestion[] {
+  let pool = REWARD_QUIZ_POOL;
+  let count = 2;
+
+  if (Array.isArray(poolOrCount)) {
+    pool = poolOrCount.length > 0 ? poolOrCount : REWARD_QUIZ_POOL;
+    count = typeof maybeCount === 'number' ? maybeCount : 2;
+  } else if (typeof poolOrCount === 'number') {
+    pool = REWARD_QUIZ_POOL;
+    count = poolOrCount;
+  }
+
+  const shuffled = shuffleQuizzes(pool);
   return shuffled.slice(0, count);
+}
+
+/**
+ * 주관식 퀴즈 정답 검증 유틸 (공백, 대소문자, 접미어 허용)
+ */
+export function isSubjectiveCorrect(userAnswer: string, quiz: QuizQuestion): boolean {
+  if (quiz.validateSubjective) {
+    return quiz.validateSubjective(userAnswer);
+  }
+  if (!quiz.answer) return false;
+
+  const cleanUser = userAnswer
+    .trim()
+    .toLowerCase()
+    .replace(/sol/g, '')
+    .replace(/개/g, '')
+    .replace(/\s+/g, '');
+  const cleanExp = quiz.answer
+    .trim()
+    .toLowerCase()
+    .replace(/sol/g, '')
+    .replace(/개/g, '')
+    .replace(/\s+/g, '');
+
+  return cleanUser === cleanExp || cleanUser.includes(cleanExp);
 }

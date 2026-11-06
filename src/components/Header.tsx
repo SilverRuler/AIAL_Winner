@@ -10,6 +10,7 @@ interface HeaderProps {
   onOpenHowTo: () => void;
   onOpenAdminLogin: () => void;
   onAdminLogout: () => void;
+  onOpenAdminQuiz?: () => void;
   onGoHome?: () => void;
   isAdmin: boolean;
   totalMealsCount: number;
@@ -23,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenHowTo,
   onOpenAdminLogin,
   onAdminLogout,
+  onOpenAdminQuiz,
   onGoHome,
   isAdmin,
   totalMealsCount,
@@ -63,18 +65,34 @@ export const Header: React.FC<HeaderProps> = ({
 
                     {/* 관리자 로그인/로그아웃 버튼 */}
                     {isAdmin ? (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onAdminLogout();
-                        }}
-                        className="inline-flex items-center space-x-1 px-1.5 sm:px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] sm:text-xs font-bold hover:bg-emerald-500/30 transition-all cursor-pointer shrink-0"
-                        title="클릭하여 관리자 로그아웃"
-                      >
-                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                        <span>관리자 (로그아웃)</span>
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        {onOpenAdminQuiz && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenAdminQuiz();
+                            }}
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-purple-600/30 text-purple-200 border border-purple-400/50 text-[10px] sm:text-xs font-black hover:bg-purple-600/50 hover:text-white transition-all cursor-pointer shrink-0 shadow-sm shadow-purple-900/30"
+                            title="온체인 퀴즈 관리"
+                          >
+                            <HelpCircle className="w-3 h-3 text-purple-300" />
+                            <span>QUIZ</span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAdminLogout();
+                          }}
+                          className="inline-flex items-center space-x-1 px-1.5 sm:px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] sm:text-xs font-bold hover:bg-emerald-500/30 transition-all cursor-pointer shrink-0"
+                          title="클릭하여 관리자 로그아웃"
+                        >
+                          <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                          <span>관리자 (로그아웃)</span>
+                        </button>
+                      </div>
                     ) : (
                       <button
                         type="button"
@@ -126,7 +144,19 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 absolute top-1.5 right-1.5 animate-pulse" />
             </button>
 
-            {/* 3) 사용 방법 */}
+            {/* 3) 관리자 QUIZ 메뉴 버튼 */}
+            {isAdmin && onOpenAdminQuiz && (
+              <button
+                onClick={onOpenAdminQuiz}
+                className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-purple-950/80 border border-purple-500/50 text-purple-300 hover:text-white hover:bg-purple-600/30 hover:border-purple-400 transition-all text-xs sm:text-sm font-black shrink-0 cursor-pointer shadow-sm shadow-purple-950/40"
+                title="솔라나 리워드 퀴즈 관리자 메뉴"
+              >
+                <HelpCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
+                <span>QUIZ</span>
+              </button>
+            )}
+
+            {/* 4) 사용 방법 */}
             <button
               onClick={onOpenHowTo}
               className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-600 transition-all text-xs sm:text-sm font-semibold shrink-0 cursor-pointer"

@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { RewardItem, MemberWinStats } from '@/types/meal';
 import { MEMBERS, LEGACY_MEMBERS, getMemberInfo } from '@/constants/members';
-import { getRandomQuizzes, QuizQuestion, REWARD_QUIZ_POOL } from '@/constants/quizzes';
+import { getRandomQuizzes, QuizQuestion, REWARD_QUIZ_POOL, isSubjectiveCorrect } from '@/constants/quizzes';
 
 interface RewardModalProps {
   isOpen: boolean;
@@ -51,6 +51,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
 
   // 화면 모드: 'history' (Page A) | 'intro' (최소 승수/신청 안내) | 'quiz1' (문제 1) | 'quiz2' (문제 2) | 'apply' (승수 신청)
   const [viewMode, setViewMode] = useState<'history' | 'intro' | 'quiz1' | 'quiz2' | 'apply'>('history');
+
+  // 전체 온체인 퀴즈 풀 (DB에서 동적으로 가져오며 기본 6문제 포함)
+  const [allQuizzes, setAllQuizzes] = useState<QuizQuestion[]>(REWARD_QUIZ_POOL);
 
   // 활성화된 랜덤 퀴즈 2문제
   const [activeQuizzes, setActiveQuizzes] = useState<QuizQuestion[]>([]);
@@ -201,7 +204,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         setViewMode('history');
       }
 
-      setActiveQuizzes(getRandomQuizzes(2));
+      fetchQuizzes().then((pool) => {
+        setActiveQuizzes(getRandomQuizzes(pool, 2));
+      });
       setQuiz1Answer('');
       setQuiz1Selected(null);
       setQuiz1Error('');
@@ -291,9 +296,24 @@ export const RewardModal: React.FC<RewardModalProps> = ({
     }, 2000);
   };
 
-  // 4문제 중 2문제 무작위 추출하여 퀴즈 시작
+  // 온체인 퀴즈 목록 조회 (DB 및 기본 풀)
+  const fetchQuizzes = async () => {
+    try {
+      const res = await fetch('/api/quizzes');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.quizzes) && data.quizzes.length > 0) {
+        setAllQuizzes(data.quizzes);
+        return data.quizzes;
+      }
+    } catch (err) {
+      console.error('Failed to fetch quizzes:', err);
+    }
+    return REWARD_QUIZ_POOL;
+  };
+
+  // 퀴즈 풀에서 2문제 균등 무작위 추출하여 퀴즈 시작 (업비트 고정 없이 완전 랜덤)
   const handleStartQuiz = () => {
-    setActiveQuizzes(getRandomQuizzes(2));
+    setActiveQuizzes(getRandomQuizzes(allQuizzes, 2));
     setQuiz1Answer('');
     setQuiz1Selected(null);
     setQuiz1Error('');
@@ -306,13 +326,11 @@ export const RewardModal: React.FC<RewardModalProps> = ({
 
   // 퀴즈 1 검증: 주관식/객관식 범용 처리 (패널티 없음)
   const handleCheckQuiz1 = () => {
-    const currentQuiz = activeQuizzes[0];
+    const currentQuiz = activeQuizzes[0] || allQuizzes[0];
     if (!currentQuiz) return;
 
     if (currentQuiz.type === 'subjective') {
-      const isValid = currentQuiz.validateSubjective
-        ? currentQuiz.validateSubjective(quiz1Answer)
-        : false;
+      const isValid = isSubjectiveCorrect(quiz1Answer, currentQuiz);
 
       if (isValid) {
         setQuiz1Error('');
@@ -338,14 +356,12 @@ export const RewardModal: React.FC<RewardModalProps> = ({
 
   // 퀴즈 2 검증: 정답 시 apply 단계 진입, 오답 시 "첫 번째 문제로 돌아간다" (패널티 없음, 재배치)
   const handleSubmitQuiz2 = () => {
-    const currentQuiz = activeQuizzes[1];
+    const currentQuiz = activeQuizzes[1] || allQuizzes[1];
     if (!currentQuiz) return;
 
     let isCorrect = false;
     if (currentQuiz.type === 'subjective') {
-      isCorrect = currentQuiz.validateSubjective
-        ? currentQuiz.validateSubjective(quiz2Answer)
-        : false;
+      isCorrect = isSubjectiveCorrect(quiz2Answer, currentQuiz);
     } else {
       if (quiz2Selected === null) {
         setQuiz2Error('보기를 선택한 후 정답을 제출해주세요.');
@@ -360,8 +376,8 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       setViewMode('apply');
     } else {
       // ⚠️ 두 번째 문제를 틀렸을 경우 첫 번째 문제로 돌아간다! (패널티 없음)
-      setQuizBackNotice('2번 문제 오답입니다! 규정에 따라 1번 문제로 돌아갑니다. (패널티 없음, 다시 도전해보세요!)');
-      setActiveQuizzes(getRandomQuizzes(2));
+      setQuizBackNotice('2번 문제 오답입니다! 규정에 따라 1번 문제로 돌아갑니다. (패널티 없음, 새로운 문제가 무작위 재배치되었습니다!)');
+      setActiveQuizzes(getRandomQuizzes(allQuizzes, 2));
       setQuiz1Answer('');
       setQuiz1Selected(null);
       setQuiz1Error('');
@@ -438,11 +454,15 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       setViewMode('intro');
       return;
     }
-    // availableWins >= 5 이면 퀴즈 1로 바로 진입
+    // availableWins >= 5 이면 2문제를 완전 무작위로 추출하여 퀴즈 1로 바로 진입
+    setActiveQuizzes(getRandomQuizzes(allQuizzes, 2));
     setQuiz1Answer('');
+    setQuiz1Selected(null);
     setQuiz1Error('');
+    setQuiz2Answer('');
     setQuiz2Selected(null);
     setQuiz2Error('');
+    setQuizBackNotice('');
     setApplyError('');
     setViewMode('quiz1');
   };
@@ -769,7 +789,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
 
         {/* 2. 문제 1 화면 (랜덤 출제: 주관식 or 객관식) */}
         {viewMode === 'quiz1' && (() => {
-          const q1 = activeQuizzes[0] || REWARD_QUIZ_POOL[0];
+          const q1 = activeQuizzes[0] || allQuizzes[0] || REWARD_QUIZ_POOL[0];
           return (
             <div className="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 animate-fade-in">
               {/* 상단 스텝 프로그레스 */}
@@ -917,7 +937,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
 
         {/* 3. 문제 2 화면 (랜덤 출제: 주관식 or 객관식, 오답 시 1번 문제로 복귀) */}
         {viewMode === 'quiz2' && (() => {
-          const q2 = activeQuizzes[1] || REWARD_QUIZ_POOL[1];
+          const q2 = activeQuizzes[1] || allQuizzes[1] || REWARD_QUIZ_POOL[1];
           return (
             <div className="p-4 sm:p-6 flex-1 overflow-y-auto space-y-4 animate-fade-in">
               {/* 상단 스텝 프로그레스 */}

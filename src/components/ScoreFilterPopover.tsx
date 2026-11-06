@@ -13,15 +13,15 @@ export interface ScoreRange {
 
 export const SCORE_RANGES: ScoreRange[] = [
   { id: '90-100', label: '90점 ~ 100점', min: 90, max: 100 },
-  { id: '80-90', label: '80점 ~ 90점', min: 80, max: 90 },
-  { id: '70-80', label: '70점 ~ 80점', min: 70, max: 80 },
-  { id: '60-70', label: '60점 ~ 70점', min: 60, max: 70 },
-  { id: '50-60', label: '50점 ~ 60점', min: 50, max: 60 },
-  { id: '40-50', label: '40점 ~ 50점', min: 40, max: 50 },
-  { id: '30-40', label: '30점 ~ 40점', min: 30, max: 40 },
-  { id: '20-30', label: '20점 ~ 30점', min: 20, max: 30 },
-  { id: '10-20', label: '10점 ~ 20점', min: 10, max: 20 },
-  { id: '0-10', label: '0점 ~ 10점', min: 0, max: 10 },
+  { id: '80-89', label: '80점 ~ 89점', min: 80, max: 89 },
+  { id: '70-79', label: '70점 ~ 79점', min: 70, max: 79 },
+  { id: '60-69', label: '60점 ~ 69점', min: 60, max: 69 },
+  { id: '50-59', label: '50점 ~ 59점', min: 50, max: 59 },
+  { id: '40-49', label: '40점 ~ 49점', min: 40, max: 49 },
+  { id: '30-39', label: '30점 ~ 39점', min: 30, max: 39 },
+  { id: '20-29', label: '20점 ~ 29점', min: 20, max: 29 },
+  { id: '10-19', label: '10점 ~ 19점', min: 10, max: 19 },
+  { id: '0-9', label: '0점 ~ 9점', min: 0, max: 9 },
 ];
 
 interface ScoreFilterPopoverProps {

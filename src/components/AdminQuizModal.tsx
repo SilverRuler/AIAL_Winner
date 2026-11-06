@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   HelpCircle,
@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronUp,
   Image as ImageIcon,
+  Pencil,
 } from 'lucide-react';
 import { QuizQuestion, REWARD_QUIZ_POOL } from '@/constants/quizzes';
 
@@ -30,6 +31,10 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
   const [quizzes, setQuizzes] = useState<QuizQuestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isFormOpen, setIsFormOpen] = useState(false);
+  const formRef = useRef<HTMLFormElement | null>(null);
+
+  // 수정 중인 퀴즈 ID (null이면 신규 등록 모드)
+  const [editingQuizId, setEditingQuizId] = useState<string | null>(null);
 
   // 폼 상태
   const [quizType, setQuizType] = useState<'objective' | 'subjective'>('objective');
@@ -86,6 +91,7 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
   }, [isOpen, onClose]);
 
   const resetForm = () => {
+    setEditingQuizId(null);
     setQuestionText('');
     setSubjectiveAnswer('');
     setOptions(['', '', '', '']);
@@ -94,8 +100,37 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
     setErrorMsg('');
   };
 
-  // 퀴즈 등록
-  const handleCreateQuiz = async (e: React.FormEvent) => {
+  // 수정 모드 진입
+  const handleStartEditQuiz = (quiz: QuizQuestion) => {
+    setEditingQuizId(quiz.id);
+    setQuestionText(quiz.question);
+    setQuizType(quiz.type);
+
+    if (quiz.type === 'subjective') {
+      setSubjectiveAnswer(quiz.answer || (quiz.id === 'upbit_sol_min' ? '0.01' : ''));
+      setOptions(['', '', '', '']);
+      setCorrectOption(1);
+    } else {
+      const quizOpts =
+        quiz.options && quiz.options.length >= 2
+          ? quiz.options.map((o) => o.text)
+          : ['', '', '', ''];
+      setOptions(quizOpts);
+      setCorrectOption(quiz.correctOption || 1);
+      setSubjectiveAnswer('');
+    }
+
+    setIsFormOpen(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 60);
+  };
+
+  // 퀴즈 등록 / 수정 제출
+  const handleSubmitQuiz = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
@@ -150,29 +185,36 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/quizzes', {
-        method: 'POST',
+      const isEditing = Boolean(editingQuizId);
+      const url = '/api/quizzes';
+      const method = isEditing ? 'PATCH' : 'POST';
+      const bodyData = isEditing
+        ? { id: editingQuizId, ...payload, adminId, adminPw }
+        : { ...payload, adminId, adminPw };
+
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           'x-admin-id': adminId,
           'x-admin-pw': adminPw,
         },
-        body: JSON.stringify({
-          ...payload,
-          adminId,
-          adminPw,
-        }),
+        body: JSON.stringify(bodyData),
       });
 
       const data = await res.json();
       if (data.success) {
-        setSuccessMsg('신규 퀴즈가 성공적으로 등록되었습니다!');
+        setSuccessMsg(
+          isEditing
+            ? '퀴즈가 성공적으로 수정되었습니다!'
+            : '신규 퀴즈가 성공적으로 등록되었습니다!'
+        );
         resetForm();
         setIsFormOpen(false);
         await fetchQuizzes();
         if (onQuizzesUpdated) onQuizzesUpdated();
       } else {
-        setErrorMsg(data.message || '퀴즈 등록에 실패했습니다.');
+        setErrorMsg(data.message || (isEditing ? '퀴즈 수정에 실패했습니다.' : '퀴즈 등록에 실패했습니다.'));
       }
     } catch (err: any) {
       setErrorMsg('서버 통신 중 오류가 발생했습니다.');
@@ -205,6 +247,10 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
       const data = await res.json();
       if (data.success) {
         setSuccessMsg('퀴즈가 성공적으로 삭제되었습니다.');
+        if (editingQuizId === id) {
+          resetForm();
+          setIsFormOpen(false);
+        }
         await fetchQuizzes();
         if (onQuizzesUpdated) onQuizzesUpdated();
       } else {
@@ -265,7 +311,13 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
           <button
             type="button"
             onClick={() => {
-              setIsFormOpen(!isFormOpen);
+              if (isFormOpen) {
+                setIsFormOpen(false);
+                resetForm();
+              } else {
+                resetForm();
+                setIsFormOpen(true);
+              }
               if (errorMsg) setErrorMsg('');
             }}
             className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md ${
@@ -277,7 +329,7 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
             {isFormOpen ? (
               <>
                 <ChevronUp className="w-3.5 h-3.5" />
-                <span>폼 닫기</span>
+                <span>{editingQuizId ? '수정 취소' : '폼 닫기'}</span>
               </>
             ) : (
               <>
@@ -324,16 +376,28 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
 
         {/* 본문 스크롤 영역 */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
-          {/* 퀴즈 추가 폼 카드 */}
+          {/* 퀴즈 추가/수정 폼 카드 */}
           {isFormOpen && (
             <form
-              onSubmit={handleCreateQuiz}
-              className="p-4 sm:p-5 rounded-2xl bg-slate-950 border border-purple-500/40 space-y-4 shadow-xl animate-fade-in"
+              ref={formRef}
+              onSubmit={handleSubmitQuiz}
+              className={`p-4 sm:p-5 rounded-2xl bg-slate-950 border space-y-4 shadow-xl animate-fade-in ${
+                editingQuizId ? 'border-amber-500/50' : 'border-purple-500/40'
+              }`}
             >
               <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
                 <h3 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
-                  <Plus className="w-4 h-4 text-purple-400" />
-                  <span>새로운 온체인 퀴즈 등록</span>
+                  {editingQuizId ? (
+                    <>
+                      <Pencil className="w-4 h-4 text-amber-400" />
+                      <span>온체인 퀴즈 수정</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 text-purple-400" />
+                      <span>새로운 온체인 퀴즈 등록</span>
+                    </>
+                  )}
                 </h3>
 
                 {/* 객관식 / 주관식 선택 토글 */}
@@ -513,7 +577,10 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
               <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsFormOpen(false)}
+                  onClick={() => {
+                    setIsFormOpen(false);
+                    resetForm();
+                  }}
                   className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold cursor-pointer"
                 >
                   취소
@@ -521,17 +588,21 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs shadow-md shadow-purple-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  className={`px-4 py-2 rounded-xl text-white font-black text-xs shadow-md flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                    editingQuizId
+                      ? 'bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 shadow-amber-600/30'
+                      : 'bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-purple-600/30'
+                  }`}
                 >
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>등록 중...</span>
+                      <span>{editingQuizId ? '수정 저장 중...' : '등록 중...'}</span>
                     </>
                   ) : (
                     <>
                       <Check className="w-3.5 h-3.5" />
-                      <span>퀴즈 등록 완료</span>
+                      <span>{editingQuizId ? '수정 완료' : '퀴즈 등록 완료'}</span>
                     </>
                   )}
                 </button>
@@ -555,12 +626,17 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
             <div className="space-y-2.5">
               {quizzes.map((quiz, index) => {
                 const isDeleting = deletingId === quiz.id;
+                const isEditing = editingQuizId === quiz.id;
                 return (
                   <div
                     key={quiz.id}
-                    className="p-3.5 sm:p-4 rounded-2xl bg-slate-950/70 border border-slate-800 hover:border-purple-500/30 transition-all space-y-2.5 shadow-sm"
+                    className={`p-3.5 sm:p-4 rounded-2xl bg-slate-950/70 border transition-all space-y-2.5 shadow-sm ${
+                      isEditing
+                        ? 'border-amber-500/60 ring-1 ring-amber-500/30'
+                        : 'border-slate-800 hover:border-purple-500/30'
+                    }`}
                   >
-                    {/* 상단: 문제 번호, 유형 배지, 삭제 버튼 */}
+                    {/* 상단: 문제 번호, 유형 배지, 수정/삭제 버튼 */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-mono font-black text-amber-400">
@@ -586,21 +662,41 @@ export const AdminQuizModal: React.FC<AdminQuizModalProps> = ({
                             기본 문제
                           </span>
                         )}
+                        {isEditing && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold animate-pulse">
+                            수정 중
+                          </span>
+                        )}
                       </div>
 
-                      <button
-                        type="button"
-                        disabled={isDeleting}
-                        onClick={() => handleDeleteQuiz(quiz.id, quiz.question)}
-                        className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
-                        title="이 퀴즈 삭제"
-                      >
-                        {isDeleting ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-400" />
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
-                      </button>
+                      <div className="flex items-center gap-1">
+                        {/* 휴지통 왼쪽에 수정 버튼 */}
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditQuiz(quiz)}
+                          className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                            isEditing
+                              ? 'text-amber-400 bg-amber-500/20 ring-1 ring-amber-400/40'
+                              : 'text-slate-500 hover:text-amber-400 hover:bg-amber-500/10'
+                          }`}
+                          title="이 퀴즈 수정"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isDeleting}
+                          onClick={() => handleDeleteQuiz(quiz.id, quiz.question)}
+                          className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
+                          title="이 퀴즈 삭제"
+                        >
+                          {isDeleting ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-400" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
                     </div>
 
                     {/* 문제 내용 */}

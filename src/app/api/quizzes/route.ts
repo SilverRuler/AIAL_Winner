@@ -175,6 +175,128 @@ export async function POST(request: NextRequest) {
 }
 
 /**
+ * PATCH /api/quizzes
+ * 관리자 전용 퀴즈 수정
+ */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    if (!verifyAdmin(request, body)) {
+      return NextResponse.json(
+        { success: false, message: '관리자 권한이 필요합니다.' },
+        { status: 403 }
+      );
+    }
+
+    const { id, question, type, answer, placeholder, options, correctOption } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { success: false, message: '수정할 퀴즈 ID가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    const trimmedQ = (question || '').trim();
+    if (!trimmedQ) {
+      return NextResponse.json(
+        { success: false, message: '문제를 입력해주세요.' },
+        { status: 400 }
+      );
+    }
+
+    if (type !== 'subjective' && type !== 'objective') {
+      return NextResponse.json(
+        { success: false, message: '문제 유형을 올바르게 선택해주세요.' },
+        { status: 400 }
+      );
+    }
+
+    const updateFields: Record<string, any> = {
+      question: trimmedQ,
+      type,
+      updatedAt: Date.now(),
+    };
+
+    if (type === 'subjective') {
+      const trimmedAns = (answer || '').trim();
+      if (!trimmedAns) {
+        return NextResponse.json(
+          { success: false, message: '주관식 정답(A. 답)을 입력해주세요.' },
+          { status: 400 }
+        );
+      }
+      updateFields.answer = trimmedAns;
+      updateFields.placeholder = (placeholder || '정답 입력').trim();
+      updateFields.options = [];
+      updateFields.correctOption = undefined;
+    } else {
+      if (!Array.isArray(options) || options.length < 2 || options.length > 4) {
+        return NextResponse.json(
+          { success: false, message: '객관식은 최소 2개에서 최대 4개의 보기를 입력해야 합니다.' },
+          { status: 400 }
+        );
+      }
+
+      for (let i = 0; i < options.length; i++) {
+        if (!options[i] || !options[i].text || !options[i].text.trim()) {
+          return NextResponse.json(
+            { success: false, message: `보기 ${i + 1}번 내용을 입력해주세요.` },
+            { status: 400 }
+          );
+        }
+      }
+
+      const parsedCorrect = Number(correctOption);
+      if (!parsedCorrect || parsedCorrect < 1 || parsedCorrect > options.length) {
+        return NextResponse.json(
+          { success: false, message: `1번부터 ${options.length}번 보기 중 하나를 정답으로 체크해주세요.` },
+          { status: 400 }
+        );
+      }
+
+      updateFields.options = options.map((opt: any, idx: number) => ({
+        no: idx + 1,
+        text: opt.text.trim(),
+      }));
+      updateFields.correctOption = parsedCorrect;
+      updateFields.answer = undefined;
+    }
+
+    const db = await getDatabase();
+    if (!db) {
+      return NextResponse.json(
+        { success: false, message: '데이터베이스 연결 실패' },
+        { status: 500 }
+      );
+    }
+
+    const result = await db.collection('quizzes').updateOne(
+      { $or: [{ id }, { _id: id as any }] },
+      { $set: updateFields }
+    );
+
+    if (result.matchedCount === 0) {
+      return NextResponse.json(
+        { success: false, message: '수정할 퀴즈를 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '퀴즈가 성공적으로 수정되었습니다.',
+    });
+  } catch (error: any) {
+    console.error('Failed to update quiz:', error);
+    return NextResponse.json(
+      { success: false, message: '퀴즈 수정 중 오류 발생', error: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+/**
  * DELETE /api/quizzes
  * 관리자 전용 퀴즈 삭제
  */

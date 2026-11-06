@@ -136,6 +136,52 @@ export function getRandomQuizzes(
 }
 
 /**
+ * 특정 멤버가 푼 퀴즈 목록(solvedQuizIds)을 제외하고 퀴즈를 무작위 배정
+ * - 전체 퀴즈 풀 중 아직 풀지 않은 문제(unsolvedPool)가 count개 이상이면: unsolvedPool에서 무작위 배정
+ * - 만약 모든 문제를 다 풀었으면(unsolvedPool.length === 0): 전체 풀(pool)에서 다시 무작위 배정!
+ * - 만약 아직 안 푼 문제가 1개만 남은 경우: 남은 1문제 + 이미 푼 문제 중 무작위 1문제 조합하여 count개 구성
+ */
+export function getRandomQuizzesForMember(
+  poolOrCount: QuizQuestion[] | number = REWARD_QUIZ_POOL,
+  solvedQuizIds: string[] = [],
+  maybeCount: number = 2
+): QuizQuestion[] {
+  let pool = REWARD_QUIZ_POOL;
+  let count = 2;
+
+  if (Array.isArray(poolOrCount)) {
+    pool = poolOrCount.length > 0 ? poolOrCount : REWARD_QUIZ_POOL;
+    count = typeof maybeCount === 'number' ? maybeCount : 2;
+  } else if (typeof poolOrCount === 'number') {
+    pool = REWARD_QUIZ_POOL;
+    count = poolOrCount;
+  }
+
+  if (!pool || pool.length === 0) return [];
+  if (pool.length <= count) return shuffleQuizzes(pool);
+
+  const solvedIds = Array.isArray(solvedQuizIds) ? solvedQuizIds : [];
+
+  // 아직 안 푼 문제 목록 필터링
+  const unsolvedPool = pool.filter((q) => !solvedIds.includes(q.id));
+
+  // 만약 모든 문제를 다 풀었거나 남은 문제가 0개이면: 다시 전체 풀에서 무작위 배정
+  if (unsolvedPool.length === 0) {
+    return shuffleQuizzes(pool).slice(0, count);
+  }
+
+  // 아직 안 푼 문제가 충분히(count개 이상) 있으면: 아직 안 푼 문제들 중에서 무작위 배정
+  if (unsolvedPool.length >= count) {
+    return shuffleQuizzes(unsolvedPool).slice(0, count);
+  }
+
+  // 아직 안 푼 문제가 부족한 경우(예: 1개 남음): 남은 문제 전부 + 이미 푼 문제 중 무작위로 부족한 만큼 채움
+  const solvedPool = pool.filter((q) => solvedIds.includes(q.id));
+  const remaining = shuffleQuizzes(solvedPool).slice(0, count - unsolvedPool.length);
+  return shuffleQuizzes([...unsolvedPool, ...remaining]);
+}
+
+/**
  * 주관식 퀴즈 정답 검증 유틸 (공백, 대소문자, 접미어 허용)
  */
 export function isSubjectiveCorrect(userAnswer: string, quiz: QuizQuestion): boolean {

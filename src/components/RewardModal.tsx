@@ -27,7 +27,13 @@ import {
 } from 'lucide-react';
 import { RewardItem, MemberWinStats } from '@/types/meal';
 import { MEMBERS, LEGACY_MEMBERS, getMemberInfo } from '@/constants/members';
-import { getRandomQuizzes, QuizQuestion, REWARD_QUIZ_POOL, isSubjectiveCorrect } from '@/constants/quizzes';
+import {
+  getRandomQuizzes,
+  getRandomQuizzesForMember,
+  QuizQuestion,
+  REWARD_QUIZ_POOL,
+  isSubjectiveCorrect,
+} from '@/constants/quizzes';
 
 interface RewardModalProps {
   isOpen: boolean;
@@ -98,6 +104,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
 
   // 멤버별 기신청 차감 승수 맵
   const [memberUsedWins, setMemberUsedWins] = useState<Record<string, number>>({});
+
+  // 멤버별 기 풀이 완료한 퀴즈 ID 목록 맵 (중복 배정 방지)
+  const [memberSolvedQuizIds, setMemberSolvedQuizIds] = useState<Record<string, string[]>>({});
 
   // 현재 선택된 멤버의 실제 총 승수 (변하지 않음)
   const userWins = useMemo(() => {
@@ -204,8 +213,11 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         setViewMode('history');
       }
 
-      fetchQuizzes().then((pool) => {
-        setActiveQuizzes(getRandomQuizzes(pool, 2));
+      Promise.all([fetchQuizzes(), fetchApplications()]).then(([pool, appsData]) => {
+        const solvedMap =
+          appsData && appsData.memberSolvedQuizIds ? appsData.memberSolvedQuizIds : {};
+        const solved = targetMem !== 'all' ? solvedMap[targetMem] || [] : [];
+        setActiveQuizzes(getRandomQuizzesForMember(pool || allQuizzes, solved, 2));
       });
       setQuiz1Answer('');
       setQuiz1Selected(null);
@@ -223,7 +235,6 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       setIsFormOpen(false);
       setEditingRewardId(null);
       fetchRewards();
-      fetchApplications();
     }
   }, [isOpen, initialMember]);
 
@@ -238,6 +249,8 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       const hasApplied =
         typeof window !== 'undefined' &&
         localStorage.getItem(`aial_reward_applied_${memberName}`) === 'true';
+
+      setActiveQuizzes(getQuizzesForMember(memberName, allQuizzes));
 
       if (!hasApplied) {
         setViewMode('intro');
@@ -274,17 +287,34 @@ export const RewardModal: React.FC<RewardModalProps> = ({
     }
   };
 
-  // 리워드 신청 내역 및 기신청 차감 승수 조회
+  // 리워드 신청 내역 및 기신청 차감 승수/풀이 완료 퀴즈 조회
   const fetchApplications = async () => {
     try {
       const res = await fetch('/api/rewards/apply');
       const data = await res.json();
-      if (data.success && data.memberUsedWins) {
-        setMemberUsedWins(data.memberUsedWins);
+      if (data.success) {
+        if (data.memberUsedWins) {
+          setMemberUsedWins(data.memberUsedWins);
+        }
+        if (data.memberSolvedQuizIds) {
+          setMemberSolvedQuizIds(data.memberSolvedQuizIds);
+        }
       }
+      return data;
     } catch (err) {
       console.error('Failed to fetch applications:', err);
+      return null;
     }
+  };
+
+  // 특정 멤버의 기 풀이 문제를 제외하고 무작위 2문제 배정 헬퍼
+  const getQuizzesForMember = (
+    memberName: string,
+    pool: QuizQuestion[] = allQuizzes,
+    solvedMap: Record<string, string[]> = memberSolvedQuizIds
+  ) => {
+    const solvedIds = solvedMap[memberName] || [];
+    return getRandomQuizzesForMember(pool, solvedIds, 2);
   };
 
   // 트랜잭션 해시 복사
@@ -311,9 +341,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
     return REWARD_QUIZ_POOL;
   };
 
-  // 퀴즈 풀에서 2문제 균등 무작위 추출하여 퀴즈 시작 (업비트 고정 없이 완전 랜덤)
+  // 퀴즈 시작 (해당 멤버가 기 풀이한 문제 제외, 편향 없이 무작위 2문제 배정)
   const handleStartQuiz = () => {
-    setActiveQuizzes(getRandomQuizzes(allQuizzes, 2));
+    setActiveQuizzes(getQuizzesForMember(selectedMember, allQuizzes));
     setQuiz1Answer('');
     setQuiz1Selected(null);
     setQuiz1Error('');
@@ -375,9 +405,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       setQuizBackNotice('');
       setViewMode('apply');
     } else {
-      // ⚠️ 두 번째 문제를 틀렸을 경우 첫 번째 문제로 돌아간다! (패널티 없음)
+      // ⚠️ 두 번째 문제를 틀렸을 경우 첫 번째 문제로 돌아간다! (패널티 없음, 기 풀이 문제 제외하고 새로운 2문제 재배치)
       setQuizBackNotice('2번 문제 오답입니다! 규정에 따라 1번 문제로 돌아갑니다. (패널티 없음, 새로운 문제가 무작위 재배치되었습니다!)');
-      setActiveQuizzes(getRandomQuizzes(allQuizzes, 2));
+      setActiveQuizzes(getQuizzesForMember(selectedMember, allQuizzes));
       setQuiz1Answer('');
       setQuiz1Selected(null);
       setQuiz1Error('');
@@ -410,6 +440,8 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       return;
     }
 
+    const solvedQuizIds = activeQuizzes.map((q) => q.id);
+
     setIsSubmittingApply(true);
     setApplyError('');
     try {
@@ -421,6 +453,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
           requestedWins,
           walletAddress: applyWallet.trim(),
           memo: applyMemo.trim(),
+          solvedQuizIds,
         }),
       });
       const data = await res.json();
@@ -454,8 +487,8 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       setViewMode('intro');
       return;
     }
-    // availableWins >= 5 이면 2문제를 완전 무작위로 추출하여 퀴즈 1로 바로 진입
-    setActiveQuizzes(getRandomQuizzes(allQuizzes, 2));
+    // availableWins >= 5 이면 해당 멤버의 기 풀이 문제를 제외한 2문제를 무작위로 추출하여 퀴즈 1로 바로 진입
+    setActiveQuizzes(getQuizzesForMember(selectedMember, allQuizzes));
     setQuiz1Answer('');
     setQuiz1Selected(null);
     setQuiz1Error('');

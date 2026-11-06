@@ -36,16 +36,29 @@ export async function GET(request: NextRequest) {
       .sort({ createdAt: -1 })
       .toArray();
 
-    // 전체 멤버별 기신청 차감 승수 집계 (반려 rejected 건 제외)
+    // 전체 멤버별 기신청 차감 승수 및 푼 퀴즈 ID 목록 집계 (반려 rejected 건 제외)
     const allValidApps = await db
       .collection('reward_applications')
       .find({ status: { $ne: 'rejected' } })
       .toArray();
 
     const memberUsedWins: Record<string, number> = {};
+    const memberSolvedQuizIds: Record<string, string[]> = {};
+
     for (const app of allValidApps) {
       memberUsedWins[app.member] =
         (memberUsedWins[app.member] || 0) + (app.requestedWins || 0);
+
+      if (Array.isArray(app.solvedQuizIds)) {
+        if (!memberSolvedQuizIds[app.member]) {
+          memberSolvedQuizIds[app.member] = [];
+        }
+        for (const qId of app.solvedQuizIds) {
+          if (qId && !memberSolvedQuizIds[app.member].includes(qId)) {
+            memberSolvedQuizIds[app.member].push(qId);
+          }
+        }
+      }
     }
 
     return NextResponse.json({
@@ -58,10 +71,12 @@ export async function GET(request: NextRequest) {
         walletAddress: app.walletAddress || '',
         memo: app.memo || '',
         status: app.status || 'pending',
+        solvedQuizIds: app.solvedQuizIds || [],
         createdAt: app.createdAt || Date.now(),
         date: app.date || '',
       })),
       memberUsedWins,
+      memberSolvedQuizIds,
     });
   } catch (err: any) {
     console.error('Failed to fetch reward applications:', err);
@@ -75,7 +90,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { member, requestedWins, walletAddress, memo } = body;
+    const { member, requestedWins, walletAddress, memo, solvedQuizIds } = body;
 
     const trimmedMember = (member || '').trim();
     const parsedWins = Number(requestedWins);
@@ -170,6 +185,7 @@ export async function POST(request: NextRequest) {
       memo: (memo || '').trim(),
       status: 'pending',
       notified: false,
+      solvedQuizIds: Array.isArray(solvedQuizIds) ? solvedQuizIds : [],
       createdAt: now,
       date: kstDate,
     };

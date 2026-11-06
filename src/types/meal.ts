@@ -140,6 +140,7 @@ export interface RewardApplication {
   status: 'pending' | 'completed' | 'rejected';
   notified?: boolean; // 텔레그램 발송 완료 여부
   notifiedAt?: number;
+  solvedQuizIds?: string[]; // 리워드 신청 시 통과한 퀴즈 ID 목록 (중복 배정 방지용)
   createdAt: number;
   date: string;
 }

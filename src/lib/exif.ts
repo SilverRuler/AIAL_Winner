@@ -6,7 +6,7 @@ export interface ExifValidationResult {
   isValid: boolean;
   photoDate?: string; // YYYY-MM-DD
   photoTime?: string; // HH:mm
-  sourceType?: 'camera' | 'kakaotalk'; // 사진 식별 출처
+  sourceType?: 'camera' | 'kakaotalk' | 'live_camera'; // 사진 식별 출처
   errorMessage?: string;
   isScreenshot?: boolean;
 }
@@ -267,10 +267,45 @@ export async function validateMealImageExif(
 
     const rawDate = exifData?.DateTimeOriginal || exifData?.CreateDate || exifData?.ModifyDate;
 
-    // 카톡 사진도 아니고 EXIF 촬영 일시 정보도 없는 경우 -> 스크린샷 또는 메타데이터 삭제본 차단
+    // 카톡 사진도 아니고 EXIF 촬영 일시 정보도 없는 경우
+    // 💡 iOS Safari 등 모바일 브라우저의 '사진 찍기'(인라인 카메라 촬영)는 WebKit 보안/개인정보 정책에 따라 EXIF 메타데이터가 자동 제거됩니다.
+    // 대신 브라우저가 사진을 촬영/생성한 시각(file.lastModified)이 실시간으로 정확히 부여됩니다.
     if (!exifData || !rawDate) {
-      // 혹시 파일 생성/수정 시각(file.lastModified)이 당일 해당 타임대인지 확인하여 구제할 수 있는지 체크
-      // 단, 스크린샷 파일명/태그가 없는 경우에 한함
+      if (file.lastModified && file.lastModified > 0) {
+        const kst = formatTimestampToKST(file.lastModified);
+
+        // 촬영 날짜 일치 검증
+        if (kst.photoDate !== targetDate) {
+          return {
+            hasExif: false,
+            isValid: false,
+            photoDate: kst.photoDate,
+            photoTime: kst.photoTime,
+            errorMessage: `해당 타임대에 촬영된 사진이 아닙니다 : ${kst.photoDate} ${kst.photoTime}`,
+          };
+        }
+
+        // 식사 타임대 일치 검증 (±30분 버퍼)
+        if (!isWithinMealSlot(targetSlot, kst.hours, kst.minutes)) {
+          return {
+            hasExif: false,
+            isValid: false,
+            photoDate: kst.photoDate,
+            photoTime: kst.photoTime,
+            errorMessage: `해당 타임대에 촬영된 사진이 아닙니다 : ${kst.photoDate} ${kst.photoTime}`,
+          };
+        }
+
+        // 실시간 카메라 직접 촬영본 승인!
+        return {
+          hasExif: true,
+          isValid: true,
+          sourceType: 'live_camera',
+          photoDate: kst.photoDate,
+          photoTime: kst.photoTime,
+        };
+      }
+
       return {
         hasExif: false,
         isValid: false,
@@ -294,23 +329,8 @@ export async function validateMealImageExif(
     }
 
     // 카메라 하드웨어/광학 센서 정보 검증
-    const hasCameraHardware = Boolean(
-      exifData.Make ||
-      exifData.Model ||
-      exifData.FNumber !== undefined ||
-      exifData.ExposureTime !== undefined ||
-      exifData.ISO !== undefined ||
-      exifData.FocalLength !== undefined
-    );
-
-    if (!hasCameraHardware) {
-      return {
-        hasExif: true,
-        isValid: false,
-        isScreenshot: true,
-        errorMessage: '카메라 센서 정보가 없는 스크린샷 사진입니다. 카메라로 직접 촬영한 원본을 올려주세요.',
-      };
-    }
+    // (일부 필터 카메라 앱이나 웹 브라우저 경유 사진은 Make/Model이 생략될 수 있으나,
+    //  DateTimeOriginal/CreateDate 등 카메라 원본 일시가 유효하다면 통과시킴)
 
     // 촬영 일시(날짜 및 시각) 파싱
     let photoDate = '';

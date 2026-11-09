@@ -56,7 +56,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
   const [exifInfo, setExifInfo] = useState<{
     photoDate: string;
     photoTime: string;
-    sourceType?: 'camera' | 'kakaotalk';
+    sourceType?: 'camera' | 'kakaotalk' | 'live_camera';
   } | null>(null);
   const [exifRejectInfo, setExifRejectInfo] = useState<{
     photoDate?: string;
@@ -577,6 +577,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                 <span>
                   {exifInfo.sourceType === 'kakaotalk'
                     ? '카카오톡 저장 사진 일시 확인 완료'
+                    : exifInfo.sourceType === 'live_camera'
+                    ? '실시간 카메라 촬영 일시 확인 완료'
                     : '카메라 원본 촬영 일시 확인 완료'} : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
                 </span>
               </div>

@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Moon,
   ShieldCheck,
+  Lock,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MealSlot, MealEntry } from '@/types/meal';
@@ -72,6 +73,41 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
   const [isCompressing, setIsCompressing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
+  // 관리자 권한 상태 (prop, sessionStorage, localStorage 종합 실시간 판별)
+  const [internalAdmin, setInternalAdmin] = useState<boolean>(false);
+  const [showInlineAdminLogin, setShowInlineAdminLogin] = useState<boolean>(false);
+  const [inlineAdminId, setInlineAdminId] = useState<string>('');
+  const [inlineAdminPw, setInlineAdminPw] = useState<string>('');
+  const [inlineAdminError, setInlineAdminError] = useState<string>('');
+  const lastAttemptedFileRef = useRef<File | null>(null);
+
+  useEffect(() => {
+    if (isAdmin) {
+      setInternalAdmin(true);
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      const isAuth =
+        sessionStorage.getItem('aial_is_admin') === 'true' ||
+        localStorage.getItem('aial_is_admin') === 'true' ||
+        sessionStorage.getItem('aial_admin_id') === 'aaa' ||
+        localStorage.getItem('aial_admin_id') === 'aaa';
+      if (isAuth) {
+        setInternalAdmin(true);
+      }
+    }
+  }, [isAdmin, isOpen]);
+
+  const isUserAdmin = Boolean(
+    isAdmin ||
+    internalAdmin ||
+    (typeof window !== 'undefined' &&
+      (sessionStorage.getItem('aial_is_admin') === 'true' ||
+        localStorage.getItem('aial_is_admin') === 'true' ||
+        sessionStorage.getItem('aial_admin_id') === 'aaa' ||
+        localStorage.getItem('aial_admin_id') === 'aaa'))
+  );
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // 실시간 현재 슬롯에 등록 완료된 멤버 목록 계산 (슬롯 전환 시 즉각 반영)
@@ -91,9 +127,17 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       setDate(kst.date);
       setTime(kst.time);
 
+      const currentAdmin =
+        isAdmin ||
+        (typeof window !== 'undefined' &&
+          (sessionStorage.getItem('aial_is_admin') === 'true' ||
+            localStorage.getItem('aial_is_admin') === 'true' ||
+            sessionStorage.getItem('aial_admin_id') === 'aaa' ||
+            localStorage.getItem('aial_admin_id') === 'aaa'));
+
       // defaultSlot이 등록 가능한 상태면 그것을 쓰고, 아니면 현재 활성 슬롯 또는 기본 슬롯(현재 시간에 맞는 슬롯)
       let initialSlot: MealSlot = defaultSlot || kst.activeSlot || getCurrentMealSlot();
-      if (defaultSlot && (isAdmin || checkCanRegisterMeal(kst.date, defaultSlot).canRegister)) {
+      if (defaultSlot && (currentAdmin || checkCanRegisterMeal(kst.date, defaultSlot).canRegister)) {
         initialSlot = defaultSlot;
       } else if (kst.activeSlot) {
         initialSlot = kst.activeSlot;
@@ -107,8 +151,10 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       setSelectedFile(null);
       setExifInfo(null);
       setExifRejectInfo(null);
+      setShowInlineAdminLogin(false);
+      setInlineAdminError('');
 
-      if (!isAdmin) {
+      if (!currentAdmin) {
         const check = checkCanRegisterMeal(kst.date, initialSlot);
         if (!check.canRegister) {
           setErrorMsg(check.reason || '');
@@ -142,19 +188,29 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
 
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [isOpen, isAdmin, date, slot]);
+  }, [isOpen, isAdmin, internalAdmin, date, slot]);
 
   if (!isOpen) return null;
 
-  const handleProcessImage = async (file: File) => {
+  const handleProcessImage = async (file: File, forceAdminBypass: boolean = false) => {
     try {
+      lastAttemptedFileRef.current = file;
       setErrorMsg('');
       setIsCompressing(true);
+
+      const checkAdmin =
+        forceAdminBypass ||
+        isUserAdmin ||
+        (typeof window !== 'undefined' &&
+          (sessionStorage.getItem('aial_is_admin') === 'true' ||
+            localStorage.getItem('aial_is_admin') === 'true' ||
+            sessionStorage.getItem('aial_admin_id') === 'aaa' ||
+            localStorage.getItem('aial_admin_id') === 'aaa'));
 
       // EXIF 메타데이터 & 스크린샷 우회 차단 검증
       const exifCheck = await validateMealImageExif(file, date, slot);
       if (!exifCheck.isValid) {
-        if (!isAdmin) {
+        if (!checkAdmin) {
           setExifRejectInfo({
             photoDate: exifCheck.photoDate,
             photoTime: exifCheck.photoTime,
@@ -168,7 +224,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
         }
 
         // 🛡️ 관리자 권한 활성화 상태: 메타데이터 검증 우회 허용!
-        // (적정 시간대 외 사진, 카톡 사진, 스크린샷 등 무제한 업로드 승인)
+        // (적정 시간대 외 사진, 카톡 사진, 스크린샷, 손상된 메타데이터 등 무제한 업로드 승인)
         setExifRejectInfo(null);
         setErrorMsg('');
         setExifInfo({
@@ -209,6 +265,32 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     }
   };
 
+  const handleInlineAdminLogin = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setInlineAdminError('');
+
+    if (inlineAdminId.trim() === 'aaa' && inlineAdminPw.trim() === 'bbb') {
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('aial_is_admin', 'true');
+        sessionStorage.setItem('aial_admin_id', 'aaa');
+        sessionStorage.setItem('aial_admin_pw', 'bbb');
+        localStorage.setItem('aial_is_admin', 'true');
+        localStorage.setItem('aial_admin_id', 'aaa');
+        localStorage.setItem('aial_admin_pw', 'bbb');
+      }
+      setInternalAdmin(true);
+      setShowInlineAdminLogin(false);
+      setInlineAdminError('');
+
+      // 거부되었던 파일이 있다면 즉시 관리자 우회로 재처리
+      if (lastAttemptedFileRef.current) {
+        handleProcessImage(lastAttemptedFileRef.current, true);
+      }
+    } else {
+      setInlineAdminError('아이디 또는 비밀번호가 올바르지 않습니다.');
+    }
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -232,11 +314,19 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     setSelectedMember('');
     setErrorMsg('');
 
+    const checkAdmin =
+      isUserAdmin ||
+      (typeof window !== 'undefined' &&
+        (sessionStorage.getItem('aial_is_admin') === 'true' ||
+          localStorage.getItem('aial_is_admin') === 'true' ||
+          sessionStorage.getItem('aial_admin_id') === 'aaa' ||
+          localStorage.getItem('aial_admin_id') === 'aaa'));
+
     // 이미 업로드된 파일이 있다면 새 슬롯 기준으로 EXIF 재검증
     if (selectedFile) {
       const reCheck = await validateMealImageExif(selectedFile, date, newSlot);
       if (!reCheck.isValid) {
-        if (!isAdmin) {
+        if (!checkAdmin) {
           setExifRejectInfo({
             photoDate: reCheck.photoDate,
             photoTime: reCheck.photoTime,
@@ -276,9 +366,17 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     e.preventDefault();
     setErrorMsg('');
 
+    const checkAdmin =
+      isUserAdmin ||
+      (typeof window !== 'undefined' &&
+        (sessionStorage.getItem('aial_is_admin') === 'true' ||
+          localStorage.getItem('aial_is_admin') === 'true' ||
+          sessionStorage.getItem('aial_admin_id') === 'aaa' ||
+          localStorage.getItem('aial_admin_id') === 'aaa'));
+
     // 한국 시간(KST) 기준 등록 가능 여부 검증 (지난 타임대 및 22:30~05:00 휴식시간 차단)
-    // 관리자(isAdmin)는 타임대 제한 없이 업로드 가능
-    if (!isAdmin) {
+    // 관리자는 타임대 제한 없이 업로드 가능
+    if (!checkAdmin) {
       const timeCheck = checkCanRegisterMeal(date, slot);
       if (!timeCheck.canRegister) {
         setErrorMsg(timeCheck.reason || '현재 시간대에는 등록할 수 없습니다.');
@@ -287,8 +385,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     }
 
     // 1번 정책: 최종 EXIF 재검증 (선택된 파일의 촬영 일시와 슬롯 일치 여부)
-    // 관리자(isAdmin)는 메타데이터 제한(적정 시간대 외, 카톡, 스크린샷 등) 우회 가능
-    if (!isAdmin && selectedFile) {
+    // 관리자는 메타데이터 제한(적정 시간대 외, 카톡, 스크린샷 등) 우회 가능
+    if (!checkAdmin && selectedFile) {
       const finalExifCheck = await validateMealImageExif(selectedFile, date, slot);
       if (!finalExifCheck.isValid) {
         setErrorMsg(finalExifCheck.errorMessage || '사진의 촬영 일시가 선택된 날짜 및 시간대와 맞지 않습니다.');
@@ -315,11 +413,21 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     try {
       setIsSubmitting(true);
 
-      let adminId = '';
-      let adminPw = '';
+      let effAdminId = '';
+      let effAdminPw = '';
       if (typeof window !== 'undefined') {
-        adminId = sessionStorage.getItem('aial_admin_id') || 'aaa';
-        adminPw = sessionStorage.getItem('aial_admin_pw') || 'bbb';
+        effAdminId =
+          sessionStorage.getItem('aial_admin_id') ||
+          localStorage.getItem('aial_admin_id') ||
+          '';
+        effAdminPw =
+          sessionStorage.getItem('aial_admin_pw') ||
+          localStorage.getItem('aial_admin_pw') ||
+          '';
+      }
+      if (checkAdmin && (!effAdminId || !effAdminPw)) {
+        effAdminId = 'aaa';
+        effAdminPw = 'bbb';
       }
 
       const finalExifTakenAt = exifInfo
@@ -335,14 +443,14 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
         comment: comment.trim(),
         imageUrl: imagePreview,
         exifTakenAt: finalExifTakenAt,
-        adminId: isAdmin ? adminId : undefined,
-        adminPw: isAdmin ? adminPw : undefined,
+        adminId: checkAdmin ? effAdminId : undefined,
+        adminPw: checkAdmin ? effAdminPw : undefined,
       };
 
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (isAdmin && adminId && adminPw) {
-        headers['x-admin-id'] = adminId;
-        headers['x-admin-pw'] = adminPw;
+      if (checkAdmin && effAdminId && effAdminPw) {
+        headers['x-admin-id'] = effAdminId;
+        headers['x-admin-pw'] = effAdminPw;
       }
 
       const resp = await fetch('/api/meals', {
@@ -388,15 +496,24 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                 <h2 className="text-base sm:text-lg font-bold text-white">
                   오늘의 식사 사진 등록
                 </h2>
-                {isAdmin && (
+                {isUserAdmin ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black">
                     <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
                     관리자 권한 (메타데이터 제한 우회 허용)
                   </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowInlineAdminLogin(!showInlineAdminLogin)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-600 text-[10px] font-medium transition-colors cursor-pointer"
+                  >
+                    <Lock className="w-3 h-3 text-amber-400" />
+                    관리자 로그인
+                  </button>
                 )}
               </div>
               <p className="text-[11px] text-slate-400">
-                {isAdmin
+                {isUserAdmin
                   ? '관리자 모드: 적정 시간대 외 사진, 카톡 사진, 스크린샷도 자유롭게 등록할 수 있습니다.'
                   : '멤버를 선택하고 맛있는 식사 사진을 올려보세요! (타임대별 1인 1회)'}
               </p>
@@ -410,12 +527,57 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
           </button>
         </div>
 
+        {/* 인라인 관리자 로그인 폼 */}
+        {showInlineAdminLogin && !isUserAdmin && (
+          <form
+            onSubmit={handleInlineAdminLogin}
+            className="px-5 py-3 bg-amber-950/40 border-b border-amber-500/30 flex flex-wrap items-center gap-2 text-xs"
+          >
+            <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+              <span>관리자 인증:</span>
+            </div>
+            <input
+              type="text"
+              placeholder="아이디"
+              value={inlineAdminId}
+              onChange={(e) => setInlineAdminId(e.target.value)}
+              className="bg-slate-900 border border-amber-500/40 rounded-lg px-2.5 py-1 text-white text-xs focus:outline-none focus:border-amber-400 w-24 sm:w-28"
+            />
+            <input
+              type="password"
+              placeholder="비밀번호"
+              value={inlineAdminPw}
+              onChange={(e) => setInlineAdminPw(e.target.value)}
+              className="bg-slate-900 border border-amber-500/40 rounded-lg px-2.5 py-1 text-white text-xs focus:outline-none focus:border-amber-400 w-28 sm:w-32"
+            />
+            <button
+              type="submit"
+              className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg transition-colors cursor-pointer"
+            >
+              인증 및 즉시 승인
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowInlineAdminLogin(false)}
+              className="px-2 py-1 text-slate-400 hover:text-white transition-colors"
+            >
+              취소
+            </button>
+            {inlineAdminError && (
+              <span className="text-rose-400 font-medium text-[11px] w-full">
+                {inlineAdminError}
+              </span>
+            )}
+          </form>
+        )}
+
         {/* 폼 영역 */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4 max-h-[80vh] overflow-y-auto">
           {(() => {
             const kst = getKSTNow();
             if (!kst.isIdleTime) return null;
-            if (isAdmin) {
+            if (isUserAdmin) {
               return (
                 <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs flex items-center space-x-2.5">
                   <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400" />
@@ -509,7 +671,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
               <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
                 {MEAL_SLOTS.map((s) => {
                   const check = checkCanRegisterMeal(date, s.slot);
-                  const isBlocked = !isAdmin && !check.canRegister;
+                  const isBlocked = !isUserAdmin && !check.canRegister;
                   const isSelected = slot === s.slot;
 
                   return (
@@ -535,7 +697,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                            s.slot === '저녁' && getKSTNow().totalMins >= 1320 ? '종료' : '대기'}
                         </span>
                       )}
-                      {isAdmin && !check.canRegister && (
+                      {isUserAdmin && !check.canRegister && (
                         <span className="text-[9px] text-amber-400/90 font-semibold">
                           관리자
                         </span>
@@ -550,19 +712,19 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
                 <span>날짜 <span className="text-rose-400">*</span></span>
-                <span className={`text-[10px] font-normal ${isAdmin ? 'text-amber-400 font-bold' : 'text-amber-400/90'}`}>
-                  {isAdmin ? '관리자 날짜 변경 가능' : 'KST 오늘만 가능'}
+                <span className={`text-[10px] font-normal ${isUserAdmin ? 'text-amber-400 font-bold' : 'text-amber-400/90'}`}>
+                  {isUserAdmin ? '관리자 날짜 변경 가능' : 'KST 오늘만 가능'}
                 </span>
               </label>
               <div className="relative">
                 <input
                   type="date"
                   value={date}
-                  onChange={isAdmin ? (e) => setDate(e.target.value) : undefined}
-                  readOnly={!isAdmin}
-                  title={isAdmin ? '등록할 날짜를 선택할 수 있습니다.' : '식사는 한국 시간 오늘 날짜에만 등록 가능합니다.'}
+                  onChange={isUserAdmin ? (e) => setDate(e.target.value) : undefined}
+                  readOnly={!isUserAdmin}
+                  title={isUserAdmin ? '등록할 날짜를 선택할 수 있습니다.' : '식사는 한국 시간 오늘 날짜에만 등록 가능합니다.'}
                   className={`w-full rounded-xl px-3 py-2 text-xs focus:outline-none ${
-                    isAdmin
+                    isUserAdmin
                       ? 'bg-slate-950 border border-slate-700 text-white focus:border-amber-500 cursor-pointer'
                       : 'bg-slate-950/80 border border-slate-800 text-slate-300 cursor-not-allowed'
                   }`}
@@ -648,7 +810,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                       <span className="text-amber-400 font-bold">사진 선택 또는 촬영</span> (모바일 카메라 지원)
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      {isAdmin ? (
+                      {isUserAdmin ? (
                         <span className="text-amber-400/90 font-semibold">
                           🛡️ 관리자 권한: 적정 시간대 외 사진, 카톡 사진, 스크린샷 업로드 가능
                         </span>
@@ -663,11 +825,24 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
 
             {/* 업로드 거부 로그 (스크린샷 감지, EXIF 누락, 촬영 일시 불일치 시 사진 영역 바로 밑에 출력) */}
             {exifRejectInfo && (
-              <div className="mt-2.5 flex items-center space-x-2 text-xs font-semibold text-rose-400 bg-rose-950/60 border border-rose-500/40 px-3.5 py-2.5 rounded-xl animate-fade-in shadow-sm">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                <span>
-                  {exifRejectInfo.reason}
-                </span>
+              <div className="mt-2.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-semibold text-rose-400 bg-rose-950/60 border border-rose-500/40 px-3.5 py-2.5 rounded-xl animate-fade-in shadow-sm">
+                <div className="flex items-center space-x-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>{exifRejectInfo.reason}</span>
+                </div>
+                {!isUserAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowInlineAdminLogin(true);
+                      setInlineAdminId('aaa');
+                    }}
+                    className="shrink-0 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Lock className="w-3 h-3 text-amber-400" />
+                    관리자 로그인으로 즉시 승인
+                  </button>
+                )}
               </div>
             )}
 
@@ -761,7 +936,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                 disabled={
                   isSubmitting ||
                   isCompressing ||
-                  !checkCanRegisterMeal(date, slot).canRegister
+                  (!isUserAdmin && !checkCanRegisterMeal(date, slot).canRegister)
                 }
                 className="px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-gradient-to-r from-orange-500 via-amber-500 to-rose-500 text-white text-xs sm:text-sm font-bold shadow-md shadow-orange-500/25 hover:from-orange-600 hover:to-rose-600 transition-all flex items-center space-x-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >

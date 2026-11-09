@@ -105,8 +105,12 @@ export default function Home() {
     }
 
     if (typeof window !== 'undefined') {
-      const savedAdmin = sessionStorage.getItem('aial_is_admin');
-      if (savedAdmin === 'true') {
+      const savedAdmin =
+        sessionStorage.getItem('aial_is_admin') === 'true' ||
+        localStorage.getItem('aial_is_admin') === 'true' ||
+        sessionStorage.getItem('aial_admin_id') === 'aaa' ||
+        localStorage.getItem('aial_admin_id') === 'aaa';
+      if (savedAdmin) {
         setIsAdmin(true);
       }
     }
@@ -439,6 +443,9 @@ export default function Home() {
       sessionStorage.setItem('aial_is_admin', 'true');
       sessionStorage.setItem('aial_admin_id', 'aaa');
       sessionStorage.setItem('aial_admin_pw', 'bbb');
+      localStorage.setItem('aial_is_admin', 'true');
+      localStorage.setItem('aial_admin_id', 'aaa');
+      localStorage.setItem('aial_admin_pw', 'bbb');
     }
   };
 
@@ -448,6 +455,9 @@ export default function Home() {
       sessionStorage.removeItem('aial_is_admin');
       sessionStorage.removeItem('aial_admin_id');
       sessionStorage.removeItem('aial_admin_pw');
+      localStorage.removeItem('aial_is_admin');
+      localStorage.removeItem('aial_admin_id');
+      localStorage.removeItem('aial_admin_pw');
     }
   };
 

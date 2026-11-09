@@ -359,6 +359,25 @@ export async function validateMealImageExif(
     }
 
     if (!photoDate || !photoTime) {
+      // 파일명에 13자리 Unix 타임스탬프가 있거나 lastModified가 있는 경우 메타데이터 보조 복원
+      const tsMatch = fileName && fileName.match(/(?:^|[^\d])([12]\d{12})(?:[^\d]|$)/);
+      if (tsMatch) {
+        const ts = parseInt(tsMatch[1], 10);
+        const kst = formatTimestampToKST(ts);
+        photoDate = kst.photoDate;
+        photoTime = kst.photoTime;
+        hours = kst.hours;
+        minutes = kst.minutes;
+      } else if (file.lastModified && file.lastModified > 0) {
+        const kst = formatTimestampToKST(file.lastModified);
+        photoDate = kst.photoDate;
+        photoTime = kst.photoTime;
+        hours = kst.hours;
+        minutes = kst.minutes;
+      }
+    }
+
+    if (!photoDate || !photoTime) {
       return {
         hasExif: false,
         isValid: false,

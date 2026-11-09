@@ -1638,13 +1638,13 @@ export default function Home() {
               >
                 <span>전체 식사 보기</span>
               </button>
-            ) : checkCanRegisterMeal(selectedDate, selectedSlot).canRegister ? (
+            ) : checkCanRegisterMeal(selectedDate, selectedSlot).canRegister || isAdmin ? (
               <button
                 onClick={() => setIsNewMealOpen(true)}
                 className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-xs sm:text-sm shadow-md shadow-orange-500/20 hover:scale-105 transition-all cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>지금 사진 올리기</span>
+                <span>{isAdmin ? '사진 올리기 (관리자)' : '지금 사진 올리기'}</span>
               </button>
             ) : (
               <div className="inline-flex items-center space-x-1.5 px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-500 text-xs font-semibold">
@@ -1707,6 +1707,7 @@ export default function Home() {
         defaultSlot={selectedSlot}
         submittedMembers={submittedMembersForCurrentSlot}
         allMeals={meals}
+        isAdmin={isAdmin}
       />
 
       <LeaderboardModal

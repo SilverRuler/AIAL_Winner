@@ -13,6 +13,7 @@ import {
   Sparkles,
   CheckCircle2,
   Moon,
+  ShieldCheck,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MealSlot, MealEntry } from '@/types/meal';
@@ -34,6 +35,7 @@ interface NewMealModalProps {
   defaultSlot?: MealSlot;
   submittedMembers?: string[];
   allMeals?: MealEntry[];
+  isAdmin?: boolean;
 }
 
 export const NewMealModal: React.FC<NewMealModalProps> = ({
@@ -44,6 +46,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
   defaultSlot,
   submittedMembers = [],
   allMeals = [],
+  isAdmin = false,
 }) => {
   const [date, setDate] = useState<string>('');
   const [time, setTime] = useState<string>('');
@@ -57,6 +60,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     photoDate: string;
     photoTime: string;
     sourceType?: 'camera' | 'kakaotalk' | 'live_camera';
+    isAdminBypass?: boolean;
+    bypassReason?: string;
   } | null>(null);
   const [exifRejectInfo, setExifRejectInfo] = useState<{
     photoDate?: string;
@@ -88,7 +93,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
 
       // defaultSlot이 등록 가능한 상태면 그것을 쓰고, 아니면 현재 활성 슬롯 또는 기본 슬롯(현재 시간에 맞는 슬롯)
       let initialSlot: MealSlot = defaultSlot || kst.activeSlot || getCurrentMealSlot();
-      if (defaultSlot && checkCanRegisterMeal(kst.date, defaultSlot).canRegister) {
+      if (defaultSlot && (isAdmin || checkCanRegisterMeal(kst.date, defaultSlot).canRegister)) {
         initialSlot = defaultSlot;
       } else if (kst.activeSlot) {
         initialSlot = kst.activeSlot;
@@ -103,14 +108,18 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       setExifInfo(null);
       setExifRejectInfo(null);
 
-      const check = checkCanRegisterMeal(kst.date, initialSlot);
-      if (!check.canRegister) {
-        setErrorMsg(check.reason || '');
+      if (!isAdmin) {
+        const check = checkCanRegisterMeal(kst.date, initialSlot);
+        if (!check.canRegister) {
+          setErrorMsg(check.reason || '');
+        } else {
+          setErrorMsg('');
+        }
       } else {
         setErrorMsg('');
       }
     }
-  }, [isOpen, defaultDate, defaultSlot]);
+  }, [isOpen, defaultDate, defaultSlot, isAdmin]);
 
   // 클립보드 붙여넣기(Ctrl+V) 지원
   useEffect(() => {
@@ -133,7 +142,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
 
     window.addEventListener('paste', handlePaste);
     return () => window.removeEventListener('paste', handlePaste);
-  }, [isOpen]);
+  }, [isOpen, isAdmin, date, slot]);
 
   if (!isOpen) return null;
 
@@ -145,29 +154,45 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       // EXIF 메타데이터 & 스크린샷 우회 차단 검증
       const exifCheck = await validateMealImageExif(file, date, slot);
       if (!exifCheck.isValid) {
-        setExifRejectInfo({
-          photoDate: exifCheck.photoDate,
-          photoTime: exifCheck.photoTime,
-          reason: exifCheck.errorMessage || '해당 날짜 및 시간대의 사진이 아닙니다.',
-        });
-        setErrorMsg(exifCheck.errorMessage || '해당 날짜 및 시간대의 사진이 아닙니다.');
-        setImagePreview(null);
-        setSelectedFile(null);
-        setExifInfo(null);
-        return;
-      }
+        if (!isAdmin) {
+          setExifRejectInfo({
+            photoDate: exifCheck.photoDate,
+            photoTime: exifCheck.photoTime,
+            reason: exifCheck.errorMessage || '해당 날짜 및 시간대의 사진이 아닙니다.',
+          });
+          setErrorMsg(exifCheck.errorMessage || '해당 날짜 및 시간대의 사진이 아닙니다.');
+          setImagePreview(null);
+          setSelectedFile(null);
+          setExifInfo(null);
+          return;
+        }
 
-      // 검증 통과 시 거부 로그 초기화 및 승인 정보 저장
-      setExifRejectInfo(null);
-      if (exifCheck.isValid && exifCheck.photoDate && exifCheck.photoTime) {
+        // 🛡️ 관리자 권한 활성화 상태: 메타데이터 검증 우회 허용!
+        // (적정 시간대 외 사진, 카톡 사진, 스크린샷 등 무제한 업로드 승인)
+        setExifRejectInfo(null);
+        setErrorMsg('');
         setExifInfo({
-          photoDate: exifCheck.photoDate,
-          photoTime: exifCheck.photoTime,
-          sourceType: exifCheck.sourceType,
+          photoDate: exifCheck.photoDate || date,
+          photoTime: exifCheck.photoTime || time || getKSTNow().time,
+          sourceType: exifCheck.sourceType || 'camera',
+          isAdminBypass: true,
+          bypassReason: exifCheck.errorMessage || '메타데이터 제한 우회',
         });
       } else {
-        setExifInfo(null);
+        // 검증 통과 시 거부 로그 초기화 및 승인 정보 저장
+        setExifRejectInfo(null);
+        if (exifCheck.isValid && exifCheck.photoDate && exifCheck.photoTime) {
+          setExifInfo({
+            photoDate: exifCheck.photoDate,
+            photoTime: exifCheck.photoTime,
+            sourceType: exifCheck.sourceType,
+            isAdminBypass: false,
+          });
+        } else {
+          setExifInfo(null);
+        }
       }
+
       setSelectedFile(file);
 
       const dataUrl = await compressImageToDataUrl(file);
@@ -211,15 +236,26 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     if (selectedFile) {
       const reCheck = await validateMealImageExif(selectedFile, date, newSlot);
       if (!reCheck.isValid) {
-        setExifRejectInfo({
-          photoDate: reCheck.photoDate,
-          photoTime: reCheck.photoTime,
-          reason: reCheck.errorMessage || '변경된 타임대에 맞지 않는 사진입니다.',
-        });
-        setErrorMsg(reCheck.errorMessage || '변경된 타임대에 맞지 않는 사진입니다.');
-        setImagePreview(null);
-        setSelectedFile(null);
-        setExifInfo(null);
+        if (!isAdmin) {
+          setExifRejectInfo({
+            photoDate: reCheck.photoDate,
+            photoTime: reCheck.photoTime,
+            reason: reCheck.errorMessage || '변경된 타임대에 맞지 않는 사진입니다.',
+          });
+          setErrorMsg(reCheck.errorMessage || '변경된 타임대에 맞지 않는 사진입니다.');
+          setImagePreview(null);
+          setSelectedFile(null);
+          setExifInfo(null);
+        } else {
+          setExifRejectInfo(null);
+          setExifInfo({
+            photoDate: reCheck.photoDate || date,
+            photoTime: reCheck.photoTime || time || getKSTNow().time,
+            sourceType: reCheck.sourceType || 'camera',
+            isAdminBypass: true,
+            bypassReason: reCheck.errorMessage || '타임대 제한 우회',
+          });
+        }
       } else {
         setExifRejectInfo(null);
         if (reCheck.isValid && reCheck.photoDate && reCheck.photoTime) {
@@ -227,6 +263,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
             photoDate: reCheck.photoDate,
             photoTime: reCheck.photoTime,
             sourceType: reCheck.sourceType,
+            isAdminBypass: false,
           });
         } else {
           setExifInfo(null);
@@ -240,14 +277,18 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     setErrorMsg('');
 
     // 한국 시간(KST) 기준 등록 가능 여부 검증 (지난 타임대 및 22:30~05:00 휴식시간 차단)
-    const timeCheck = checkCanRegisterMeal(date, slot);
-    if (!timeCheck.canRegister) {
-      setErrorMsg(timeCheck.reason || '현재 시간대에는 등록할 수 없습니다.');
-      return;
+    // 관리자(isAdmin)는 타임대 제한 없이 업로드 가능
+    if (!isAdmin) {
+      const timeCheck = checkCanRegisterMeal(date, slot);
+      if (!timeCheck.canRegister) {
+        setErrorMsg(timeCheck.reason || '현재 시간대에는 등록할 수 없습니다.');
+        return;
+      }
     }
 
     // 1번 정책: 최종 EXIF 재검증 (선택된 파일의 촬영 일시와 슬롯 일치 여부)
-    if (selectedFile) {
+    // 관리자(isAdmin)는 메타데이터 제한(적정 시간대 외, 카톡, 스크린샷 등) 우회 가능
+    if (!isAdmin && selectedFile) {
       const finalExifCheck = await validateMealImageExif(selectedFile, date, slot);
       if (!finalExifCheck.isValid) {
         setErrorMsg(finalExifCheck.errorMessage || '사진의 촬영 일시가 선택된 날짜 및 시간대와 맞지 않습니다.');
@@ -274,6 +315,17 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     try {
       setIsSubmitting(true);
 
+      let adminId = '';
+      let adminPw = '';
+      if (typeof window !== 'undefined') {
+        adminId = sessionStorage.getItem('aial_admin_id') || 'aaa';
+        adminPw = sessionStorage.getItem('aial_admin_pw') || 'bbb';
+      }
+
+      const finalExifTakenAt = exifInfo
+        ? `${exifInfo.photoDate} ${exifInfo.photoTime}`
+        : `${date} ${time || getKSTNow().time}`;
+
       const payload = {
         date,
         time,
@@ -282,12 +334,20 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
         menuName: menuName.trim() || '오늘의 한 끼',
         comment: comment.trim(),
         imageUrl: imagePreview,
-        exifTakenAt: exifInfo ? `${exifInfo.photoDate} ${exifInfo.photoTime}` : undefined,
+        exifTakenAt: finalExifTakenAt,
+        adminId: isAdmin ? adminId : undefined,
+        adminPw: isAdmin ? adminPw : undefined,
       };
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (isAdmin && adminId && adminPw) {
+        headers['x-admin-id'] = adminId;
+        headers['x-admin-pw'] = adminPw;
+      }
 
       const resp = await fetch('/api/meals', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
       });
 
@@ -324,17 +384,27 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
               <Utensils className="w-4 h-4 text-white" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-bold text-white">
-                오늘의 식사 사진 등록
-              </h2>
+              <div className="flex items-center space-x-2">
+                <h2 className="text-base sm:text-lg font-bold text-white">
+                  오늘의 식사 사진 등록
+                </h2>
+                {isAdmin && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                    관리자 권한 (메타데이터 제한 우회 허용)
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-slate-400">
-                멤버를 선택하고 맛있는 식사 사진을 올려보세요! (타임대별 1인 1회)
+                {isAdmin
+                  ? '관리자 모드: 적정 시간대 외 사진, 카톡 사진, 스크린샷도 자유롭게 등록할 수 있습니다.'
+                  : '멤버를 선택하고 맛있는 식사 사진을 올려보세요! (타임대별 1인 1회)'}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -345,6 +415,19 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
           {(() => {
             const kst = getKSTNow();
             if (!kst.isIdleTime) return null;
+            if (isAdmin) {
+              return (
+                <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs flex items-center space-x-2.5">
+                  <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400" />
+                  <div>
+                    <span className="font-bold block text-white">관리자 권한 활성화</span>
+                    <span className="text-[11px] text-amber-300">
+                      휴식 시간대 및 적정 시간 외/카톡/스크린샷 사진도 등록할 수 있습니다.
+                    </span>
+                  </div>
+                </div>
+              );
+            }
             return (
               <div className="p-3.5 rounded-xl bg-purple-950/50 border border-purple-500/40 text-purple-200 text-xs flex items-center space-x-2.5">
                 <Moon className="w-5 h-5 shrink-0 text-purple-400" />
@@ -426,7 +509,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
               <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
                 {MEAL_SLOTS.map((s) => {
                   const check = checkCanRegisterMeal(date, s.slot);
-                  const isBlocked = !check.canRegister;
+                  const isBlocked = !isAdmin && !check.canRegister;
                   const isSelected = slot === s.slot;
 
                   return (
@@ -452,25 +535,37 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                            s.slot === '저녁' && getKSTNow().totalMins >= 1320 ? '종료' : '대기'}
                         </span>
                       )}
+                      {isAdmin && !check.canRegister && (
+                        <span className="text-[9px] text-amber-400/90 font-semibold">
+                          관리자
+                        </span>
+                      )}
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            {/* 날짜 (한국 시간 KST 오늘만 등록 가능) */}
+            {/* 날짜 (일반: 한국 시간 KST 오늘만 가능, 관리자: 날짜 변경 가능) */}
             <div>
               <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center justify-between">
                 <span>날짜 <span className="text-rose-400">*</span></span>
-                <span className="text-[10px] text-amber-400/90 font-normal">KST 오늘만 가능</span>
+                <span className={`text-[10px] font-normal ${isAdmin ? 'text-amber-400 font-bold' : 'text-amber-400/90'}`}>
+                  {isAdmin ? '관리자 날짜 변경 가능' : 'KST 오늘만 가능'}
+                </span>
               </label>
               <div className="relative">
                 <input
                   type="date"
                   value={date}
-                  readOnly
-                  title="식사는 한국 시간 오늘 날짜에만 등록 가능합니다."
-                  className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 cursor-not-allowed focus:outline-none"
+                  onChange={isAdmin ? (e) => setDate(e.target.value) : undefined}
+                  readOnly={!isAdmin}
+                  title={isAdmin ? '등록할 날짜를 선택할 수 있습니다.' : '식사는 한국 시간 오늘 날짜에만 등록 가능합니다.'}
+                  className={`w-full rounded-xl px-3 py-2 text-xs focus:outline-none ${
+                    isAdmin
+                      ? 'bg-slate-950 border border-slate-700 text-white focus:border-amber-500 cursor-pointer'
+                      : 'bg-slate-950/80 border border-slate-800 text-slate-300 cursor-not-allowed'
+                  }`}
                 />
               </div>
             </div>
@@ -553,7 +648,13 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                       <span className="text-amber-400 font-bold">사진 선택 또는 촬영</span> (모바일 카메라 지원)
                     </div>
                     <p className="text-[11px] text-slate-500">
-                      카메라 원본 또는 카카오톡 다운로드 사진 (스크린샷 업로드 불가)
+                      {isAdmin ? (
+                        <span className="text-amber-400/90 font-semibold">
+                          🛡️ 관리자 권한: 적정 시간대 외 사진, 카톡 사진, 스크린샷 업로드 가능
+                        </span>
+                      ) : (
+                        '카메라 원본 또는 카카오톡 다운로드 사진 (스크린샷 업로드 불가)'
+                      )}
                     </p>
                   </div>
                 )}
@@ -572,14 +673,31 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
 
             {/* 업로드 승인 로그 (촬영 일시 확인 완료 시 사진 영역 바로 밑에 출력) */}
             {exifInfo && imagePreview && (
-              <div className="mt-2.5 flex items-center space-x-2 text-xs font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-500/30 px-3.5 py-2.5 rounded-xl animate-fade-in shadow-sm">
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+              <div
+                className={`mt-2.5 flex items-center space-x-2 text-xs font-semibold px-3.5 py-2.5 rounded-xl animate-fade-in shadow-sm ${
+                  exifInfo.isAdminBypass
+                    ? 'text-amber-300 bg-amber-950/60 border border-amber-500/40'
+                    : 'text-emerald-400 bg-emerald-950/40 border border-emerald-500/30'
+                }`}
+              >
+                {exifInfo.isAdminBypass ? (
+                  <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                )}
                 <span>
-                  {exifInfo.sourceType === 'kakaotalk'
-                    ? '카카오톡 저장 사진 일시 확인 완료'
-                    : exifInfo.sourceType === 'live_camera'
-                    ? '실시간 카메라 촬영 일시 확인 완료'
-                    : '카메라 원본 촬영 일시 확인 완료'} : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
+                  {exifInfo.isAdminBypass ? (
+                    <>
+                      <strong>[관리자 권한 승인]</strong> 메타데이터 검증 우회 ({exifInfo.bypassReason}) :{' '}
+                      <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
+                    </>
+                  ) : exifInfo.sourceType === 'kakaotalk' ? (
+                    <>카카오톡 저장 사진 일시 확인 완료 : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong></>
+                  ) : exifInfo.sourceType === 'live_camera' ? (
+                    <>실시간 카메라 촬영 일시 확인 완료 : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong></>
+                  ) : (
+                    <>카메라 원본 촬영 일시 확인 완료 : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong></>
+                  )}
                 </span>
               </div>
             )}

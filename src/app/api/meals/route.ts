@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MealEntry } from '@/types/meal';
 import { MEMBERS, LEGACY_MEMBERS, checkCanRegisterMeal, getKSTNow } from '@/constants/members';
-import { getClientIp, maskIp } from '@/lib/ip';
+import { getClientIp, maskIp, normalizeIp } from '@/lib/ip';
 
 const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
 const ADMIN_PW = process.env.ADMIN_PW || 'bbb';
@@ -35,13 +35,19 @@ export async function GET(request: NextRequest) {
       .sort({ date: -1, createdAt: 1 })
       .toArray();
 
+    const rawIp = getClientIp(request);
+    const clientIp = normalizeIp(rawIp) || '';
+
     const formattedMeals = meals.map((m: any) => ({
       ...m,
       id: m.id || m._id.toString(),
       _id: undefined,
       ip: undefined, // UI 노출 방지 (몽고디비 내부에만 기록)
       viewedIps: undefined, // UI 노출 방지 (몽고디비 내부에만 기록)
+      likedIps: undefined, // UI 노출 방지 (몽고디비 내부에만 기록)
       views: typeof m.views === 'number' ? m.views : 0,
+      likes: typeof m.likes === 'number' ? Math.max(0, m.likes) : 0,
+      hasLiked: Boolean(clientIp && Array.isArray(m.likedIps) && m.likedIps.includes(clientIp)),
       comments: Array.isArray(m.comments)
         ? m.comments
             .filter((c: any) => !c.isDeleted)
@@ -68,7 +74,7 @@ export async function GET(request: NextRequest) {
       },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=3, stale-while-revalidate=15',
+          'Cache-Control': 'private, no-cache, no-store, must-revalidate',
         },
       }
     );
@@ -202,6 +208,8 @@ export async function POST(request: NextRequest) {
       isWinner: false,
       views: 0,
       viewedIps: [],
+      likes: 0,
+      likedIps: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
       ip: clientIp, // 몽고디비 원본 전체 IP 기록
@@ -235,6 +243,9 @@ export async function POST(request: NextRequest) {
       const responseMeal = {
         ...newEntry,
         ip: undefined,
+        viewedIps: undefined,
+        likedIps: undefined,
+        hasLiked: false,
       };
 
       return NextResponse.json({
@@ -247,6 +258,9 @@ export async function POST(request: NextRequest) {
     const responseMeal = {
       ...newEntry,
       ip: undefined,
+      viewedIps: undefined,
+      likedIps: undefined,
+      hasLiked: false,
     };
 
     return NextResponse.json({

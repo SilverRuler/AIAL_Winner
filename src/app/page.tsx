@@ -129,8 +129,15 @@ export default function Home() {
 
       if (data.success && Array.isArray(data.meals)) {
         if (data.meals.length > 0) {
-          setMeals(data.meals);
-          saveLocalMeals(data.meals);
+          const mapped = data.meals.map((m: any) => ({
+            ...m,
+            hasLiked: Boolean(
+              m.hasLiked ||
+                (typeof window !== 'undefined' && localStorage.getItem(`aial_meal_liked_${m.id}`) === '1')
+            ),
+          }));
+          setMeals(mapped);
+          saveLocalMeals(mapped);
         } else {
           const local = getLocalMeals();
           setMeals(local);
@@ -902,6 +909,75 @@ export default function Home() {
     }
   };
 
+  // 게시글 좋아요 토글 핸들러 (1개 IP당 1회만 카운트, 재클릭 시 취소 토글)
+  const handleToggleMealLike = async (mealId: string) => {
+    // 1. 현재 로컬 상태 파악 (Optimistic UI)
+    const currentMeal = meals.find((m) => m.id === mealId) || selectedDetailMeal;
+    const currentLiked = Boolean(
+      currentMeal?.hasLiked ||
+        (typeof window !== 'undefined' && localStorage.getItem(`aial_meal_liked_${mealId}`) === '1')
+    );
+    const nextLiked = !currentLiked;
+    const currentLikes = currentMeal?.likes || 0;
+    const nextLikes = nextLiked ? currentLikes + 1 : Math.max(0, currentLikes - 1);
+
+    if (typeof window !== 'undefined') {
+      if (nextLiked) {
+        localStorage.setItem(`aial_meal_liked_${mealId}`, '1');
+      } else {
+        localStorage.removeItem(`aial_meal_liked_${mealId}`);
+      }
+    }
+
+    setMeals((prev) => {
+      const updated = prev.map((m) =>
+        m.id === mealId ? { ...m, likes: nextLikes, hasLiked: nextLiked } : m
+      );
+      saveLocalMeals(updated);
+      return updated;
+    });
+
+    setSelectedDetailMeal((prev) =>
+      prev && prev.id === mealId ? { ...prev, likes: nextLikes, hasLiked: nextLiked } : prev
+    );
+
+    // 2. 서버 원자적 반영 요청
+    try {
+      const resp = await fetch('/api/meals/like', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mealId, action: 'toggle' }),
+      });
+      const data = await resp.json();
+      if (data.success && typeof data.likes === 'number') {
+        const finalLikes = data.likes;
+        const finalLiked = Boolean(data.liked);
+
+        setMeals((prev) => {
+          const updated = prev.map((m) =>
+            m.id === mealId ? { ...m, likes: finalLikes, hasLiked: finalLiked } : m
+          );
+          saveLocalMeals(updated);
+          return updated;
+        });
+
+        setSelectedDetailMeal((prev) =>
+          prev && prev.id === mealId ? { ...prev, likes: finalLikes, hasLiked: finalLiked } : prev
+        );
+
+        if (typeof window !== 'undefined') {
+          if (finalLiked) {
+            localStorage.setItem(`aial_meal_liked_${mealId}`, '1');
+          } else {
+            localStorage.removeItem(`aial_meal_liked_${mealId}`);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to toggle like count:', e);
+    }
+  };
+
   // 상세 모달 열기 및 조회수 집계
   const handleOpenMealDetail = (meal: MealEntry) => {
     setSelectedDetailMeal(meal);
@@ -1597,6 +1673,7 @@ export default function Home() {
                   setAdminTargetMeal(target);
                   setAdminAction('delete');
                 }}
+                onLike={(mealId) => handleToggleMealLike(mealId)}
               />
             ))}
           </div>
@@ -1721,6 +1798,7 @@ export default function Home() {
         onImageClick={(url, title) => setViewerImage({ url, title })}
         onCommentAdded={handleCommentAdded}
         onCommentDeleted={handleCommentDeleted}
+        onLike={(mealId) => handleToggleMealLike(mealId)}
       />
 
       <AdminAuthModal

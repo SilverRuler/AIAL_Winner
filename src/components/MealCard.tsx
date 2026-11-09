@@ -3,7 +3,7 @@
 import React from 'react';
 import { MealEntry } from '@/types/meal';
 import { getMemberInfo, getWinnerHeaderText } from '@/constants/members';
-import { Crown, Sparkles, MoreVertical, Edit2, Trash2, Award, MessageSquare, Eye } from 'lucide-react';
+import { Crown, Sparkles, MoreVertical, Edit2, Trash2, Award, MessageSquare, Eye, Heart } from 'lucide-react';
 
 interface MealCardProps {
   meal: MealEntry;
@@ -11,6 +11,7 @@ interface MealCardProps {
   onDetailClick: (meal: MealEntry) => void;
   onEdit: (meal: MealEntry) => void;
   onDelete: (meal: MealEntry) => void;
+  onLike?: (mealId: string) => void;
 }
 
 export const MealCard: React.FC<MealCardProps> = ({
@@ -19,6 +20,7 @@ export const MealCard: React.FC<MealCardProps> = ({
   onDetailClick,
   onEdit,
   onDelete,
+  onLike,
 }) => {
   const memberInfo = getMemberInfo(meal.member);
   const [showMenu, setShowMenu] = React.useState(false);
@@ -200,15 +202,44 @@ export const MealCard: React.FC<MealCardProps> = ({
           </div>
         )}
 
-        {/* 하단 조회수, 댓글 개수 및 상세 모달 열기 안내 */}
+        {/* 하단 메타 정보 (순서: 조회 -> 좋아요 -> 댓글) */}
         <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
           <div className="flex items-center space-x-2.5">
+            {/* 1. 조회 */}
             <div className="inline-flex items-center space-x-1 text-slate-400 group-hover/body:text-amber-300 transition-colors">
               <Eye className="w-3.5 h-3.5 text-slate-500 group-hover/body:text-amber-400" />
               <span className="font-semibold text-[11px]">
                 조회 {meal.views || 0}
               </span>
             </div>
+
+            {/* 2. 좋아요 (1 IP당 1회, 재클릭 시 취소 토글) */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onLike?.(meal.id);
+              }}
+              className={`inline-flex items-center space-x-1 transition-all cursor-pointer group/like ${
+                meal.hasLiked
+                  ? 'text-rose-400 font-bold'
+                  : 'text-slate-400 hover:text-rose-400'
+              }`}
+              title={meal.hasLiked ? '좋아요 취소' : '좋아요 누르기'}
+            >
+              <Heart
+                className={`w-3.5 h-3.5 transition-transform group-hover/like:scale-110 ${
+                  meal.hasLiked
+                    ? 'text-rose-500 fill-rose-500'
+                    : 'text-slate-500 group-hover/like:text-rose-400'
+                }`}
+              />
+              <span className="font-semibold text-[11px]">
+                좋아요 {meal.likes || 0}
+              </span>
+            </button>
+
+            {/* 3. 댓글 */}
             <div className="inline-flex items-center space-x-1 text-slate-400 group-hover/body:text-amber-300 transition-colors">
               <MessageSquare className="w-3.5 h-3.5 text-slate-500 group-hover/body:text-amber-400" />
               <span className="font-semibold text-[11px]">
@@ -217,7 +248,7 @@ export const MealCard: React.FC<MealCardProps> = ({
             </div>
           </div>
           <span className="text-[11px] text-slate-500 group-hover/body:text-amber-400/90 transition-colors font-medium">
-            상세보기 & 댓글 💬
+            상세보기 💬
           </span>
         </div>
       </div>

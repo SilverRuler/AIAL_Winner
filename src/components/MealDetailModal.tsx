@@ -14,6 +14,7 @@ import {
   Loader2,
   ExternalLink,
   Eye,
+  Heart,
 } from 'lucide-react';
 import { MealEntry, MealComment, Member } from '@/types/meal';
 import { MEMBERS, LEGACY_MEMBERS, getMemberInfo, isLegacyEvaluation } from '@/constants/members';
@@ -27,6 +28,7 @@ interface MealDetailModalProps {
   onImageClick: (url: string, title: string) => void;
   onCommentAdded: (mealId: string, newComment: MealComment) => void;
   onCommentDeleted: (mealId: string, commentId: string) => void;
+  onLike?: (mealId: string) => void;
 }
 
 export const MealDetailModal: React.FC<MealDetailModalProps> = ({
@@ -37,6 +39,7 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   onImageClick,
   onCommentAdded,
   onCommentDeleted,
+  onLike,
 }) => {
   const [author, setAuthor] = useState('');
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -267,9 +270,25 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
                     {meal.time}
                   </span>
                 )}
+                {/* 메타 정보: 조회 -> 좋아요 -> 댓글 순 */}
                 <span className="flex items-center gap-1 text-slate-400 font-medium">
                   <Eye className="w-3 h-3 text-slate-500" />
                   조회 {meal.views || 0}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onLike?.(meal.id)}
+                  className={`flex items-center gap-1 font-medium transition-colors cursor-pointer ${
+                    meal.hasLiked ? 'text-rose-400 font-bold' : 'text-slate-400 hover:text-rose-400'
+                  }`}
+                  title={meal.hasLiked ? '좋아요 취소' : '좋아요 누르기'}
+                >
+                  <Heart className={`w-3 h-3 ${meal.hasLiked ? 'text-rose-500 fill-rose-500' : 'text-slate-500'}`} />
+                  좋아요 {meal.likes || 0}
+                </button>
+                <span className="flex items-center gap-1 text-slate-400 font-medium">
+                  <MessageSquare className="w-3 h-3 text-slate-500" />
+                  댓글 {comments.length}개
                 </span>
               </div>
             </div>
@@ -329,10 +348,55 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
             </div>
           )}
 
-          {/* 구분선 */}
-          <div className="border-t border-slate-800/80 pt-2" />
+          {/* 4. 인터랙티브 반응 바: 조회 -> 좋아요 -> 댓글 순 */}
+          <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-900/60 border border-slate-800">
+            <div className="flex items-center space-x-3 text-xs">
+              {/* 1. 조회 */}
+              <div className="flex items-center space-x-1.5 text-slate-400 font-medium">
+                <Eye className="w-4 h-4 text-slate-500" />
+                <span>조회 <strong className="text-white font-mono">{meal.views || 0}</strong></span>
+              </div>
 
-          {/* 4. 댓글 섹션 */}
+              <div className="w-px h-4 bg-slate-800" />
+
+              {/* 2. 좋아요 (1 IP당 1회, 재클릭 시 취소 토글) */}
+              <button
+                type="button"
+                onClick={() => onLike?.(meal.id)}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95 ${
+                  meal.hasLiked
+                    ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 shadow-sm shadow-rose-500/20'
+                    : 'bg-slate-800/80 hover:bg-rose-500/10 text-slate-300 hover:text-rose-400 border border-slate-700 hover:border-rose-500/30'
+                }`}
+                title={meal.hasLiked ? '좋아요 취소' : '좋아요 누르기'}
+              >
+                <Heart
+                  className={`w-4 h-4 transition-transform ${
+                    meal.hasLiked ? 'text-rose-500 fill-rose-500 scale-110' : 'text-rose-400/70'
+                  }`}
+                />
+                <span>좋아요</span>
+                <span className="font-mono">{meal.likes || 0}</span>
+              </button>
+
+              <div className="w-px h-4 bg-slate-800" />
+
+              {/* 3. 댓글 */}
+              <div className="flex items-center space-x-1.5 text-slate-400 font-medium">
+                <MessageSquare className="w-4 h-4 text-slate-500" />
+                <span>댓글 <strong className="text-white font-mono">{comments.length}</strong>개</span>
+              </div>
+            </div>
+
+            <div className="text-[11px] text-slate-500 hidden sm:block">
+              {meal.hasLiked ? '❤️ 내가 좋아한 식사' : '1 IP당 1회 추천'}
+            </div>
+          </div>
+
+          {/* 구분선 */}
+          <div className="border-t border-slate-800/80 pt-1" />
+
+          {/* 5. 댓글 섹션 */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-extrabold text-white flex items-center gap-1.5">

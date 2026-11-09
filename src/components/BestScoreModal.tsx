@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Trophy,
   Eye,
+  Heart,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { BestScoreInfo, MealEntry, RankedScoreMeal } from '@/types/meal';
@@ -359,13 +360,20 @@ export const BestScoreModal: React.FC<BestScoreModalProps> = ({
                             )}
                           </div>
 
-                          {/* 카드 하단 액션 */}
+                          {/* 카드 하단 액션 (순서: 조회 -> 좋아요 -> 댓글) */}
                           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs">
                             <div className="flex items-center space-x-2.5">
+                              {/* 1. 조회 */}
                               <div className="inline-flex items-center space-x-1 text-slate-400 text-[11px]">
                                 <Eye className="w-3.5 h-3.5 text-slate-500" />
                                 <span>조회 {m.views || 0}</span>
                               </div>
+                              {/* 2. 좋아요 */}
+                              <div className="inline-flex items-center space-x-1 text-slate-400 text-[11px]">
+                                <Heart className="w-3.5 h-3.5 text-rose-500/80" />
+                                <span>좋아요 {m.likes || 0}</span>
+                              </div>
+                              {/* 3. 댓글 */}
                               {onMealClick ? (
                                 <button
                                   type="button"

@@ -92,9 +92,9 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
         localStorage.getItem('aial_is_admin') === 'true' ||
         sessionStorage.getItem('aial_admin_id') === 'aaa' ||
         localStorage.getItem('aial_admin_id') === 'aaa';
-      if (isAuth) {
-        setInternalAdmin(true);
-      }
+      setInternalAdmin(Boolean(isAuth));
+    } else {
+      setInternalAdmin(false);
     }
   }, [isAdmin, isOpen]);
 
@@ -288,6 +288,23 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       }
     } else {
       setInlineAdminError('아이디 또는 비밀번호가 올바르지 않습니다.');
+    }
+  };
+
+  const handleAdminLogoutInsideModal = () => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('aial_is_admin');
+      sessionStorage.removeItem('aial_admin_id');
+      sessionStorage.removeItem('aial_admin_pw');
+      localStorage.removeItem('aial_is_admin');
+      localStorage.removeItem('aial_admin_id');
+      localStorage.removeItem('aial_admin_pw');
+    }
+    setInternalAdmin(false);
+    setShowInlineAdminLogin(false);
+    // 현재 선택된 파일이 있다면 일반 사용자 기준으로 즉시 재검증하여 거부 상태로 전환
+    if (lastAttemptedFileRef.current) {
+      handleProcessImage(lastAttemptedFileRef.current, false);
     }
   };
 
@@ -497,10 +514,20 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                   오늘의 식사 사진 등록
                 </h2>
                 {isUserAdmin ? (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black">
-                    <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
-                    관리자 권한 (메타데이터 제한 우회 허용)
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black">
+                      <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+                      관리자 권한 (메타데이터 제한 우회 허용)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleAdminLogoutInsideModal}
+                      className="px-2 py-0.5 rounded-lg bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-300 border border-slate-700 text-[10px] font-medium transition-colors cursor-pointer"
+                      title="관리자 권한 해제"
+                    >
+                      로그아웃
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"

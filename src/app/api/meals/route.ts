@@ -134,7 +134,7 @@ export async function POST(request: NextRequest) {
     if (!isAdmin) {
       if (!exifTakenAt || typeof exifTakenAt !== 'string') {
         return NextResponse.json(
-          { success: false, message: '카메라 원본 촬영 정보(EXIF)가 확인되지 않는 사진(스크린샷 등)은 등록할 수 없습니다.' },
+          { success: false, message: '카메라 원본 촬영 정보(EXIF)가 확인되지 않는 사진(카톡 다운로드, 스크린샷 등)은 등록할 수 없습니다.' },
           { status: 400 }
         );
       }

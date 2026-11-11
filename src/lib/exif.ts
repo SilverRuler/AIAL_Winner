@@ -6,7 +6,7 @@ export interface ExifValidationResult {
   isValid: boolean;
   photoDate?: string; // YYYY-MM-DD
   photoTime?: string; // HH:mm
-  sourceType?: 'camera' | 'kakaotalk' | 'live_camera'; // 사진 식별 출처
+  sourceType?: 'camera'; // 일반 유저는 오직 카메라 원본만 승인
   errorMessage?: string;
   isScreenshot?: boolean;
 }
@@ -20,41 +20,12 @@ const SCREENSHOT_SOFTWARE_REGEX =
   /(screenshot|screen capture|screencapture|snipping tool|snip|lightshot|sharex)/i;
 
 // 카카오톡 파일명 감지 패턴
-const KAKAOTALK_FILENAME_REGEX = /kakaotalk|kakao/i;
-
-// 1) KakaoTalk_20261105_091530123.jpg, KakaoTalk_Photo_20261105_091530.jpg 등
-const KAKAO_FORMATTED_REGEX =
-  /(?:kakaotalk|kakao).*?(20\d{2})[.\-_]?(\d{2})[.\-_]?(\d{2})[.\-_]?(\d{2})[.\-_]?(\d{2})/i;
-
-// 2) kakaotalk_1730763849123.jpg (13자리 ms Unix 타임스탬프)
-const KAKAO_TS_REGEX = /(?:kakaotalk|kakao).*?([12]\d{12})/i;
-
-/**
- * 타임스탬프(ms)를 한국 표준시(KST: UTC+9) 기준 날짜/시간으로 변환
- */
-function formatTimestampToKST(ts: number): {
-  photoDate: string;
-  photoTime: string;
-  hours: number;
-  minutes: number;
-} {
-  const dateObj = new Date(ts);
-  const utc = dateObj.getTime() + dateObj.getTimezoneOffset() * 60000;
-  const kstDate = new Date(utc + 9 * 60 * 60 * 1000);
-
-  const y = kstDate.getFullYear();
-  const m = String(kstDate.getMonth() + 1).padStart(2, '0');
-  const d = String(kstDate.getDate()).padStart(2, '0');
-  const h = String(kstDate.getHours()).padStart(2, '0');
-  const min = String(kstDate.getMinutes()).padStart(2, '0');
-
-  return {
-    photoDate: `${y}-${m}-${d}`,
-    photoTime: `${h}:${min}`,
-    hours: kstDate.getHours(),
-    minutes: kstDate.getMinutes(),
-  };
-}
+// 1) kakaotalk, kakao (소문자/대문자)
+// 2) 안드로이드 카카오톡 저장 기본 파일명 (예: 1794219498732.jpg)
+// 3) 파일명 내 13자리 Unix ms 타임스탬프
+const KAKAOTALK_FILENAME_REGEX = /(kakaotalk|kakao)/i;
+const KAKAO_NUMERIC_FILENAME_REGEX = /^1[6789]\d{11}\.(jpe?g|png|webp)$/i;
+const KAKAO_TS_FILENAME_REGEX = /(?:^|[_\-.])(1[6789]\d{11})(?:[_\-.]|\.[a-z]{3,4}$)/i;
 
 /**
  * 식사 타임대(±30분 버퍼) 허용 범위 검증
@@ -106,10 +77,11 @@ async function getImageDimensions(file: File): Promise<{ width: number; height: 
 }
 
 /**
- * 이미지 파일에서 EXIF 및 파일 시스템 메타데이터를 추출하여
- * 1) 스크린샷 우회 등록 차단
- * 2) 카카오톡 저장 사진(선 업로드 후 다운로드) 정상 허용 및 타임 검증
- * 3) 카메라 원본 사진의 촬영 일자(오늘) 및 타임대(아침/점심/저녁) 허용 범위를 정밀 검증합니다.
+ * 이미지 파일에서 EXIF 및 메타데이터를 추출하여
+ * 1) 파일명 및 비율 기반 스크린샷 차단
+ * 2) 카카오톡 저장 사진(파일명 또는 EXIF 결여) 엄격 차단
+ * 3) 스마트폰 기본 카메라 원본 사진의 하드웨어 태그 및 촬영 일자(오늘) / 타임대(아침/점심/저녁) 허용 범위를 정밀 검증합니다.
+ * (관리자 로그인 시에만 해당 제약을 우회하여 모든 사진을 등록할 수 있습니다.)
  */
 export async function validateMealImageExif(
   file: File,
@@ -124,16 +96,16 @@ export async function validateMealImageExif(
       hasExif: false,
       isValid: false,
       isScreenshot: true,
-      errorMessage: '스크린샷(화면 캡처) 사진은 등록할 수 없습니다. 카메라 원본 또는 카톡 저장 사진을 올려주세요.',
+      errorMessage: '스크린샷(화면 캡처) 사진은 등록할 수 없습니다. 스마트폰 기본 카메라로 직접 촬영한 원본 사진을 올려주세요.',
     };
   }
 
-  // 2. 스마트폰 전체 화면 캡처 특유의 종횡비(Aspect Ratio 2.08:1 이상) 검사 (스크린샷 카톡 전송 꼼수 방지)
+  // 2. 스마트폰 전체 화면 캡처 특유의 종횡비(Aspect Ratio 2.08:1 이상) 검사 (스크린샷 전송 꼼수 방지)
   try {
     const dims = await getImageDimensions(file);
     if (dims && dims.width > 0 && dims.height > 0) {
       const ratio = Math.max(dims.width, dims.height) / Math.min(dims.width, dims.height);
-      // 일반 카메라/카톡 사진은 4:3 (1.33) 또는 16:9 (1.78). 2.08 이상은 19.5:9 등 스마트폰 화면 전체 캡처
+      // 일반 카메라 사진은 4:3 (1.33) 또는 16:9 (1.78). 2.08 이상은 19.5:9 등 스마트폰 화면 전체 캡처
       if (ratio >= 2.08) {
         return {
           hasExif: false,
@@ -148,11 +120,16 @@ export async function validateMealImageExif(
   }
 
   // 3. 카카오톡 다운로드 사진 차단 (일반 사용자는 차단, 관리자만 모달에서 우회 허용)
-  if (fileName && KAKAOTALK_FILENAME_REGEX.test(fileName)) {
+  if (
+    fileName &&
+    (KAKAOTALK_FILENAME_REGEX.test(fileName) ||
+      KAKAO_NUMERIC_FILENAME_REGEX.test(fileName) ||
+      KAKAO_TS_FILENAME_REGEX.test(fileName))
+  ) {
     return {
       hasExif: false,
       isValid: false,
-      errorMessage: '카카오톡 저장(다운로드) 사진은 등록할 수 없습니다. 카메라로 직접 촬영한 원본 사진만 등록 가능합니다.',
+      errorMessage: '카카오톡 저장(다운로드) 사진은 등록할 수 없습니다. 스마트폰 기본 카메라로 직접 촬영한 원본 사진만 등록 가능합니다.',
     };
   }
 
@@ -178,52 +155,14 @@ export async function validateMealImageExif(
 
     const rawDate = exifData?.DateTimeOriginal || exifData?.CreateDate || exifData?.ModifyDate;
 
-    // 카톡 사진도 아니고 EXIF 촬영 일시 정보도 없는 경우
-    // 💡 iOS Safari 등 모바일 브라우저의 '사진 찍기'(인라인 카메라 촬영)는 WebKit 보안/개인정보 정책에 따라 EXIF 메타데이터가 자동 제거됩니다.
-    // 대신 브라우저가 사진을 촬영/생성한 시각(file.lastModified)이 실시간으로 정확히 부여됩니다.
+    // 카톡 다운로드, 웹 다운로드, 편집 사진, EXIF 누락 사진 차단
+    // 💡 카카오톡 등 메신저를 통해 전송/저장된 사진은 EXIF 메타데이터가 완전히 제거됩니다.
+    // 일반 사용자는 오직 카메라 원본 EXIF가 온전히 보존된 사진만 업로드할 수 있습니다.
     if (!exifData || !rawDate) {
-      const now = Date.now();
-      const isRecentCapture = Boolean(file.lastModified && Math.abs(now - file.lastModified) <= 5 * 60 * 1000);
-      if (isRecentCapture) {
-        const kst = formatTimestampToKST(file.lastModified);
-
-        // 촬영 날짜 일치 검증
-        if (kst.photoDate !== targetDate) {
-          return {
-            hasExif: false,
-            isValid: false,
-            photoDate: kst.photoDate,
-            photoTime: kst.photoTime,
-            errorMessage: `해당 타임대에 촬영된 사진이 아닙니다 : ${kst.photoDate} ${kst.photoTime}`,
-          };
-        }
-
-        // 식사 타임대 일치 검증 (±30분 버퍼)
-        if (!isWithinMealSlot(targetSlot, kst.hours, kst.minutes)) {
-          return {
-            hasExif: false,
-            isValid: false,
-            photoDate: kst.photoDate,
-            photoTime: kst.photoTime,
-            errorMessage: `해당 타임대에 촬영된 사진이 아닙니다 : ${kst.photoDate} ${kst.photoTime}`,
-          };
-        }
-
-        // 실시간 카메라 직접 촬영본 승인!
-        return {
-          hasExif: true,
-          isValid: true,
-          sourceType: 'live_camera',
-          photoDate: kst.photoDate,
-          photoTime: kst.photoTime,
-        };
-      }
-
       return {
         hasExif: false,
         isValid: false,
-        isScreenshot: true,
-        errorMessage: '카메라 원본 촬영 정보(EXIF)가 없습니다. 스크린샷이 아닌 카메라 원본 사진을 올려주세요.',
+        errorMessage: '카메라 원본 촬영 정보(EXIF)가 없습니다. 카카오톡 다운로드나 스크린샷이 아닌 스마트폰 기본 카메라로 직접 촬영한 원본 사진을 올려주세요.',
       };
     }
 
@@ -241,9 +180,24 @@ export async function validateMealImageExif(
       };
     }
 
-    // 카메라 하드웨어/광학 센서 정보 검증
-    // (일부 필터 카메라 앱이나 웹 브라우저 경유 사진은 Make/Model이 생략될 수 있으나,
-    //  DateTimeOriginal/CreateDate 등 카메라 원본 일시가 유효하다면 통과시킴)
+    // 카메라 하드웨어 및 광학 센서 정보 검증 (카메라 원본 증명)
+    // Make(제조사: Apple, Samsung 등), Model(기기명), 조리개(FNumber), 셔터속도(ExposureTime), 감도(ISO), 초점거리(FocalLength)
+    const hasCameraHardware = Boolean(
+      exifData.Make ||
+      exifData.Model ||
+      exifData.FNumber !== undefined ||
+      exifData.ExposureTime !== undefined ||
+      exifData.ISO !== undefined ||
+      exifData.FocalLength !== undefined
+    );
+
+    if (!hasCameraHardware) {
+      return {
+        hasExif: false,
+        isValid: false,
+        errorMessage: '카메라 하드웨어 촬영 정보가 확인되지 않습니다. 카카오톡 다운로드나 변환된 사진이 아닌 스마트폰 카메라 원본 사진을 올려주세요.',
+      };
+    }
 
     // 촬영 일시(날짜 및 시각) 파싱
     let photoDate = '';
@@ -314,7 +268,7 @@ export async function validateMealImageExif(
     return {
       hasExif: false,
       isValid: false,
-      errorMessage: '사진 메타데이터 분석 중 오류가 발생했습니다. 카메라 원본 또는 카톡 저장 사진으로 다시 시도해주세요.',
+      errorMessage: '사진 메타데이터 분석 중 오류가 발생했습니다. 스마트폰 기본 카메라 원본 사진으로 다시 시도해주세요.',
     };
   }
 }

@@ -37,6 +37,8 @@ interface NewMealModalProps {
   submittedMembers?: string[];
   allMeals?: MealEntry[];
   isAdmin?: boolean;
+  onAdminLogin?: () => void;
+  onAdminLogout?: () => void;
 }
 
 export const NewMealModal: React.FC<NewMealModalProps> = ({
@@ -48,6 +50,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
   submittedMembers = [],
   allMeals = [],
   isAdmin = false,
+  onAdminLogin,
+  onAdminLogout,
 }) => {
   const [date, setDate] = useState<string>('');
   const [time, setTime] = useState<string>('');
@@ -192,20 +196,23 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleProcessImage = async (file: File, forceAdminBypass: boolean = false) => {
+  const handleProcessImage = async (file: File, forceAdminBypass?: boolean) => {
     try {
       lastAttemptedFileRef.current = file;
       setErrorMsg('');
       setIsCompressing(true);
 
+      // forceAdminBypass가 명시적으로 false면 일반 사용자 모드로 강제 검증
       const checkAdmin =
-        forceAdminBypass ||
-        isUserAdmin ||
-        (typeof window !== 'undefined' &&
-          (sessionStorage.getItem('aial_is_admin') === 'true' ||
-            localStorage.getItem('aial_is_admin') === 'true' ||
-            sessionStorage.getItem('aial_admin_id') === 'aaa' ||
-            localStorage.getItem('aial_admin_id') === 'aaa'));
+        forceAdminBypass === false
+          ? false
+          : forceAdminBypass === true ||
+            isUserAdmin ||
+            (typeof window !== 'undefined' &&
+              (sessionStorage.getItem('aial_is_admin') === 'true' ||
+                localStorage.getItem('aial_is_admin') === 'true' ||
+                sessionStorage.getItem('aial_admin_id') === 'aaa' ||
+                localStorage.getItem('aial_admin_id') === 'aaa'));
 
       // EXIF 메타데이터 & 스크린샷 우회 차단 검증
       const exifCheck = await validateMealImageExif(file, date, slot);
@@ -281,6 +288,9 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       setInternalAdmin(true);
       setShowInlineAdminLogin(false);
       setInlineAdminError('');
+      if (onAdminLogin) {
+        onAdminLogin();
+      }
 
       // 거부되었던 파일이 있다면 즉시 관리자 우회로 재처리
       if (lastAttemptedFileRef.current) {
@@ -302,6 +312,9 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     }
     setInternalAdmin(false);
     setShowInlineAdminLogin(false);
+    if (onAdminLogout) {
+      onAdminLogout();
+    }
     // 현재 선택된 파일이 있다면 일반 사용자 기준으로 즉시 재검증하여 거부 상태로 전환
     if (lastAttemptedFileRef.current) {
       handleProcessImage(lastAttemptedFileRef.current, false);
@@ -842,7 +855,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                           🛡️ 관리자 권한: 적정 시간대 외 사진, 카톡 사진, 스크린샷 업로드 가능
                         </span>
                       ) : (
-                        '카메라 원본 또는 카카오톡 다운로드 사진 (스크린샷 업로드 불가)'
+                        '스마트폰 카메라로 직접 촬영한 원본 사진만 등록 가능 (카톡 다운로드/스크린샷 불가)'
                       )}
                     </p>
                   </div>
@@ -893,10 +906,6 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                       <strong>[관리자 권한 승인]</strong> 메타데이터 검증 우회 ({exifInfo.bypassReason}) :{' '}
                       <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
                     </>
-                  ) : exifInfo.sourceType === 'kakaotalk' ? (
-                    <>카카오톡 저장 사진 일시 확인 완료 : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong></>
-                  ) : exifInfo.sourceType === 'live_camera' ? (
-                    <>실시간 카메라 촬영 일시 확인 완료 : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong></>
                   ) : (
                     <>카메라 원본 촬영 일시 확인 완료 : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong></>
                   )}

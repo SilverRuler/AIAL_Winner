@@ -1718,6 +1718,8 @@ export default function Home() {
         submittedMembers={submittedMembersForCurrentSlot}
         allMeals={meals}
         isAdmin={isAdmin}
+        onAdminLogin={handleAdminLoginSuccess}
+        onAdminLogout={handleAdminLogout}
       />
 
       <LeaderboardModal

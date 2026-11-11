@@ -119,12 +119,13 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
               <div className="px-4 pb-4 pt-1 space-y-2.5 border-t border-slate-800/80 text-slate-200 leading-relaxed font-medium">
                 <p className="text-sm sm:text-base font-bold text-white flex items-center gap-2 pt-2">
                   <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
-                  출품한 작품은 3가지 폴백 모델에 의해 평가됩니다.
+                  출품한 작품은 4가지 폴백 모델에 의해 평가됩니다.
                 </p>
                 <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] sm:text-xs text-slate-300">
                   <p><span className="text-indigo-400 font-bold">1.</span> mistralai/mistral-large-4-1t-a52b</p>
                   <p><span className="text-indigo-400 font-bold">2.</span> meta/muse-glimmer-30b</p>
-                  <p><span className="text-indigo-400 font-bold">3.</span> sr-combo</p>
+                  <p><span className="text-indigo-400 font-bold">3.</span> nvidia/nemotron-3.5-super-vl-120b-a12b</p>
+                  <p><span className="text-indigo-400 font-bold">4.</span> sr-combo</p>
                 </div>
                 <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
                   <Info className="w-4 h-4 text-blue-400 shrink-0" />

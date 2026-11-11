@@ -4,13 +4,14 @@ import { MealEntry } from '@/types/meal';
 
 export const maxDuration = 60;
 
-// NVIDIA NIM Vision Model (Primary & Fallback)
+// NVIDIA NIM Vision Model (1순위, 2순위, 3순위)
 const NIM_API_URL = process.env.NIM_API_URL || 'https://integrate.api.nvidia.com/v1/chat/completions';
-const NIM_MODEL = process.env.NIM_MODEL || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
-const NIM_FALLBACK_MODEL = process.env.NIM_FALLBACK_MODEL || 'mistralai/mistral-large-4-1t-a52b';
+const NIM_MODEL_1 = process.env.NIM_MODEL || 'mistralai/mistral-large-4-1t-a52b';
+const NIM_MODEL_2 = process.env.NIM_MODEL_2 || 'meta/muse-glimmer-30b';
+const NIM_MODEL_3 = process.env.NIM_MODEL_3 || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
 
-// LLM evaluation service (sr-combo on oci2 - fallback)
+// 4순위: LLM evaluation service (sr-combo on oci2 - fallback)
 const LLM_API_URL = process.env.LLM_API_URL || 'http://oci2.silverruler.xyz:20129/v1/chat/completions';
 const LLM_MODEL = process.env.LLM_MODEL || 'sr-combo';
 const LLM_API_KEY = process.env.LLM_API_KEY || '';
@@ -395,27 +396,37 @@ async function evaluateSingleMeal(
       contentList.push({ type: 'image_url', image_url: { url: imageBase64 } });
     }
 
-    // 1순위: NIM Primary 모델 시도
-    const tier1Res = await callNimVision(NIM_MODEL, nimSystemPrompt, contentList, member);
+    // 1순위: NIM mistral (mistralai/mistral-large-4-1t-a52b)
+    const tier1Res = await callNimVision(NIM_MODEL_1, nimSystemPrompt, contentList, member);
     if (tier1Res) {
       return {
         score: tier1Res.score,
-        review: appendModelTag(tier1Res.review, NIM_MODEL),
+        review: appendModelTag(tier1Res.review, NIM_MODEL_1),
       };
     }
 
-    // 2순위: NIM Fallback 모델 시도
-    console.warn(`[Single Meal Eval] Primary NIM (${NIM_MODEL}) failed for ${member}. Trying secondary NIM fallback (${NIM_FALLBACK_MODEL})...`);
-    const tier2Res = await callNimVision(NIM_FALLBACK_MODEL, nimSystemPrompt, contentList, member);
+    // 2순위: NIM muse-glimmer-30b (meta/muse-glimmer-30b)
+    console.warn(`[Single Meal Eval] 1st NIM (${NIM_MODEL_1}) failed for ${member}. Trying 2nd NIM (${NIM_MODEL_2})...`);
+    const tier2Res = await callNimVision(NIM_MODEL_2, nimSystemPrompt, contentList, member);
     if (tier2Res) {
       return {
         score: tier2Res.score,
-        review: appendModelTag(tier2Res.review, NIM_FALLBACK_MODEL),
+        review: appendModelTag(tier2Res.review, NIM_MODEL_2),
+      };
+    }
+
+    // 3순위: NIM nemotron-3.5-super-vl-120b-a12b (nvidia/nemotron-3.5-super-vl-120b-a12b)
+    console.warn(`[Single Meal Eval] 2nd NIM (${NIM_MODEL_2}) failed for ${member}. Trying 3rd NIM (${NIM_MODEL_3})...`);
+    const tier3Res = await callNimVision(NIM_MODEL_3, nimSystemPrompt, contentList, member);
+    if (tier3Res) {
+      return {
+        score: tier3Res.score,
+        review: appendModelTag(tier3Res.review, NIM_MODEL_3),
       };
     }
   }
 
-  // 3순위: sr-combo LLM 텍스트 기반 평가 Fallback
+  // 4순위: sr-combo LLM 텍스트 기반 평가 Fallback
   try {
     const systemPrompt = `당신은 세계 최고 권위의 미식 평가단이자 'AIAL 식사 배틀'의 AI 심사위원입니다.
 각 참가자가 제출한 ${slot} 식사 사진의 제목(메뉴명)과 코멘트를 참고하여(없거나 비어있을 수도 있음) 전문적이고 감각적인 미식 총평과 맛 점수를 부여합니다.

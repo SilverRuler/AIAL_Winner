@@ -34,10 +34,11 @@ LLM_FALLBACK_URL = "http://oci2.silverruler.xyz:20129/v1/chat/completions"
 MODEL_NAME = os.environ.get("LLM_MODEL", "sr-combo")
 API_KEY = os.environ.get("LLM_API_KEY", "")
 
-# NVIDIA NIM Vision 모델 설정 (1순위 & 2순위 미식 심사위원)
+# NVIDIA NIM Vision 모델 설정 (1순위, 2순위, 3순위 미식 심사위원)
 NIM_API_URL = os.environ.get("NIM_API_URL", "https://integrate.api.nvidia.com/v1/chat/completions")
-NIM_MODEL = os.environ.get("NIM_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
-NIM_FALLBACK_MODEL = os.environ.get("NIM_FALLBACK_MODEL", "mistralai/mistral-large-4-1t-a52b")
+NIM_MODEL_1 = os.environ.get("NIM_MODEL", "mistralai/mistral-large-4-1t-a52b")
+NIM_MODEL_2 = os.environ.get("NIM_MODEL_2", "meta/muse-glimmer-30b")
+NIM_MODEL_3 = os.environ.get("NIM_MODEL_3", "nvidia/nemotron-3.5-super-vl-120b-a12b")
 NIM_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 
 # 로컬 .env 및 .env.local 파일 보조 로드
@@ -56,8 +57,9 @@ API_KEY = os.environ.get("LLM_API_KEY", API_KEY)
 LLM_API_URL = os.environ.get("LLM_API_URL", LLM_API_URL)
 MODEL_NAME = os.environ.get("LLM_MODEL", MODEL_NAME)
 NIM_API_URL = os.environ.get("NIM_API_URL", NIM_API_URL)
-NIM_MODEL = os.environ.get("NIM_MODEL", NIM_MODEL)
-NIM_FALLBACK_MODEL = os.environ.get("NIM_FALLBACK_MODEL", NIM_FALLBACK_MODEL)
+NIM_MODEL_1 = os.environ.get("NIM_MODEL", NIM_MODEL_1)
+NIM_MODEL_2 = os.environ.get("NIM_MODEL_2", NIM_MODEL_2)
+NIM_MODEL_3 = os.environ.get("NIM_MODEL_3", NIM_MODEL_3)
 NIM_API_KEY = os.environ.get("NVIDIA_API_KEY", NIM_API_KEY)
 
 def get_current_slot():
@@ -233,17 +235,22 @@ def evaluate_single_meal(m, slot_name):
 
     # 1순위: NVIDIA NIM Vision 1순위 모델 (mistralai/mistral-large-4-1t-a52b)
     if NIM_API_KEY:
-        print(f"  [Tier 1] Trying primary NIM Vision model ({NIM_MODEL}) for {member}...", flush=True)
-        res = call_nim_vision(user_prompt, image_data_url, slot_name, model_name=NIM_MODEL)
+        print(f"  [Tier 1] Trying primary NIM Vision model ({NIM_MODEL_1}) for {member}...", flush=True)
+        res = call_nim_vision(user_prompt, image_data_url, slot_name, model_name=NIM_MODEL_1)
 
     # 2순위: 1순위 실패 시 NVIDIA NIM Vision 2순위 모델 (meta/muse-glimmer-30b) Fallback
     if (not res or not isinstance(res, dict) or "score" not in res) and NIM_API_KEY:
-        print(f"  [Tier 2 Fallback] Primary NIM failed. Trying secondary NIM model ({NIM_FALLBACK_MODEL}) for {member}...", flush=True)
-        res = call_nim_vision(user_prompt, image_data_url, slot_name, model_name=NIM_FALLBACK_MODEL)
+        print(f"  [Tier 2 Fallback] Primary NIM failed. Trying secondary NIM model ({NIM_MODEL_2}) for {member}...", flush=True)
+        res = call_nim_vision(user_prompt, image_data_url, slot_name, model_name=NIM_MODEL_2)
 
-    # 3순위: NIM 실패 시 sr-combo LLM 텍스트 기반 평가 Fallback
+    # 3순위: 2순위 실패 시 NVIDIA NIM Vision 3순위 모델 (nvidia/nemotron-3.5-super-vl-120b-a12b) Fallback
+    if (not res or not isinstance(res, dict) or "score" not in res) and NIM_API_KEY:
+        print(f"  [Tier 3 Fallback] Secondary NIM failed. Trying 3rd NIM model ({NIM_MODEL_3}) for {member}...", flush=True)
+        res = call_nim_vision(user_prompt, image_data_url, slot_name, model_name=NIM_MODEL_3)
+
+    # 4순위: NIM 실패 시 sr-combo LLM 텍스트 기반 평가 Fallback
     if not res or not isinstance(res, dict) or "score" not in res:
-        print(f"  [Tier 3 Fallback] NIM models failed. Falling back to sr-combo for {member}...", flush=True)
+        print(f"  [Tier 4 Fallback] NIM models failed. Falling back to sr-combo for {member}...", flush=True)
         system_prompt = f"""당신은 세계 최고 권위의 미식 평가단이자 'AIAL 식사 배틀'의 AI 심사위원입니다.
 각 참가자가 제출한 {slot_name} 식사 사진의 제목(메뉴명)과 코멘트를 참고하여(없거나 비어있을 수도 있음) 전문적이고 감각적인 미식 총평과 맛 점수를 부여합니다.
 

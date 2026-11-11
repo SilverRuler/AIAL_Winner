@@ -36,8 +36,8 @@ API_KEY = os.environ.get("LLM_API_KEY", "")
 
 # NVIDIA NIM Vision 모델 설정 (1순위 & 2순위 미식 심사위원)
 NIM_API_URL = os.environ.get("NIM_API_URL", "https://integrate.api.nvidia.com/v1/chat/completions")
-NIM_MODEL = os.environ.get("NIM_MODEL", "mistralai/mistral-large-4-1t-a52b")
-NIM_FALLBACK_MODEL = os.environ.get("NIM_FALLBACK_MODEL", "meta/muse-glimmer-30b")
+NIM_MODEL = os.environ.get("NIM_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
+NIM_FALLBACK_MODEL = os.environ.get("NIM_FALLBACK_MODEL", "mistralai/mistral-large-4-1t-a52b")
 NIM_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 
 # 로컬 .env 및 .env.local 파일 보조 로드

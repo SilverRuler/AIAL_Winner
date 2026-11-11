@@ -6,8 +6,8 @@ export const maxDuration = 60;
 
 // NVIDIA NIM Vision Model (Primary & Fallback)
 const NIM_API_URL = process.env.NIM_API_URL || 'https://integrate.api.nvidia.com/v1/chat/completions';
-const NIM_MODEL = process.env.NIM_MODEL || 'mistralai/mistral-large-4-1t-a52b';
-const NIM_FALLBACK_MODEL = process.env.NIM_FALLBACK_MODEL || 'meta/muse-glimmer-30b';
+const NIM_MODEL = process.env.NIM_MODEL || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
+const NIM_FALLBACK_MODEL = process.env.NIM_FALLBACK_MODEL || 'mistralai/mistral-large-4-1t-a52b';
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
 
 // LLM evaluation service (sr-combo on oci2 - fallback)
@@ -251,13 +251,14 @@ async function callNimVision(
   if (!NVIDIA_API_KEY) return null;
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    const timeoutId = setTimeout(() => controller.abort(), 55000);
 
     const resp = await fetch(NIM_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${NVIDIA_API_KEY}`,
+        Accept: 'text/event-stream',
       },
       body: JSON.stringify({
         model,
@@ -265,8 +266,8 @@ async function callNimVision(
           { role: 'system', content: systemPrompt },
           { role: 'user', content: contentList },
         ],
-        max_tokens: model.includes('glimmer') ? 8192 : 4096,
-        stream: false,
+        max_tokens: 4096,
+        stream: true,
         temperature: 0.3,
         top_p: 0.95,
       }),
@@ -275,25 +276,44 @@ async function callNimVision(
 
     clearTimeout(timeoutId);
 
-    if (resp.ok) {
-      const rawText = await resp.text();
-      const start = rawText.indexOf('{');
-      const end = rawText.lastIndexOf('}');
-      if (start !== -1 && end !== -1) {
-        const parsed = JSON.parse(rawText.substring(start, end + 1));
-        let evalData = parsed;
-        if (parsed.choices && parsed.choices[0]?.message?.content) {
-          const content = parsed.choices[0].message.content.trim();
-          const cStart = content.indexOf('{');
-          const cEnd = content.lastIndexOf('}');
-          if (cStart !== -1 && cEnd !== -1) {
-            evalData = JSON.parse(content.substring(cStart, cEnd + 1));
+    if (resp.ok && resp.body) {
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let done = false;
+      let buffer = '';
+      const contentParts: string[] = [];
+
+      while (!done) {
+        const { value, done: streamDone } = await reader.read();
+        done = streamDone;
+        if (value) {
+          buffer += decoder.decode(value, { stream: !done });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
+              try {
+                const chunk = JSON.parse(trimmed.slice(6));
+                const delta = chunk.choices?.[0]?.delta;
+                if (delta?.content) {
+                  contentParts.push(delta.content);
+                }
+              } catch {}
+            }
           }
         }
-        if (typeof evalData.score === 'number' && typeof evalData.review === 'string') {
+      }
+
+      const fullContent = contentParts.join('').trim();
+      const start = fullContent.indexOf('{');
+      const end = fullContent.lastIndexOf('}');
+      if (start !== -1 && end !== -1) {
+        const parsed = JSON.parse(fullContent.substring(start, end + 1));
+        if (typeof parsed.score === 'number' && typeof parsed.review === 'string') {
           return {
-            score: Math.max(0, Math.min(100, Math.round(evalData.score))),
-            review: evalData.review.trim(),
+            score: Math.max(0, Math.min(100, Math.round(parsed.score))),
+            review: parsed.review.trim(),
           };
         }
       }

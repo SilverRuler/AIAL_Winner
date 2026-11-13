@@ -15,6 +15,8 @@ import {
   Moon,
   ShieldCheck,
   Lock,
+  Camera,
+  ImageIcon,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MealSlot, MealEntry } from '@/types/meal';
@@ -113,6 +115,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
   );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const isDirectCameraRef = useRef<boolean>(false);
 
   // 실시간 현재 슬롯에 등록 완료된 멤버 목록 계산 (슬롯 전환 시 즉각 반영)
   const activeSubmittedMembers = useMemo(() => {
@@ -155,6 +159,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       setSelectedFile(null);
       setExifInfo(null);
       setExifRejectInfo(null);
+      isDirectCameraRef.current = false;
       setShowInlineAdminLogin(false);
       setInlineAdminError('');
 
@@ -196,9 +201,10 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleProcessImage = async (file: File, forceAdminBypass?: boolean) => {
+  const handleProcessImage = async (file: File, forceAdminBypass?: boolean, isDirectCamera?: boolean) => {
     try {
       lastAttemptedFileRef.current = file;
+      isDirectCameraRef.current = Boolean(isDirectCamera);
       setErrorMsg('');
       setIsCompressing(true);
 
@@ -214,8 +220,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                 sessionStorage.getItem('aial_admin_id') === 'aaa' ||
                 localStorage.getItem('aial_admin_id') === 'aaa'));
 
-      // EXIF 메타데이터 & 스크린샷 우회 차단 검증
-      const exifCheck = await validateMealImageExif(file, date, slot);
+      // EXIF 메타데이터 & 스크린샷 우회 차단 검증 (모바일 실시간 촬영 지원)
+      const exifCheck = await validateMealImageExif(file, date, slot, isDirectCamera);
       if (!exifCheck.isValid) {
         if (!checkAdmin) {
           setExifRejectInfo({
@@ -227,6 +233,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
           setImagePreview(null);
           setSelectedFile(null);
           setExifInfo(null);
+          isDirectCameraRef.current = false;
           return;
         }
 
@@ -251,6 +258,9 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
             sourceType: exifCheck.sourceType,
             isAdminBypass: false,
           });
+          if (exifCheck.sourceType === 'live_camera') {
+            isDirectCameraRef.current = true;
+          }
         } else {
           setExifInfo(null);
         }
@@ -294,7 +304,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
 
       // 거부되었던 파일이 있다면 즉시 관리자 우회로 재처리
       if (lastAttemptedFileRef.current) {
-        handleProcessImage(lastAttemptedFileRef.current, true);
+        handleProcessImage(lastAttemptedFileRef.current, true, isDirectCameraRef.current);
       }
     } else {
       setInlineAdminError('아이디 또는 비밀번호가 올바르지 않습니다.');
@@ -317,14 +327,14 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     }
     // 현재 선택된 파일이 있다면 일반 사용자 기준으로 즉시 재검증하여 거부 상태로 전환
     if (lastAttemptedFileRef.current) {
-      handleProcessImage(lastAttemptedFileRef.current, false);
+      handleProcessImage(lastAttemptedFileRef.current, false, isDirectCameraRef.current);
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, isDirectCamera = false) => {
     const file = e.target.files?.[0];
     if (file) {
-      handleProcessImage(file);
+      handleProcessImage(file, undefined, isDirectCamera);
     }
     // 동일 파일 재선택 가능하도록 리셋
     e.target.value = '';
@@ -354,7 +364,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
 
     // 이미 업로드된 파일이 있다면 새 슬롯 기준으로 EXIF 재검증
     if (selectedFile) {
-      const reCheck = await validateMealImageExif(selectedFile, date, newSlot);
+      const isDirect = isDirectCameraRef.current || exifInfo?.sourceType === 'live_camera';
+      const reCheck = await validateMealImageExif(selectedFile, date, newSlot, isDirect);
       if (!reCheck.isValid) {
         if (!checkAdmin) {
           setExifRejectInfo({
@@ -417,7 +428,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
     // 1번 정책: 최종 EXIF 재검증 (선택된 파일의 촬영 일시와 슬롯 일치 여부)
     // 관리자는 메타데이터 제한(적정 시간대 외, 카톡, 스크린샷 등) 우회 가능
     if (!checkAdmin && selectedFile) {
-      const finalExifCheck = await validateMealImageExif(selectedFile, date, slot);
+      const isDirect = isDirectCameraRef.current || exifInfo?.sourceType === 'live_camera';
+      const finalExifCheck = await validateMealImageExif(selectedFile, date, slot, isDirect);
       if (!finalExifCheck.isValid) {
         setErrorMsg(finalExifCheck.errorMessage || '사진의 촬영 일시가 선택된 날짜 및 시간대와 맞지 않습니다.');
         return;
@@ -793,9 +805,27 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
             <label className="block text-xs font-bold text-slate-300 mb-1.5">
               식사 사진 <span className="text-rose-400">*</span>
               <span className="ml-2 font-normal text-slate-400 text-[11px]">
-                (파일 첨부, 모바일 사진 촬영 또는 <strong>Ctrl+V</strong> 붙여넣기)
+                (실시간 카메라 촬영, 앨범 사진 첨부 또는 <strong>Ctrl+V</strong> 붙여넣기)
               </span>
             </label>
+
+            {/* 실시간 카메라 촬영용 input (아이폰/모바일에서 뷰파인더 직행) */}
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={(e) => handleFileChange(e, true)}
+              className="hidden"
+            />
+            {/* 일반 사진/앨범 선택용 input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleFileChange(e, false)}
+              className="hidden"
+            />
 
             {imagePreview ? (
               <div className="relative aspect-[16/9] w-full rounded-xl overflow-hidden bg-slate-950 border border-amber-500/40 group">
@@ -804,16 +834,23 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                   alt="미리보기"
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
-                  <label className="px-3 py-1.5 rounded-lg bg-slate-900/90 text-white text-xs font-semibold hover:bg-slate-800 border border-slate-700 cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileChange}
-                      className="sr-only"
-                    />
-                    사진 교체
-                  </label>
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs hover:bg-amber-400 flex items-center gap-1.5 cursor-pointer shadow-md"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    카메라 재촬영
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 text-white font-semibold text-xs hover:bg-slate-700 border border-slate-600 flex items-center gap-1.5 cursor-pointer shadow-md"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    앨범에서 교체
+                  </button>
                   <button
                     type="button"
                     onClick={() => {
@@ -821,6 +858,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                       setSelectedFile(null);
                       setExifInfo(null);
                       setExifRejectInfo(null);
+                      isDirectCameraRef.current = false;
                     }}
                     className="px-3 py-1.5 rounded-lg bg-rose-600/90 text-white text-xs font-semibold hover:bg-rose-500 cursor-pointer"
                   >
@@ -829,38 +867,50 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                 </div>
               </div>
             ) : (
-              <label className="border-2 border-dashed border-slate-700 hover:border-amber-500/60 rounded-xl p-6 text-center cursor-pointer transition-colors bg-slate-950/50 hover:bg-slate-950 block relative">
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleFileChange}
-                  className="sr-only"
-                />
+              <div className="border-2 border-dashed border-slate-700 hover:border-amber-500/60 rounded-xl p-5 text-center transition-colors bg-slate-950/60">
                 {isCompressing ? (
-                  <div className="flex flex-col items-center space-y-2 py-4">
+                  <div className="flex flex-col items-center space-y-2 py-5">
                     <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
                     <span className="text-xs text-slate-300">이미지 최적화 압축 중...</span>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center space-y-2">
+                  <div className="flex flex-col items-center space-y-3">
                     <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-slate-400">
                       <Upload className="w-5 h-5" />
                     </div>
-                    <div className="text-xs text-slate-300">
-                      <span className="text-amber-400 font-bold">사진 선택 또는 촬영</span> (모바일 카메라 지원)
+
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 w-full max-w-sm">
+                      <button
+                        type="button"
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="w-full sm:w-1/2 py-2.5 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95 transition-all cursor-pointer"
+                      >
+                        <Camera className="w-4 h-4 shrink-0" />
+                        <span>카메라로 바로 촬영</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full sm:w-1/2 py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs border border-slate-700 flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                      >
+                        <ImageIcon className="w-4 h-4 shrink-0 text-slate-400" />
+                        <span>앨범에서 사진 선택</span>
+                      </button>
                     </div>
-                    <p className="text-[11px] text-slate-500">
+
+                    <p className="text-[11px] text-slate-400">
                       {isUserAdmin ? (
-                        <span className="text-amber-400/90 font-semibold">
+                        <span className="text-amber-400 font-semibold">
                           🛡️ 관리자 권한: 적정 시간대 외 사진, 카톡 사진, 스크린샷 업로드 가능
                         </span>
                       ) : (
-                        '스마트폰 카메라로 직접 촬영한 원본 사진만 등록 가능 (카톡 다운로드/스크린샷 불가)'
+                        '아이폰/모바일 즉시 촬영 지원 · 카메라 원본 사진만 가능 (카톡 다운로드/스크린샷 불가)'
                       )}
                     </p>
                   </div>
                 )}
-              </label>
+              </div>
             )}
 
             {/* 업로드 거부 로그 (스크린샷 감지, EXIF 누락, 촬영 일시 불일치 시 사진 영역 바로 밑에 출력) */}
@@ -906,8 +956,16 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                       <strong>[관리자 권한 승인]</strong> 메타데이터 검증 우회 ({exifInfo.bypassReason}) :{' '}
                       <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
                     </>
+                  ) : exifInfo.sourceType === 'live_camera' ? (
+                    <>
+                      실시간 카메라 촬영 일시 확인 완료 :{' '}
+                      <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
+                    </>
                   ) : (
-                    <>카메라 원본 촬영 일시 확인 완료 : <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong></>
+                    <>
+                      카메라 원본 촬영 일시 확인 완료 :{' '}
+                      <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
+                    </>
                   )}
                 </span>
               </div>

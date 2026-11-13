@@ -1,12 +1,13 @@
 import exifr from 'exifr';
 import { MealSlot } from '@/types/meal';
+import { getKSTNow } from '@/constants/members';
 
 export interface ExifValidationResult {
   hasExif: boolean;
   isValid: boolean;
   photoDate?: string; // YYYY-MM-DD
   photoTime?: string; // HH:mm
-  sourceType?: 'camera'; // 일반 유저는 오직 카메라 원본만 승인
+  sourceType?: 'camera' | 'live_camera'; // 스마트폰 카메라 원본 또는 실시간 카메라 직접 촬영
   errorMessage?: string;
   isScreenshot?: boolean;
 }
@@ -86,7 +87,8 @@ async function getImageDimensions(file: File): Promise<{ width: number; height: 
 export async function validateMealImageExif(
   file: File,
   targetDate: string,
-  targetSlot: MealSlot
+  targetSlot: MealSlot,
+  isDirectCamera?: boolean
 ): Promise<ExifValidationResult> {
   const fileName = file.name || '';
 
@@ -133,7 +135,59 @@ export async function validateMealImageExif(
     };
   }
 
-  // 4. 일반 카메라 원본 사진 검증 (EXIF 파싱)
+  // 4. 모바일/아이폰 브라우저 실시간 직접 촬영(Live Camera Capture) 처리
+  // iOS Safari의 '사진 찍기' 및 HTML5 capture="environment"는 개인정보 보호 및 샌드박스 정책상
+  // WebKit이 생성하는 임시 파일(image.jpg 등)에서 EXIF 하드웨어 메타데이터를 전면 제거합니다.
+  // 따라서 전용 실시간 촬영 버튼(isDirectCamera)을 통해 유입되었거나,
+  // 모바일 환경에서 방금 촬영된 live camera 파일(image.jpg 등, 60초 이내 생성)인 경우
+  // 현재 한국 표준시(KST)를 기준으로 식사 타임대를 즉시 정밀 검증하여 승인합니다.
+  const isMobileDevice =
+    typeof navigator !== 'undefined' &&
+    (/iphone|ipad|ipod|android|mobile/i.test(navigator.userAgent || '') ||
+      (typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1));
+
+  const isLiveShotFile =
+    Boolean(isDirectCamera) ||
+    (isMobileDevice &&
+      /^image\.(jpe?g|png)$/i.test(fileName) &&
+      Math.abs(Date.now() - file.lastModified) <= 60 * 1000);
+
+  if (isLiveShotFile) {
+    const kst = getKSTNow();
+
+    // 촬영 날짜 일치 검증 (실시간 촬영은 KST 오늘 날짜에만 허용)
+    if (kst.date !== targetDate) {
+      return {
+        hasExif: true,
+        isValid: false,
+        photoDate: kst.date,
+        photoTime: kst.time,
+        errorMessage: `실시간 촬영 등록은 오늘(${kst.date}) 식사 타임에만 가능합니다. (선택된 날짜: ${targetDate})`,
+      };
+    }
+
+    // 식사 타임대(±30분 버퍼) 일치 검증
+    if (!isWithinMealSlot(targetSlot, kst.hour, kst.minute)) {
+      return {
+        hasExif: true,
+        isValid: false,
+        photoDate: kst.date,
+        photoTime: kst.time,
+        errorMessage: `현재 시각(${kst.time})은 ${targetSlot} 식사 타임대가 아닙니다.`,
+      };
+    }
+
+    // 실시간 직접 촬영 승인 완료
+    return {
+      hasExif: true,
+      isValid: true,
+      sourceType: 'live_camera',
+      photoDate: kst.date,
+      photoTime: kst.time,
+    };
+  }
+
+  // 5. 일반 앨범/갤러리 원본 사진 검증 (EXIF 파싱)
   try {
     const exifData = await exifr
       .parse(file, {

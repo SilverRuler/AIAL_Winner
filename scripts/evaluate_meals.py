@@ -36,9 +36,9 @@ API_KEY = os.environ.get("LLM_API_KEY", "")
 
 # NVIDIA NIM Vision 모델 설정 (1순위, 2순위, 3순위 미식 심사위원)
 NIM_API_URL = os.environ.get("NIM_API_URL", "https://integrate.api.nvidia.com/v1/chat/completions")
-NIM_MODEL_1 = os.environ.get("NIM_MODEL", "mistralai/mistral-large-4-1t-a52b")
+NIM_MODEL_1 = os.environ.get("NIM_MODEL", "nvidia/nemotron-3.5-super-vl-120b-a12b")
 NIM_MODEL_2 = os.environ.get("NIM_MODEL_2", "meta/muse-glimmer-30b")
-NIM_MODEL_3 = os.environ.get("NIM_MODEL_3", "nvidia/nemotron-3.5-super-vl-120b-a12b")
+NIM_MODEL_3 = os.environ.get("NIM_MODEL_3", "mistralai/mistral-large-4-1t-a52b")
 NIM_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
 
 # 로컬 .env 및 .env.local 파일 보조 로드
@@ -233,7 +233,7 @@ def evaluate_single_meal(m, slot_name):
     res = None
     image_data_url = get_image_data_url(image_url) if (NIM_API_KEY and image_url) else None
 
-    # 1순위: NVIDIA NIM Vision 1순위 모델 (mistralai/mistral-large-4-1t-a52b)
+    # 1순위: NVIDIA NIM Vision 1순위 모델 (nvidia/nemotron-3.5-super-vl-120b-a12b)
     if NIM_API_KEY:
         print(f"  [Tier 1] Trying primary NIM Vision model ({NIM_MODEL_1}) for {member}...", flush=True)
         res = call_nim_vision(user_prompt, image_data_url, slot_name, model_name=NIM_MODEL_1)
@@ -243,7 +243,7 @@ def evaluate_single_meal(m, slot_name):
         print(f"  [Tier 2 Fallback] Primary NIM failed. Trying secondary NIM model ({NIM_MODEL_2}) for {member}...", flush=True)
         res = call_nim_vision(user_prompt, image_data_url, slot_name, model_name=NIM_MODEL_2)
 
-    # 3순위: 2순위 실패 시 NVIDIA NIM Vision 3순위 모델 (nvidia/nemotron-3.5-super-vl-120b-a12b) Fallback
+    # 3순위: 2순위 실패 시 NVIDIA NIM Vision 3순위 모델 (mistralai/mistral-large-4-1t-a52b) Fallback
     if (not res or not isinstance(res, dict) or "score" not in res) and NIM_API_KEY:
         print(f"  [Tier 3 Fallback] Secondary NIM failed. Trying 3rd NIM model ({NIM_MODEL_3}) for {member}...", flush=True)
         res = call_nim_vision(user_prompt, image_data_url, slot_name, model_name=NIM_MODEL_3)

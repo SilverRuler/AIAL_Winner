@@ -6,9 +6,9 @@ export const maxDuration = 60;
 
 // NVIDIA NIM Vision Model (1순위, 2순위, 3순위)
 const NIM_API_URL = process.env.NIM_API_URL || 'https://integrate.api.nvidia.com/v1/chat/completions';
-const NIM_MODEL_1 = process.env.NIM_MODEL || 'mistralai/mistral-large-4-1t-a52b';
+const NIM_MODEL_1 = process.env.NIM_MODEL || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
 const NIM_MODEL_2 = process.env.NIM_MODEL_2 || 'meta/muse-glimmer-30b';
-const NIM_MODEL_3 = process.env.NIM_MODEL_3 || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
+const NIM_MODEL_3 = process.env.NIM_MODEL_3 || 'mistralai/mistral-large-4-1t-a52b';
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
 
 // 4순위: LLM evaluation service (sr-combo on oci2 - fallback)
@@ -329,10 +329,11 @@ async function callNimVision(
 
 /**
  * 참가자 1명의 식사를 개별 평가
- * 1순위: NVIDIA NIM Vision 모델 (mistralai/mistral-large-4-1t-a52b)을 통한 실제 이미지 직접 시각 평가.
+ * 1순위: NVIDIA NIM Vision 모델 (nvidia/nemotron-3.5-super-vl-120b-a12b)을 통한 실제 이미지 직접 시각 평가.
  * 2순위: 1순위 실패 시 NVIDIA NIM Vision 모델 (meta/muse-glimmer-30b) 시각 평가 Fallback.
- * 3순위: NIM 실패 시 기존 sr-combo LLM 텍스트 기반 평가 fallback.
- * 4순위: 최종 휴리스틱 평가 fallback.
+ * 3순위: 2순위 실패 시 NVIDIA NIM Vision 모델 (mistralai/mistral-large-4-1t-a52b) 시각 평가 Fallback.
+ * 4순위: NIM 실패 시 기존 sr-combo LLM 텍스트 기반 평가 fallback.
+ * 5순위: 최종 휴리스틱 평가 fallback.
  */
 async function evaluateSingleMeal(
   slot: string,
@@ -396,7 +397,7 @@ async function evaluateSingleMeal(
       contentList.push({ type: 'image_url', image_url: { url: imageBase64 } });
     }
 
-    // 1순위: NIM mistral (mistralai/mistral-large-4-1t-a52b)
+    // 1순위: NIM nemotron (nvidia/nemotron-3.5-super-vl-120b-a12b)
     const tier1Res = await callNimVision(NIM_MODEL_1, nimSystemPrompt, contentList, member);
     if (tier1Res) {
       return {
@@ -415,7 +416,7 @@ async function evaluateSingleMeal(
       };
     }
 
-    // 3순위: NIM nemotron-3.5-super-vl-120b-a12b (nvidia/nemotron-3.5-super-vl-120b-a12b)
+    // 3순위: NIM mistral (mistralai/mistral-large-4-1t-a52b)
     console.warn(`[Single Meal Eval] 2nd NIM (${NIM_MODEL_2}) failed for ${member}. Trying 3rd NIM (${NIM_MODEL_3})...`);
     const tier3Res = await callNimVision(NIM_MODEL_3, nimSystemPrompt, contentList, member);
     if (tier3Res) {

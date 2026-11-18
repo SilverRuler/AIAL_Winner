@@ -36,7 +36,7 @@ API_KEY = os.environ.get("LLM_API_KEY", "")
 
 # NVIDIA NIM Vision 모델 설정 (1순위, 2순위, 3순위 미식 심사위원)
 NIM_API_URL = os.environ.get("NIM_API_URL", "https://integrate.api.nvidia.com/v1/chat/completions")
-NIM_MODEL_1 = os.environ.get("NIM_MODEL", "meta/muse-glimmer-30b")
+NIM_MODEL_1 = os.environ.get("NIM_MODEL", "moonshotai/kimi-k3.1-pro")
 NIM_MODEL_2 = os.environ.get("NIM_MODEL_2", "mistralai/mistral-large-4-1t-a52b")
 NIM_MODEL_3 = os.environ.get("NIM_MODEL_3", "nvidia/nemotron-3.5-super-vl-120b-a12b")
 NIM_API_KEY = os.environ.get("NVIDIA_API_KEY", "")
@@ -154,7 +154,8 @@ def call_nim_vision(user_prompt, image_data_url, slot_name, model_name=None):
     if image_data_url:
         content_list.append({"type": "image_url", "image_url": {"url": image_data_url}})
 
-    max_tokens = 8192 if "glimmer" in target_model else 4096
+    is_kimi = "kimi" in target_model.lower() or "moonshot" in target_model.lower()
+    max_tokens = 8192 if (is_kimi or "glimmer" in target_model) else 4096
 
     payload = {
         "model": target_model,
@@ -167,6 +168,8 @@ def call_nim_vision(user_prompt, image_data_url, slot_name, model_name=None):
         "temperature": 0.3,
         "top_p": 0.95
     }
+    if is_kimi:
+        payload["reasoning_effort"] = "low"
 
     headers = {
         "Authorization": f"Bearer {NIM_API_KEY}",
@@ -176,7 +179,8 @@ def call_nim_vision(user_prompt, image_data_url, slot_name, model_name=None):
 
     try:
         print(f"  [NIM Vision] Requesting evaluation from {target_model}...", flush=True)
-        resp = requests.post(NIM_API_URL, headers=headers, json=payload, stream=True, timeout=(30, 180))
+        # Kimi 등 1순위 모델 미응답 시 신속한 2순위 Fallback을 위해 적정 타임아웃(연결 15s, 읽기 60s) 적용
+        resp = requests.post(NIM_API_URL, headers=headers, json=payload, stream=True, timeout=(15, 60))
         if resp.status_code == 200:
             print(f"  [NIM Vision - {target_model}] Connected. Streaming evaluation (reasoning & review)...", flush=True)
             content_chunks = []

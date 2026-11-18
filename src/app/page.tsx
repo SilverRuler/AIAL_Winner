@@ -48,6 +48,7 @@ import { BestScoreModal } from '@/components/BestScoreModal';
 import { SearchModal } from '@/components/SearchModal';
 import { RewardModal } from '@/components/RewardModal';
 import { AdminQuizModal } from '@/components/AdminQuizModal';
+import { ModelHealthBar } from '@/components/ModelHealthBar';
 import { MealDetailModal } from '@/components/MealDetailModal';
 import { getLocalMeals, saveLocalMeals, calculateMemberWinStats } from '@/lib/storage';
 
@@ -1310,6 +1311,9 @@ export default function Home() {
             </span>
           </div>
         </div>
+
+        {/* AI 모델 헬스체크 상태 표시 (데스크톱: 3개 모델 헬스체크 상황, 모바일: 콤팩트 표시) */}
+        <ModelHealthBar />
 
         {/* 2. 멤버별 필터링 안내 배너 (멤버 선택 시 표시) */}
         {selectedMemberFilter && (

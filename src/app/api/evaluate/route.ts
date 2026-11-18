@@ -6,9 +6,9 @@ export const maxDuration = 60;
 
 // NVIDIA NIM Vision Model (1순위, 2순위, 3순위)
 const NIM_API_URL = process.env.NIM_API_URL || 'https://integrate.api.nvidia.com/v1/chat/completions';
-const NIM_MODEL_1 = process.env.NIM_MODEL || 'stepfun-ai/step-5-preview';
-const NIM_MODEL_2 = process.env.NIM_MODEL_2 || 'mistralai/mistral-large-4-1t-a52b';
-const NIM_MODEL_3 = process.env.NIM_MODEL_3 || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
+const NIM_MODEL_1 = process.env.NIM_MODEL || 'mistralai/mistral-large-4-1t-a52b';
+const NIM_MODEL_2 = process.env.NIM_MODEL_2 || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
+const NIM_MODEL_3 = process.env.NIM_MODEL_3 || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
 
 // 4순위: LLM evaluation service (sr-combo on oci2 - fallback)
@@ -254,7 +254,6 @@ async function callNimVision(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 55000);
 
-    const isStep = model.toLowerCase().includes('step');
     const requestPayload: Record<string, any> = {
       model,
       messages: [
@@ -263,8 +262,8 @@ async function callNimVision(
       ],
       max_tokens: 4096,
       stream: true,
-      temperature: isStep ? 0.5 : 0.3,
-      top_p: isStep ? 1 : 0.95,
+      temperature: 0.3,
+      top_p: 0.95,
     };
 
     const resp = await fetch(NIM_API_URL, {
@@ -332,9 +331,9 @@ async function callNimVision(
 
 /**
  * 참가자 1명의 식사를 개별 평가
- * 1순위: NVIDIA NIM Vision 모델 (stepfun-ai/step-5-preview)을 통한 실제 이미지 직접 시각 평가.
- * 2순위: 1순위 실패 시 NVIDIA NIM Vision 모델 (mistralai/mistral-large-4-1t-a52b) 시각 평가 Fallback.
- * 3순위: 2순위 실패 시 NVIDIA NIM Vision 모델 (nvidia/nemotron-3.5-super-vl-120b-a12b) 시각 평가 Fallback.
+ * 1순위: NVIDIA NIM Vision 모델 (mistralai/mistral-large-4-1t-a52b)을 통한 실제 이미지 직접 시각 평가.
+ * 2순위: 1순위 실패 시 NVIDIA NIM Vision 모델 (nvidia/nemotron-3.5-super-vl-120b-a12b) 시각 평가 Fallback.
+ * 3순위: 2순위 실패 시 NVIDIA NIM Vision 모델 (nvidia/nemotron-3-nano-omni-30b-a3b-reasoning) 시각 평가 Fallback.
  * 4순위: NIM 실패 시 기존 sr-combo LLM 텍스트 기반 평가 fallback.
  * 5순위: 최종 휴리스틱 평가 fallback.
  */
@@ -400,7 +399,7 @@ async function evaluateSingleMeal(
       contentList.push({ type: 'image_url', image_url: { url: imageBase64 } });
     }
 
-    // 1순위: NIM Step 5 Preview (stepfun-ai/step-5-preview)
+    // 1순위: NIM Mistral Large (mistralai/mistral-large-4-1t-a52b)
     const tier1Res = await callNimVision(NIM_MODEL_1, nimSystemPrompt, contentList, member);
     if (tier1Res) {
       return {
@@ -409,7 +408,7 @@ async function evaluateSingleMeal(
       };
     }
 
-    // 2순위: NIM mistral (mistralai/mistral-large-4-1t-a52b)
+    // 2순위: NIM Nemotron 3.5 Super VL (nvidia/nemotron-3.5-super-vl-120b-a12b)
     console.warn(`[Single Meal Eval] 1st NIM (${NIM_MODEL_1}) failed for ${member}. Trying 2nd NIM (${NIM_MODEL_2})...`);
     const tier2Res = await callNimVision(NIM_MODEL_2, nimSystemPrompt, contentList, member);
     if (tier2Res) {
@@ -419,7 +418,7 @@ async function evaluateSingleMeal(
       };
     }
 
-    // 3순위: NIM nemotron (nvidia/nemotron-3.5-super-vl-120b-a12b)
+    // 3순위: NIM Nemotron Omni Reasoning (nvidia/nemotron-3-nano-omni-30b-a3b-reasoning)
     console.warn(`[Single Meal Eval] 2nd NIM (${NIM_MODEL_2}) failed for ${member}. Trying 3rd NIM (${NIM_MODEL_3})...`);
     const tier3Res = await callNimVision(NIM_MODEL_3, nimSystemPrompt, contentList, member);
     if (tier3Res) {

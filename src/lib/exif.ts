@@ -7,7 +7,7 @@ export interface ExifValidationResult {
   isValid: boolean;
   photoDate?: string; // YYYY-MM-DD
   photoTime?: string; // HH:mm
-  sourceType?: 'camera' | 'live_camera'; // 스마트폰 카메라 원본 또는 실시간 카메라 직접 촬영
+  sourceType?: 'camera' | 'live_camera' | 'kakaotalk'; // 스마트폰 카메라 원본, 실시간 카메라 직접 촬영, 카카오톡 시간검증
   errorMessage?: string;
   isScreenshot?: boolean;
 }
@@ -25,8 +25,94 @@ const SCREENSHOT_SOFTWARE_REGEX =
 // 2) 안드로이드 카카오톡 저장 기본 파일명 (예: 1794219498732.jpg)
 // 3) 파일명 내 13자리 Unix ms 타임스탬프
 const KAKAOTALK_FILENAME_REGEX = /(kakaotalk|kakao)/i;
-const KAKAO_NUMERIC_FILENAME_REGEX = /^1[6789]\d{11}\.(jpe?g|png|webp)$/i;
-const KAKAO_TS_FILENAME_REGEX = /(?:^|[_\-.])(1[6789]\d{11})(?:[_\-.]|\.[a-z]{3,4}$)/i;
+const KAKAO_NUMERIC_FILENAME_REGEX = /^1[6-9]\d{11}\.(jpe?g|png|webp)$/i;
+const KAKAO_TS_FILENAME_REGEX = /(?:^|\D)(1[6-9]\d{11})(?:\D|$)/i;
+
+export interface KakaoTimestampInfo {
+  date: string; // YYYY-MM-DD
+  time: string; // HH:mm
+  hour: number;
+  minute: number;
+  timestamp: number;
+}
+
+/**
+ * 카카오톡 파일명에서 날짜/시간 또는 13자리 Unix 타임스탬프를 역추적 파싱 (KST 기준)
+ */
+export function parseKakaoFilenameTimestamp(fileName: string): KakaoTimestampInfo | null {
+  if (!fileName) return null;
+
+  // 1) KakaoTalk_YYYYMMDD_HHMMSS... 형태 (예: KakaoTalk_20261118_123456789.jpg)
+  const ymdMatch = fileName.match(
+    /(?:kakao|kakaotalk).*?(20[2-3]\d)[-_ ]?([01]\d)[-_ ]?([0-3]\d)[-_ ]([0-2]\d)[-_ ]?([0-5]\d)(?:[-_ ]?([0-5]\d))?/i
+  );
+  if (ymdMatch) {
+    const [, y, m, d, h, min] = ymdMatch;
+    const year = parseInt(y, 10);
+    const month = parseInt(m, 10);
+    const day = parseInt(d, 10);
+    const hour = parseInt(h, 10);
+    const minute = parseInt(min, 10);
+
+    if (
+      month >= 1 &&
+      month <= 12 &&
+      day >= 1 &&
+      day <= 31 &&
+      hour >= 0 &&
+      hour <= 23 &&
+      minute >= 0 &&
+      minute <= 59
+    ) {
+      const dateStr = `${y}-${m}-${d}`;
+      const timeStr = `${h}:${min}`;
+      const dt = new Date(`${dateStr}T${timeStr}:00+09:00`);
+      return {
+        date: dateStr,
+        time: timeStr,
+        hour,
+        minute,
+        timestamp: dt.getTime(),
+      };
+    }
+  }
+
+  // 2) 13자리 Unix ms 타임스탬프 형태 (예: 1794978876123.jpg, KakaoTalk_1794978876123.jpg)
+  const tsMatch = fileName.match(/(?:^|\D)(1[6-9]\d{11})(?:\D|$)/i);
+  if (tsMatch) {
+    const ts = parseInt(tsMatch[1], 10);
+    // 2024년 ~ 2035년 범위 유효성 체크
+    if (ts >= 1700000000000 && ts <= 2050000000000) {
+      const d = new Date(ts);
+      // 한국 표준시(KST)로 변환
+      const kstFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Seoul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      const parts = kstFormatter.formatToParts(d);
+      const getPart = (type: string) => parts.find((p) => p.type === type)?.value || '';
+      const hourStr = getPart('hour');
+      const minStr = getPart('minute');
+      const hour = parseInt(hourStr, 10);
+      const minute = parseInt(minStr, 10);
+
+      return {
+        date: `${getPart('year')}-${getPart('month')}-${getPart('day')}`,
+        time: `${hourStr}:${minStr}`,
+        hour,
+        minute,
+        timestamp: ts,
+      };
+    }
+  }
+
+  return null;
+}
 
 /**
  * 식사 타임대(±30분 버퍼) 허용 범위 검증
@@ -121,17 +207,90 @@ export async function validateMealImageExif(
     // 이미지 크기 추출 실패 시 다음 단계 진행
   }
 
-  // 3. 카카오톡 다운로드 사진 차단 (일반 사용자는 차단, 관리자만 모달에서 우회 허용)
-  if (
+  // 3. 카카오톡 촬영/저장 사진 검증 (방안 A: 파일명 타임스탬프 역추적 검증)
+  // 카카오톡 내 카메라로 바로 촬영하여 전송/저장된 사진은 EXIF가 제거될 수 있으나,
+  // 파일명에 포함된 날짜/시간 또는 타임스탬프(Unix ms)를 역추적하여
+  // 오늘 날짜 및 해당 식사 타임대(±30분 버퍼)와 일치하면 실시간 촬영으로 인정합니다.
+  const isKakaoFile =
     fileName &&
     (KAKAOTALK_FILENAME_REGEX.test(fileName) ||
       KAKAO_NUMERIC_FILENAME_REGEX.test(fileName) ||
-      KAKAO_TS_FILENAME_REGEX.test(fileName))
-  ) {
+      KAKAO_TS_FILENAME_REGEX.test(fileName));
+
+  if (isKakaoFile) {
+    const kakaoTimeInfo = parseKakaoFilenameTimestamp(fileName);
+
+    if (kakaoTimeInfo) {
+      const { date: photoDate, time: photoTime, hour, minute } = kakaoTimeInfo;
+
+      // 1) 날짜 일치 검증 (오늘 식사 날짜인지 확인)
+      if (photoDate !== targetDate) {
+        return {
+          hasExif: true,
+          isValid: false,
+          photoDate,
+          photoTime,
+          errorMessage: `카카오톡 사진의 촬영/전송 일자(${photoDate})가 오늘 식사 일자(${targetDate})와 일치하지 않습니다.`,
+        };
+      }
+
+      // 2) 식사 타임대(±30분 버퍼) 일치 검증
+      if (!isWithinMealSlot(targetSlot, hour, minute)) {
+        return {
+          hasExif: true,
+          isValid: false,
+          photoDate,
+          photoTime,
+          errorMessage: `카카오톡 사진의 촬영/전송 시각(${photoTime})이 ${targetSlot} 식사 타임대 범위가 아닙니다.`,
+        };
+      }
+
+      // 3) 검증 통과: 카카오톡 실시간 촬영 인정
+      return {
+        hasExif: true,
+        isValid: true,
+        sourceType: 'kakaotalk',
+        photoDate,
+        photoTime,
+      };
+    }
+
+    // 파일명에서 타임스탬프를 파싱하지 못한 카카오톡 파일인 경우 file.lastModified 보조 확인
+    if (file.lastModified) {
+      const lastModDate = new Date(file.lastModified);
+      const kstFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Seoul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      const parts = kstFormatter.formatToParts(lastModDate);
+      const getPart = (type: string) => parts.find((p) => p.type === type)?.value || '';
+      const lDate = `${getPart('year')}-${getPart('month')}-${getPart('day')}`;
+      const lHourStr = getPart('hour');
+      const lMinStr = getPart('minute');
+      const lHour = parseInt(lHourStr, 10);
+      const lMin = parseInt(lMinStr, 10);
+
+      if (lDate === targetDate && isWithinMealSlot(targetSlot, lHour, lMin)) {
+        return {
+          hasExif: true,
+          isValid: true,
+          sourceType: 'kakaotalk',
+          photoDate: lDate,
+          photoTime: `${lHourStr}:${lMinStr}`,
+        };
+      }
+    }
+
     return {
       hasExif: false,
       isValid: false,
-      errorMessage: '카카오톡 저장(다운로드) 사진은 등록할 수 없습니다. 스마트폰 기본 카메라로 직접 촬영한 원본 사진만 등록 가능합니다.',
+      errorMessage:
+        '카카오톡 저장 사진에서 유효한 촬영 시간 정보를 확인할 수 없습니다. 오늘 식사 시간대에 촬영된 카카오톡 원본 파일을 올려주세요.',
     };
   }
 
@@ -209,14 +368,13 @@ export async function validateMealImageExif(
 
     const rawDate = exifData?.DateTimeOriginal || exifData?.CreateDate || exifData?.ModifyDate;
 
-    // 카톡 다운로드, 웹 다운로드, 편집 사진, EXIF 누락 사진 차단
-    // 💡 카카오톡 등 메신저를 통해 전송/저장된 사진은 EXIF 메타데이터가 완전히 제거됩니다.
-    // 일반 사용자는 오직 카메라 원본 EXIF가 온전히 보존된 사진만 업로드할 수 있습니다.
+    // 웹 다운로드, 편집 사진, EXIF 누락 사진 차단
+    // 💡 카메라 원본 EXIF 또는 앞선 카카오톡 시간 역추적 검증을 통과한 사진만 업로드할 수 있습니다.
     if (!exifData || !rawDate) {
       return {
         hasExif: false,
         isValid: false,
-        errorMessage: '카메라 원본 촬영 정보(EXIF)가 없습니다. 카카오톡 다운로드나 스크린샷이 아닌 스마트폰 기본 카메라로 직접 촬영한 원본 사진을 올려주세요.',
+        errorMessage: '카메라 원본 촬영 정보(EXIF)가 없습니다. 스마트폰 기본 카메라로 직접 촬영한 원본 사진이나 카카오톡에서 저장된 사진을 올려주세요.',
       };
     }
 
@@ -249,7 +407,7 @@ export async function validateMealImageExif(
       return {
         hasExif: false,
         isValid: false,
-        errorMessage: '카메라 하드웨어 촬영 정보가 확인되지 않습니다. 카카오톡 다운로드나 변환된 사진이 아닌 스마트폰 카메라 원본 사진을 올려주세요.',
+        errorMessage: '카메라 하드웨어 촬영 정보가 확인되지 않습니다. 스마트폰 카메라 원본 사진이나 시간 정보가 포함된 카카오톡 사진을 올려주세요.',
       };
     }
 

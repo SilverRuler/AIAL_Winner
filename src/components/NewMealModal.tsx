@@ -905,7 +905,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                           🛡️ 관리자 권한: 적정 시간대 외 사진, 카톡 사진, 스크린샷 업로드 가능
                         </span>
                       ) : (
-                        '아이폰/모바일 즉시 촬영 지원 · 카메라 원본 사진만 가능 (카톡 다운로드/스크린샷 불가)'
+                        '아이폰/모바일 즉시 촬영 지원 · 카메라 원본 및 오늘 촬영된 카톡 사진 지원 (스크린샷 불가)'
                       )}
                     </p>
                   </div>
@@ -959,6 +959,11 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                   ) : exifInfo.sourceType === 'live_camera' ? (
                     <>
                       실시간 카메라 촬영 일시 확인 완료 :{' '}
+                      <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
+                    </>
+                  ) : exifInfo.sourceType === 'kakaotalk' ? (
+                    <>
+                      카카오톡 촬영/전송 시각 검증 완료 :{' '}
                       <strong className="text-white">{exifInfo.photoDate} {exifInfo.photoTime}</strong>
                     </>
                   ) : (

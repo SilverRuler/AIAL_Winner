@@ -6,7 +6,7 @@ export const maxDuration = 60;
 
 // NVIDIA NIM Vision Model (1순위, 2순위, 3순위)
 const NIM_API_URL = process.env.NIM_API_URL || 'https://integrate.api.nvidia.com/v1/chat/completions';
-const NIM_MODEL_1 = process.env.NIM_MODEL || 'moonshotai/kimi-k3.1-pro';
+const NIM_MODEL_1 = process.env.NIM_MODEL || 'stepfun-ai/step-5-preview';
 const NIM_MODEL_2 = process.env.NIM_MODEL_2 || 'mistralai/mistral-large-4-1t-a52b';
 const NIM_MODEL_3 = process.env.NIM_MODEL_3 || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
@@ -254,21 +254,18 @@ async function callNimVision(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 55000);
 
-    const isKimi = model.toLowerCase().includes('kimi') || model.toLowerCase().includes('moonshot');
+    const isStep = model.toLowerCase().includes('step');
     const requestPayload: Record<string, any> = {
       model,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: contentList },
       ],
-      max_tokens: isKimi ? 8192 : 4096,
+      max_tokens: 4096,
       stream: true,
-      temperature: 0.3,
-      top_p: 0.95,
+      temperature: isStep ? 0.5 : 0.3,
+      top_p: isStep ? 1 : 0.95,
     };
-    if (isKimi) {
-      requestPayload.reasoning_effort = 'low';
-    }
 
     const resp = await fetch(NIM_API_URL, {
       method: 'POST',
@@ -335,7 +332,7 @@ async function callNimVision(
 
 /**
  * 참가자 1명의 식사를 개별 평가
- * 1순위: NVIDIA NIM Vision 모델 (moonshotai/kimi-k3.1-pro)을 통한 실제 이미지 직접 시각 평가.
+ * 1순위: NVIDIA NIM Vision 모델 (stepfun-ai/step-5-preview)을 통한 실제 이미지 직접 시각 평가.
  * 2순위: 1순위 실패 시 NVIDIA NIM Vision 모델 (mistralai/mistral-large-4-1t-a52b) 시각 평가 Fallback.
  * 3순위: 2순위 실패 시 NVIDIA NIM Vision 모델 (nvidia/nemotron-3.5-super-vl-120b-a12b) 시각 평가 Fallback.
  * 4순위: NIM 실패 시 기존 sr-combo LLM 텍스트 기반 평가 fallback.
@@ -403,7 +400,7 @@ async function evaluateSingleMeal(
       contentList.push({ type: 'image_url', image_url: { url: imageBase64 } });
     }
 
-    // 1순위: NIM kimi-k3.1-pro (moonshotai/kimi-k3.1-pro)
+    // 1순위: NIM Step 5 Preview (stepfun-ai/step-5-preview)
     const tier1Res = await callNimVision(NIM_MODEL_1, nimSystemPrompt, contentList, member);
     if (tier1Res) {
       return {

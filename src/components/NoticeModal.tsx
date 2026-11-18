@@ -122,7 +122,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                   출품한 작품은 4가지 폴백 모델에 의해 평가됩니다.
                 </p>
                 <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] sm:text-xs text-slate-300">
-                  <p><span className="text-indigo-400 font-bold">1.</span> moonshotai/kimi-k3.1-pro</p>
+                  <p><span className="text-indigo-400 font-bold">1.</span> stepfun-ai/step-5-preview</p>
                   <p><span className="text-indigo-400 font-bold">2.</span> mistralai/mistral-large-4-1t-a52b</p>
                   <p><span className="text-indigo-400 font-bold">3.</span> nvidia/nemotron-3.5-super-vl-120b-a12b</p>
                   <p><span className="text-indigo-400 font-bold">4.</span> sr-combo</p>

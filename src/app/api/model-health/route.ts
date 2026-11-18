@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 const NIM_API_URL = process.env.NIM_API_URL || 'https://integrate.api.nvidia.com/v1/chat/completions';
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
@@ -24,9 +24,9 @@ export interface ModelHealthItem {
 const TARGET_MODELS = [
   {
     order: 1,
-    id: 'moonshotai/kimi-k3.1-pro',
-    displayName: 'moonshotai/kimi-k3.1-pro',
-    shortName: 'Kimi 3.1 Pro',
+    id: 'stepfun-ai/step-5-preview',
+    displayName: 'stepfun-ai/step-5-preview',
+    shortName: 'Step 5 Preview',
   },
   {
     order: 2,
@@ -46,6 +46,9 @@ const TARGET_MODELS = [
 let memoryCache: { checkedAt: number; models: ModelHealthItem[] } | null = null;
 let isChecking = false;
 
+// 1x1 투명 픽셀 (Step 5 VLM ping용)
+const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAA';
+
 async function checkSingleModel(modelDef: typeof TARGET_MODELS[0]): Promise<ModelHealthItem> {
   const startTime = Date.now();
   if (!NVIDIA_API_KEY) {
@@ -61,20 +64,26 @@ async function checkSingleModel(modelDef: typeof TARGET_MODELS[0]): Promise<Mode
     };
   }
 
-  const isKimi = modelDef.id.toLowerCase().includes('kimi') || modelDef.id.toLowerCase().includes('moonshot');
+  const isStep = modelDef.id.toLowerCase().includes('step');
+  const userContent: any = isStep
+    ? [
+        { type: 'text', text: 'ping' },
+        { type: 'image_url', image_url: { url: TINY_PNG } },
+      ]
+    : 'ping';
+
   const payload: Record<string, any> = {
     model: modelDef.id,
-    messages: [{ role: 'user', content: 'ping' }],
+    messages: [{ role: 'user', content: userContent }],
     max_tokens: 10,
     stream: false,
+    temperature: isStep ? 0.5 : 0.3,
   };
-  if (isKimi) {
-    payload.reasoning_effort = 'low';
-  }
 
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000); // 12초 타임아웃
+    const timeoutMs = isStep ? 45000 : 15000;
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     const resp = await fetch(NIM_API_URL, {
       method: 'POST',
@@ -122,7 +131,7 @@ async function checkSingleModel(modelDef: typeof TARGET_MODELS[0]): Promise<Mode
       status: 'unhealthy',
       latencyMs: null,
       checkedAt: Date.now(),
-      error: isTimeout ? '응답 타임아웃 (12초 초과)' : (err?.message || '연결 실패'),
+      error: isTimeout ? '응답 타임아웃' : (err?.message || '연결 실패'),
     };
   }
 }

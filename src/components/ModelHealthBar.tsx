@@ -54,12 +54,12 @@ export function ModelHealthBar() {
 
   const models: ModelHealthItem[] = data?.models || [
     {
-      id: 'moonshotai/kimi-k3.1-pro',
+      id: 'stepfun-ai/step-5-preview',
       order: 1,
-      displayName: 'moonshotai/kimi-k3.1-pro',
-      shortName: 'Kimi',
-      status: 'unhealthy',
-      latencyMs: null,
+      displayName: 'stepfun-ai/step-5-preview',
+      shortName: 'Step 5 Preview',
+      status: 'healthy',
+      latencyMs: 36000,
       checkedAt: 0,
     },
     {
@@ -68,7 +68,7 @@ export function ModelHealthBar() {
       displayName: 'mistralai/mistral-large-4-1t-a52b',
       shortName: 'Mistral',
       status: 'healthy',
-      latencyMs: 485,
+      latencyMs: 4200,
       checkedAt: 0,
     },
     {
@@ -77,7 +77,7 @@ export function ModelHealthBar() {
       displayName: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
       shortName: 'Nemotron',
       status: 'healthy',
-      latencyMs: 380,
+      latencyMs: 500,
       checkedAt: 0,
     },
   ];
@@ -92,9 +92,9 @@ export function ModelHealthBar() {
   };
 
   return (
-    <div className="w-full">
-      {/* 1. 데스크톱 뷰 (sm 이상) */}
-      <div className="hidden sm:flex items-center justify-between gap-3 px-3.5 py-2 bg-slate-900/70 border border-slate-800/80 rounded-xl text-xs backdrop-blur-sm shadow-sm transition-all">
+    /* 모바일 뷰에서는 헬스체크 영역 숨김 (hidden sm:block으로 데스크톱에서만 깔끔하게 노출) */
+    <div className="hidden sm:block w-full">
+      <div className="flex items-center justify-between gap-3 px-3.5 py-2 bg-slate-900/70 border border-slate-800/80 rounded-xl text-xs backdrop-blur-sm shadow-sm transition-all">
         <div className="flex items-center space-x-2 shrink-0">
           <Activity className="w-3.5 h-3.5 text-cyan-400" />
           <span className="font-bold text-slate-300">모델 응답 상황</span>
@@ -110,7 +110,7 @@ export function ModelHealthBar() {
                 className="flex items-center space-x-1.5 shrink-0"
                 title={
                   isHealthy
-                    ? `${m.displayName}: 정상 응답 (${m.latencyMs ? `${m.latencyMs}ms` : '정상'})`
+                    ? `${m.displayName}: 정상 응답 (${m.latencyMs ? `${Math.round(m.latencyMs / 1000 * 10) / 10}s` : '정상'})`
                     : `${m.displayName}: ${m.error || '응답 지연 또는 미응답'}`
                 }
               >
@@ -141,36 +141,6 @@ export function ModelHealthBar() {
           >
             <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
           </button>
-        </div>
-      </div>
-
-      {/* 2. 모바일 뷰 (sm 미만: 뷰를 해치지 않게 아주 콤팩트하게 표시) */}
-      <div className="flex sm:hidden items-center justify-between px-2.5 py-1.5 bg-slate-950/60 border border-slate-800/60 rounded-lg text-[11px] shadow-sm">
-        <div className="flex items-center space-x-1 shrink-0 text-slate-400 font-bold">
-          <Activity className="w-3 h-3 text-cyan-400" />
-          <span>모델 상태:</span>
-        </div>
-
-        <div className="flex items-center space-x-2.5">
-          {models.map((m) => {
-            const isHealthy = m.status === 'healthy';
-            return (
-              <div
-                key={m.id}
-                className="flex items-center space-x-1"
-                title={`${m.displayName}: ${isHealthy ? '정상' : '응답 지연'}`}
-              >
-                <span className="text-slate-400 font-medium">{m.order}.{m.shortName}</span>
-                <span
-                  className={`inline-block w-2 h-2 rounded-full ${
-                    isHealthy
-                      ? 'bg-emerald-500 shadow-sm shadow-emerald-500/60'
-                      : 'bg-rose-500 shadow-sm shadow-rose-500/60'
-                  }`}
-                />
-              </div>
-            );
-          })}
         </div>
       </div>
     </div>

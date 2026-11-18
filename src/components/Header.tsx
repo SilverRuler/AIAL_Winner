@@ -118,8 +118,8 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* 2. 하단/우측: [명예의 전당] - [사용 방법] - [식사 등록] 버튼 그룹 */}
-          <div className="flex items-center justify-end space-x-1.5 sm:space-x-2.5 overflow-x-auto no-scrollbar py-0.5">
+          {/* 2. 하단/우측: [명예의 전당] - [사용 방법] - [식사 등록] 버튼 그룹 (모바일에서 넘치면 좌우 스크롤 가능) */}
+          <div className="flex items-center justify-start sm:justify-end gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar py-1 max-w-full touch-pan-x">
             {/* 1) 명예의 전당 */}
             <button
               onClick={onOpenLeaderboard}
@@ -127,7 +127,7 @@ export const Header: React.FC<HeaderProps> = ({
               title="먀미의 승리(WIN) 랭킹 및 명예의 전당"
             >
               <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
-              <span className="hidden xs:inline sm:inline">명예의 전당</span>
+              <span>명예의 전당</span>
               <span className="px-1.5 py-0.2 bg-amber-500/20 rounded-full text-[10px] sm:text-[11px] font-bold">
                 {totalWinsCount}W
               </span>

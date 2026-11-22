@@ -216,7 +216,15 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                 </p>
                 <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-                  12인 공유 3D UFO 크레인에서 Bar 사이로 상자를 통과시키면 0.002 SOL 리워드를 신청할 수 있습니다.
+                  12인 공유 3D UFO 크레인에서 Bar 사이로 상자를 통과시키면 0.005(약 500원 가량) SOL 리워드를 신청할 수 있습니다.
+                </p>
+                <p className="text-amber-300 text-xs sm:text-sm flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                  신뢰를 기반으로 운영중이며 남의 닉을 사용하지 마시기 바랍니다.
+                </p>
+                <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
+                  <Info className="w-4 h-4 text-cyan-400 shrink-0" />
+                  베타서비스이므로 요청/요구 사항이 있으면 건의 하시길 바랍니다.
                 </p>
               </div>
             )}

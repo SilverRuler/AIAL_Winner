@@ -265,7 +265,7 @@ export default function GachaPage() {
                 <span>UFO 브릿지 뽑기 (SOL 리워드)</span>
               </h1>
               <p className="text-[10px] sm:text-xs text-slate-400">
-                12인 공유 릴레이 크레인 · Bar 사이로 상자를 통과시키면 <strong className="text-amber-300">0.002 SOL</strong> 당첨!
+                12인 공유 릴레이 크레인 · Bar 사이로 상자를 통과시키면 <strong className="text-amber-300">0.005 SOL</strong> 당첨!
               </p>
             </div>
           </div>
@@ -313,7 +313,7 @@ export default function GachaPage() {
               <Gift className="w-5 h-5 text-amber-300 shrink-0 animate-bounce" />
               <div className="text-xs sm:text-sm">
                 <strong className="text-white">{selectedMember}</strong>님이 아직 수령 신청하지 않은{' '}
-                <strong className="text-amber-300">{myUnclaimedWins.length}개의 당첨 상자(0.002 SOL)</strong>가 있습니다!
+                <strong className="text-amber-300">{myUnclaimedWins.length}개의 당첨 상자(0.005 SOL)</strong>가 있습니다!
               </div>
             </div>
             <button
@@ -410,7 +410,7 @@ export default function GachaPage() {
               <Trophy className="w-4 h-4 text-amber-400" />
               <span>최근 UFO 뽑기 당첨 현황</span>
             </h2>
-            <span className="text-[11px] text-slate-400">당첨 상품: 0.002 SOL</span>
+            <span className="text-[11px] text-slate-400">당첨 상품: 0.005 SOL</span>
           </div>
 
           {recentWins.length === 0 ? (

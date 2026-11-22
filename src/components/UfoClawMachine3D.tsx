@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { ArrowRight, ArrowUp, Volume2, VolumeX, Sparkles } from 'lucide-react';
-import { GachaBoxItem, GachaColorTheme } from '@/types/gacha';
+import { GachaBoxItem } from '@/types/gacha';
 import { GACHA_PHYSICS } from '@/constants/gacha';
 
 export type CranePhase =
@@ -42,66 +42,119 @@ interface UfoClawMachine3DProps {
   isStarting: boolean;
 }
 
-const THEME_COLORS: Record<GachaColorTheme, { main: string; trim: string; glow: string }> = {
-  gold: { main: '#f59e0b', trim: '#fef08a', glow: '#fbbf24' },
-  cyan: { main: '#06b6d4', trim: '#cffafe', glow: '#22d3ee' },
-  rose: { main: '#f43f5e', trim: '#ffe4e6', glow: '#fb7185' },
-  purple: { main: '#8b5cf6', trim: '#ede9fe', glow: '#a78bfa' },
-};
-
-function createBoxTexture(label: string, theme: GachaColorTheme): THREE.CanvasTexture {
+function createSidePanelTexture(title: string, accent: string, bg: string): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
-  canvas.height = 256;
+  canvas.height = 128;
   const ctx = canvas.getContext('2d');
-  const palette = THEME_COLORS[theme] || THEME_COLORS.gold;
-
   if (ctx) {
-    // 바탕 그라데이션
-    const grad = ctx.createLinearGradient(0, 0, 256, 256);
-    grad.addColorStop(0, palette.main);
-    grad.addColorStop(1, '#0f172a');
+    const grad = ctx.createLinearGradient(0, 0, 256, 128);
+    grad.addColorStop(0, bg);
+    grad.addColorStop(1, '#090d16');
     ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 256, 256);
+    ctx.fillRect(0, 0, 256, 128);
 
-    // 테두리 프레임
-    ctx.strokeStyle = palette.trim;
-    ctx.lineWidth = 14;
-    ctx.strokeRect(10, 10, 236, 236);
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 8;
+    ctx.strokeRect(6, 6, 244, 116);
 
-    // 리본 띠
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
-    ctx.fillRect(112, 0, 32, 256);
-    ctx.fillRect(0, 112, 256, 32);
-
-    // 중앙 엠블럼
-    ctx.beginPath();
-    ctx.arc(128, 128, 56, 0, Math.PI * 2);
-    ctx.fillStyle = '#090d16';
-    ctx.fill();
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = palette.trim;
-    ctx.stroke();
-
-    // 물음표 & SOL 라벨
-    ctx.fillStyle = palette.trim;
-    ctx.font = '900 48px sans-serif';
+    ctx.fillStyle = accent;
+    ctx.font = '900 26px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('?', 128, 114);
+    ctx.fillText(title, 128, 52);
 
-    ctx.font = 'bold 20px monospace';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText('SOL BOX', 128, 152);
-
-    ctx.font = 'bold 16px sans-serif';
-    ctx.fillStyle = palette.trim;
-    ctx.fillText(label, 128, 214);
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText('AIAL PRIZE · 0.005 SOL', 128, 88);
   }
-
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
+}
+
+function createFigureFrontTexture(slotIndex: number, label: string): THREE.CanvasTexture {
+  const isFrieren = slotIndex % 2 === 0;
+  const imgSrc = isFrieren ? '/gacha/frieren.png' : '/gacha/nezuko.png';
+  const accent = isFrieren ? '#bae6fd' : '#fbcfe8';
+  const bg = isFrieren ? '#0369a1' : '#be123c';
+  const title = isFrieren ? 'FRIEREN' : 'NEZUKO';
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+
+  const drawArtwork = (loadedImg?: HTMLImageElement) => {
+    if (!ctx) return;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 256, 512);
+
+    if (loadedImg && loadedImg.width > 0 && loadedImg.height > 0) {
+      // 비율 유지 Cover 크롭으로 캐릭터 이미지 채우기
+      const targetAspect = 256 / 512;
+      const srcAspect = loadedImg.width / loadedImg.height;
+      let sx = 0, sy = 0, sw = loadedImg.width, sh = loadedImg.height;
+      if (srcAspect > targetAspect) {
+        sw = loadedImg.height * targetAspect;
+        sx = (loadedImg.width - sw) / 2;
+      } else {
+        sh = loadedImg.width / targetAspect;
+        sy = (loadedImg.height - sh) * 0.2;
+      }
+      ctx.drawImage(loadedImg, sx, sy, sw, sh, 8, 8, 240, 496);
+    }
+
+    // 피규어 박스 하단 타이틀 배너
+    ctx.fillStyle = 'rgba(7, 11, 24, 0.82)';
+    ctx.fillRect(8, 434, 240, 70);
+
+    ctx.fillStyle = accent;
+    ctx.font = '900 24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(title, 128, 458);
+
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 15px monospace';
+    ctx.fillText(`${label} · 0.005 SOL`, 128, 486);
+
+    // 피규어 박스 테두리 프레임
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 10;
+    ctx.strokeRect(5, 5, 246, 502);
+
+    tex.needsUpdate = true;
+  };
+
+  drawArtwork();
+
+  if (typeof window !== 'undefined') {
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => drawArtwork(img);
+    img.src = imgSrc;
+  }
+
+  return tex;
+}
+
+function createFigureBoxMaterials(slotIndex: number, label: string): THREE.MeshStandardMaterial[] {
+  const isFrieren = slotIndex % 2 === 0;
+  const accent = isFrieren ? '#7dd3fc' : '#f9a8d4';
+  const bg = isFrieren ? '#0c4a6e' : '#881337';
+  const title = isFrieren ? 'FRIEREN' : 'NEZUKO';
+
+  const frontTex = createFigureFrontTexture(slotIndex, label);
+  const sideTex = createSidePanelTexture(title, accent, bg);
+
+  const frontMat = new THREE.MeshStandardMaterial({ map: frontTex, roughness: 0.24, metalness: 0.15 });
+  const sideMat = new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.3, metalness: 0.25 });
+
+  // BoxGeometry face order: +X, -X, +Y(Top), -Y(Bottom), +Z, -Z
+  return [sideMat, sideMat, frontMat, frontMat, sideMat, sideMat];
 }
 
 export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
@@ -603,13 +656,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       for (const it of nextItems) {
         let ent = boxEntities.get(it.id);
         if (!ent) {
-          const tex = createBoxTexture(it.label, it.colorTheme);
-          const mat = new THREE.MeshStandardMaterial({
-            map: tex,
-            roughness: 0.28,
-            metalness: 0.3,
-          });
-          const mesh = new THREE.Mesh(boxGeo.clone(), mat);
+          const mats = createFigureBoxMaterials(it.slotIndex, it.label);
+          const mesh = new THREE.Mesh(boxGeo.clone(), mats);
           mesh.castShadow = true;
           mesh.receiveShadow = true;
           scene.add(mesh);
@@ -1051,7 +1099,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
         {/* Bar 사이 낙하 안내 뱃지 */}
         <div className="absolute bottom-2.5 left-2.5 pointer-events-none px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-300 backdrop-blur-sm">
-          🎯 두 Bar 사이로 박스를 통과시키면 <span className="text-amber-300">0.002 SOL</span> 당첨!
+          🎯 두 Bar 사이로 박스를 통과시키면 <span className="text-amber-300">0.005 SOL</span> 당첨!
         </div>
 
         {droppedThisTurn > 0 && (

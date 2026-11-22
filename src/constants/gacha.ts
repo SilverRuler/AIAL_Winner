@@ -46,7 +46,7 @@ export const GACHA_SLOT_X = [-2.05, -0.68, 0.68, 2.05] as const;
 
 export const GACHA_COLOR_THEMES: GachaColorTheme[] = ['gold', 'cyan', 'rose', 'purple'];
 
-export const GACHA_DEFAULT_REWARD_AMOUNT = 0.002; // 기본 당첨 상품: 0.002 SOL
+export const GACHA_DEFAULT_REWARD_AMOUNT = 0.005; // 기본 당첨 상품: 0.005 SOL
 
 /**
  * 슬롯 인덱스(0..3)에 대한 초기 안착 좌표 반환
@@ -65,10 +65,11 @@ export function getRestingBoxPosition(slotIndex: number): [number, number, numbe
 export function createBoxForSlot(slotIndex: number, nowTs = Date.now()): GachaBoxItem {
   const safeIdx = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, slotIndex));
   const theme = GACHA_COLOR_THEMES[safeIdx % GACHA_COLOR_THEMES.length];
+  const charLabel = safeIdx % 2 === 0 ? `프리렌 박스 #${safeIdx + 1}` : `네즈코 박스 #${safeIdx + 1}`;
   return {
     id: `box_s${safeIdx}_${nowTs}_${Math.random().toString(36).substring(2, 7)}`,
     slotIndex: safeIdx,
-    label: `SOL 캡슐 #${safeIdx + 1}`,
+    label: charLabel,
     colorTheme: theme,
     position: getRestingBoxPosition(safeIdx),
     quaternion: [0, 0, 0, 1],

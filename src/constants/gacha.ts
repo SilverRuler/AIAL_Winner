@@ -46,7 +46,7 @@ export const GACHA_SLOT_X = [-2.05, -0.68, 0.68, 2.05] as const;
 
 export const GACHA_COLOR_THEMES: GachaColorTheme[] = ['gold', 'cyan', 'rose', 'purple'];
 
-export const GACHA_DEFAULT_REWARD_AMOUNT = 0.005; // 기본 당첨 상품: 0.005 SOL
+export const GACHA_DEFAULT_REWARD_AMOUNT = 0.01; // 기본 당첨 상품: 0.01 SOL
 
 /**
  * 슬롯 인덱스(0..3)에 대한 초기 안착 좌표 반환

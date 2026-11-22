@@ -66,7 +66,7 @@ function createSidePanelTexture(title: string, accent: string, bg: string): THRE
 
     ctx.fillStyle = '#e2e8f0';
     ctx.font = 'bold 16px monospace';
-    ctx.fillText('AIAL PRIZE · 0.005 SOL', 128, 88);
+    ctx.fillText('AIAL PRIZE · 0.01 SOL', 128, 88);
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -119,7 +119,7 @@ function createFigureFrontTexture(slotIndex: number, label: string): THREE.Canva
 
     ctx.fillStyle = '#fde047';
     ctx.font = 'bold 15px monospace';
-    ctx.fillText(`${label} · 0.005 SOL`, 128, 486);
+    ctx.fillText(`${label} · 0.01 SOL`, 128, 486);
 
     // 피규어 박스 테두리 프레임
     ctx.strokeStyle = accent;
@@ -1099,7 +1099,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
         {/* Bar 사이 낙하 안내 뱃지 */}
         <div className="absolute bottom-2.5 left-2.5 pointer-events-none px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-300 backdrop-blur-sm">
-          🎯 두 Bar 사이로 박스를 통과시키면 <span className="text-amber-300">0.005 SOL</span> 당첨!
+          🎯 두 Bar 사이로 박스를 통과시키면 <span className="text-amber-300">0.01 SOL</span> 당첨!
         </div>
 
         {droppedThisTurn > 0 && (

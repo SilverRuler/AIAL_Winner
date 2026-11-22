@@ -8,7 +8,6 @@ import {
   Ticket,
   RotateCcw,
   ShieldCheck,
-  Lock,
   Coins,
   Gift,
   Plus,
@@ -24,9 +23,6 @@ import { GachaWinModal } from '@/components/GachaWinModal';
 export default function GachaPage() {
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [authChecked, setAuthChecked] = useState<boolean>(false);
-  const [loginId, setLoginId] = useState('');
-  const [loginPw, setLoginPw] = useState('');
-  const [loginError, setLoginError] = useState('');
 
   const [machine, setMachine] = useState<GachaMachineState | null>(null);
   const [ticketsByMember, setTicketsByMember] = useState<Record<string, GachaTicketBalance>>({});
@@ -83,7 +79,6 @@ export default function GachaPage() {
   }, []);
 
   useEffect(() => {
-    if (!isAdmin) return;
     fetchState();
     const timer = setInterval(() => {
       // 본인이 턴 진행 중일 때는 3D 로컬 물리 상태를 덮어쓰지 않음
@@ -92,30 +87,12 @@ export default function GachaPage() {
       }
     }, 3500);
     return () => clearInterval(timer);
-  }, [isAdmin, activeTurnId, fetchState]);
+  }, [activeTurnId, fetchState]);
 
   const handleSelectMember = (name: string) => {
     setSelectedMember(name);
     if (typeof window !== 'undefined') {
       localStorage.setItem('aial_gacha_member', name);
-    }
-  };
-
-  const handleAdminLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    if (loginId.trim() === 'aaa' && loginPw.trim() === 'bbb') {
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('aial_is_admin', 'true');
-        sessionStorage.setItem('aial_admin_id', 'aaa');
-        sessionStorage.setItem('aial_admin_pw', 'bbb');
-        localStorage.setItem('aial_is_admin', 'true');
-        localStorage.setItem('aial_admin_id', 'aaa');
-        localStorage.setItem('aial_admin_pw', 'bbb');
-      }
-      setIsAdmin(true);
-    } else {
-      setLoginError('관리자 아이디 또는 비밀번호가 올바르지 않습니다.');
     }
   };
 
@@ -269,63 +246,6 @@ export default function GachaPage() {
     );
   }
 
-  // 비로그인 차단 (관리자 로그인 시에만 테스트/입장 허용)
-  if (!isAdmin) {
-    return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center p-4">
-        <div className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-3xl p-6 space-y-4 shadow-2xl">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
-              <Lock className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-base font-black text-white">UFO 크레인 뽑기 (테스트 중)</h1>
-              <p className="text-[11px] text-slate-400">현재 관리자 로그인 상태에서만 입장 가능합니다.</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleAdminLogin} className="space-y-3">
-            {loginError && (
-              <p className="text-xs text-rose-400 bg-rose-950/40 border border-rose-500/30 rounded-xl px-3 py-2">
-                {loginError}
-              </p>
-            )}
-            <input
-              type="text"
-              placeholder="관리자 ID"
-              value={loginId}
-              onChange={(e) => setLoginId(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-amber-500"
-              required
-            />
-            <input
-              type="password"
-              placeholder="관리자 비밀번호"
-              value={loginPw}
-              onChange={(e) => setLoginPw(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-amber-500"
-              required
-            />
-            <div className="flex gap-2 pt-1">
-              <Link
-                href="/"
-                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold text-center"
-              >
-                홈으로 돌아가기
-              </Link>
-              <button
-                type="submit"
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black cursor-pointer"
-              >
-                관리자 로그인
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
       {/* 상단 내비게이션 헤더 */}
@@ -345,40 +265,42 @@ export default function GachaPage() {
                 <span>UFO 브릿지 뽑기 (SOL 리워드)</span>
               </h1>
               <p className="text-[10px] sm:text-xs text-slate-400">
-                12인 공유 릴레이 크레인 · Bar 사이로 상자를 통과시키면 <strong className="text-amber-300">0.02 SOL</strong> 당첨!
+                12인 공유 릴레이 크레인 · Bar 사이로 상자를 통과시키면 <strong className="text-amber-300">0.002 SOL</strong> 당첨!
               </p>
             </div>
           </div>
 
           {/* 관리자 전용 툴바 */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => handleAdminGrantTicket(1)}
-              disabled={isGranting}
-              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold cursor-pointer disabled:opacity-50"
-              title="현재 선택된 멤버에게 테스트 뽑기권 +1 지급"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>{selectedMember} 티켓 +1</span>
-            </button>
+          {isAdmin && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleAdminGrantTicket(1)}
+                disabled={isGranting}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold cursor-pointer disabled:opacity-50"
+                title="현재 선택된 멤버에게 테스트 뽑기권 +1 지급"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{selectedMember} 티켓 +1</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={handleAdminReset}
-              disabled={isResetting || !!activeTurnId}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-xs font-black cursor-pointer disabled:opacity-50"
-              title="각도가 틀어졌을 때 모든 상자를 초기 위치로 복구"
-            >
-              {isResetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-              <span>뽑기판 초기화</span>
-            </button>
+              <button
+                type="button"
+                onClick={handleAdminReset}
+                disabled={isResetting || !!activeTurnId}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-xs font-black cursor-pointer disabled:opacity-50"
+                title="각도가 틀어졌을 때 모든 상자를 초기 위치로 복구"
+              >
+                {isResetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                <span>뽑기판 초기화</span>
+              </button>
 
-            <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              관리자 모드
-            </span>
-          </div>
+              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                관리자 모드
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -391,7 +313,7 @@ export default function GachaPage() {
               <Gift className="w-5 h-5 text-amber-300 shrink-0 animate-bounce" />
               <div className="text-xs sm:text-sm">
                 <strong className="text-white">{selectedMember}</strong>님이 아직 수령 신청하지 않은{' '}
-                <strong className="text-amber-300">{myUnclaimedWins.length}개의 당첨 상자(0.02 SOL)</strong>가 있습니다!
+                <strong className="text-amber-300">{myUnclaimedWins.length}개의 당첨 상자(0.002 SOL)</strong>가 있습니다!
               </div>
             </div>
             <button
@@ -488,7 +410,7 @@ export default function GachaPage() {
               <Trophy className="w-4 h-4 text-amber-400" />
               <span>최근 UFO 뽑기 당첨 현황</span>
             </h2>
-            <span className="text-[11px] text-slate-400">당첨 상품: 0.02 SOL</span>
+            <span className="text-[11px] text-slate-400">당첨 상품: 0.002 SOL</span>
           </div>
 
           {recentWins.length === 0 ? (

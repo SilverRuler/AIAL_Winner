@@ -119,16 +119,16 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* 2. 하단/우측: [명예의 전당] - [사용 방법] - [식사 등록] 버튼 그룹 */}
+          {/* 2. 하단/우측: [명예의 전당] - [공지사항] - [뽑기하러 가기] - [사용방법] - [식사 등록] 버튼 그룹 */}
           <div
-            className={`flex items-center gap-1.5 sm:gap-2.5 overflow-x-auto no-scrollbar py-1 max-w-full touch-pan-x ${
+            className={`flex items-center gap-1 sm:gap-2.5 overflow-x-auto no-scrollbar py-1 max-w-full touch-pan-x ${
               isAdmin ? 'justify-start sm:justify-end' : 'justify-end'
             }`}
           >
             {/* 1) 명예의 전당 */}
             <button
               onClick={onOpenLeaderboard}
-              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-900 border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 hover:border-amber-500/60 transition-all text-xs sm:text-sm font-semibold shrink-0 cursor-pointer"
+              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-900 border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 hover:border-amber-500/60 transition-all text-[11px] sm:text-sm font-semibold shrink-0 cursor-pointer"
               title="먀미의 승리(WIN) 랭킹 및 명예의 전당"
             >
               <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
@@ -141,11 +141,12 @@ export const Header: React.FC<HeaderProps> = ({
             {/* 2) 공지사항 */}
             <button
               onClick={onOpenNotice}
-              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-900 border border-blue-500/30 text-blue-300 hover:text-white hover:bg-blue-500/10 hover:border-blue-500/60 transition-all text-xs sm:text-sm font-semibold shrink-0 cursor-pointer relative"
+              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-900 border border-blue-500/30 text-blue-300 hover:text-white hover:bg-blue-500/10 hover:border-blue-500/60 transition-all text-[11px] sm:text-sm font-semibold shrink-0 cursor-pointer relative"
               title="AIAL Winner 공지사항"
             >
               <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-400" />
-              <span>공지사항</span>
+              <span className="sm:hidden">공지</span>
+              <span className="hidden sm:inline">공지사항</span>
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 absolute top-1.5 right-1.5 animate-pulse" />
             </button>
 
@@ -153,7 +154,7 @@ export const Header: React.FC<HeaderProps> = ({
             {isAdmin && onOpenAdminQuiz && (
               <button
                 onClick={onOpenAdminQuiz}
-                className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-purple-950/80 border border-purple-500/50 text-purple-300 hover:text-white hover:bg-purple-600/30 hover:border-purple-400 transition-all text-xs sm:text-sm font-black shrink-0 cursor-pointer shadow-sm shadow-purple-950/40"
+                className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-purple-950/80 border border-purple-500/50 text-purple-300 hover:text-white hover:bg-purple-600/30 hover:border-purple-400 transition-all text-[11px] sm:text-sm font-black shrink-0 cursor-pointer shadow-sm shadow-purple-950/40"
                 title="솔라나 리워드 퀴즈 관리자 메뉴"
               >
                 <HelpCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
@@ -161,32 +162,32 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* 3-2) 관리자 전용 UFO 뽑기하러 가기 버튼 */}
-            {isAdmin && (
-              <Link
-                href="/gacha"
-                className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-600/25 border border-cyan-400/60 text-cyan-200 hover:text-white hover:from-cyan-500/35 hover:to-blue-600/40 transition-all text-xs sm:text-sm font-black shrink-0 shadow-sm shadow-cyan-900/40"
-                title="UFO 브릿지 뽑기 (관리자 테스트)"
-              >
-                <Gamepad2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-300" />
-                <span>뽑기하러 가기</span>
-              </Link>
-            )}
+            {/* 3-2) UFO 뽑기하러 가기 버튼 (전체 사용자 노출) */}
+            <Link
+              href="/gacha"
+              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-600/25 border border-cyan-400/60 text-cyan-200 hover:text-white hover:from-cyan-500/35 hover:to-blue-600/40 transition-all text-[11px] sm:text-sm font-black shrink-0 shadow-sm shadow-cyan-900/40"
+              title="UFO 브릿지 뽑기하러 가기"
+            >
+              <Gamepad2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-300" />
+              <span className="sm:hidden">뽑기</span>
+              <span className="hidden sm:inline">뽑기하러 가기</span>
+            </Link>
 
             {/* 4) 사용 방법 */}
             <button
               onClick={onOpenHowTo}
-              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-600 transition-all text-xs sm:text-sm font-semibold shrink-0 cursor-pointer"
+              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 hover:border-slate-600 transition-all text-[11px] sm:text-sm font-semibold shrink-0 cursor-pointer"
               title="AIAL Winner 이용 방법 및 가이드"
             >
               <HelpCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-orange-400" />
-              <span>사용방법</span>
+              <span className="sm:hidden">안내</span>
+              <span className="hidden sm:inline">사용방법</span>
             </button>
 
-            {/* 3) 식사 등록 */}
+            {/* 5) 식사 등록 */}
             <button
               onClick={onOpenNewMeal}
-              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-orange-500 via-amber-500 to-rose-500 text-white font-bold text-xs sm:text-sm shadow-md shadow-orange-500/25 hover:from-orange-600 hover:to-rose-600 hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0 cursor-pointer"
+              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-orange-500 via-amber-500 to-rose-500 text-white font-bold text-[11px] sm:text-sm shadow-md shadow-orange-500/25 hover:from-orange-600 hover:to-rose-600 hover:scale-[1.02] active:scale-[0.98] transition-all shrink-0 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
               <span>식사 등록</span>

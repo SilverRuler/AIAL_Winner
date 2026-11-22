@@ -221,8 +221,17 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     scene.fog = new THREE.FogExp2('#070b18', 0.045);
 
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 100);
-    camera.position.set(0, 4.15, 6.25);
-    camera.lookAt(0, 0.82, 0);
+    const applyResponsiveCamera = (w: number, h: number) => {
+      const aspect = Math.max(0.55, w / Math.max(1, h));
+      camera.aspect = aspect;
+      // 모바일 세로/정사각 화면에서는 가로폭 전체(좌우 기둥 ±3.3)가 잘리지 않도록 카메라 거리 및 화각 자동 보정
+      const scale = aspect < 1.48 ? Math.min(1.95, 1.52 / aspect) : 1.0;
+      camera.fov = aspect < 1.15 ? 48 : 42;
+      camera.position.set(0, 4.15 * (1 + (scale - 1) * 0.72), 6.25 * scale);
+      camera.lookAt(0, 0.78, 0);
+      camera.updateProjectionMatrix();
+    };
+    applyResponsiveCamera(width, height);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
@@ -337,7 +346,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     });
 
     // 경사 아크릴 가이드 (앞/뒤 바 외곽 영역)
-    const rampVisualGeo = new THREE.BoxGeometry(GACHA_PHYSICS.BAR_LENGTH, 0.05, 0.92);
+    const rampVisualGeo = new THREE.BoxGeometry(GACHA_PHYSICS.BAR_LENGTH, 0.05, 0.84);
     const rampVisualMat = new THREE.MeshPhysicalMaterial({
       color: '#38bdf8',
       transparent: true,
@@ -345,12 +354,12 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       roughness: 0.2,
     });
     const frontRampMesh = new THREE.Mesh(rampVisualGeo, rampVisualMat);
-    frontRampMesh.position.set(0, 0.92, 1.08);
+    frontRampMesh.position.set(0, 0.96, 1.18);
     frontRampMesh.rotation.x = -0.58;
     cabinetGroup.add(frontRampMesh);
 
     const backRampMesh = new THREE.Mesh(rampVisualGeo, rampVisualMat);
-    backRampMesh.position.set(0, 0.92, -1.08);
+    backRampMesh.position.set(0, 0.96, -1.18);
     backRampMesh.rotation.x = 0.58;
     cabinetGroup.add(backRampMesh);
 
@@ -481,7 +490,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
     world.addContactMaterial(
       new CANNON.ContactMaterial(barPhysMat, boxPhysMat, {
-        friction: 0.34,
+        friction: 0.4,
         restitution: 0.06,
         contactEquationStiffness: 1e7,
         contactEquationRelaxation: 3,
@@ -526,15 +535,15 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
     // 앞 경사 가이드
     const frontRampBody = new CANNON.Body({ mass: 0, material: barPhysMat });
-    frontRampBody.addShape(new CANNON.Box(new CANNON.Vec3(GACHA_PHYSICS.BAR_LENGTH / 2, 0.05, 0.55)));
-    frontRampBody.position.set(0, 0.92, 1.08);
+    frontRampBody.addShape(new CANNON.Box(new CANNON.Vec3(GACHA_PHYSICS.BAR_LENGTH / 2, 0.05, 0.42)));
+    frontRampBody.position.set(0, 0.96, 1.18);
     frontRampBody.quaternion.setFromEuler(-0.58, 0, 0);
     world.addBody(frontRampBody);
 
     // 뒤 경사 가이드
     const backRampBody = new CANNON.Body({ mass: 0, material: barPhysMat });
-    backRampBody.addShape(new CANNON.Box(new CANNON.Vec3(GACHA_PHYSICS.BAR_LENGTH / 2, 0.05, 0.55)));
-    backRampBody.position.set(0, 0.92, -1.08);
+    backRampBody.addShape(new CANNON.Box(new CANNON.Vec3(GACHA_PHYSICS.BAR_LENGTH / 2, 0.05, 0.42)));
+    backRampBody.position.set(0, 0.96, -1.18);
     backRampBody.quaternion.setFromEuler(0.58, 0, 0);
     world.addBody(backRampBody);
 
@@ -771,7 +780,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
               new CANNON.Vec3(0, -0.18, 0),
               bestEnt.body,
               bestLocal,
-              32
+              28
             );
             world.addConstraint(constraint);
             state.grabConstraint = constraint;
@@ -903,8 +912,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       if (!container) return;
       const w = container.clientWidth || 720;
       const h = container.clientHeight || 460;
-      camera.aspect = w / h;
-      camera.updateProjectionMatrix();
+      applyResponsiveCamera(w, h);
       renderer.setSize(w, h);
     };
     window.addEventListener('resize', handleResize);
@@ -1038,12 +1046,12 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       </div>
 
       {/* 3D WebGL 캔버스 뷰포트 */}
-      <div className="relative w-full h-[340px] sm:h-[440px] bg-[#070b18] select-none">
+      <div className="relative w-full h-[280px] sm:h-[440px] bg-[#070b18] select-none">
         <div ref={mountRef} className="w-full h-full" />
 
         {/* Bar 사이 낙하 안내 뱃지 */}
-        <div className="absolute bottom-3 left-3 pointer-events-none px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-300 backdrop-blur-sm">
-          🎯 두 Bar 사이로 박스를 통과시키면 <span className="text-amber-300">0.02 SOL</span> 당첨!
+        <div className="absolute bottom-2.5 left-2.5 pointer-events-none px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-300 backdrop-blur-sm">
+          🎯 두 Bar 사이로 박스를 통과시키면 <span className="text-amber-300">0.002 SOL</span> 당첨!
         </div>
 
         {droppedThisTurn > 0 && (

@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
       boxLabel: doc.boxLabel,
       colorTheme: doc.colorTheme,
       rewardType: doc.rewardType || 'SOL',
-      rewardAmount: typeof doc.rewardAmount === 'number' ? doc.rewardAmount : 0.02,
+      rewardAmount: typeof doc.rewardAmount === 'number' ? doc.rewardAmount : 0.002,
       unboxed: Boolean(doc.unboxed),
       claimStatus: doc.claimStatus || 'unclaimed',
       walletAddress: doc.walletAddress || '',

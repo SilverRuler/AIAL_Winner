@@ -5,25 +5,25 @@ import { GachaBoxItem, GachaColorTheme } from '@/types/gacha';
  * Three.js 및 cannon-es가 동일한 좌표계와 치수를 사용하도록 단일 소스에서 관리
  */
 export const GACHA_PHYSICS = {
-  // 2개의 평행 Bar (X축 방향으로 길게 뻗고, Z축으로 간격 배치)
+  // 2개의 평행 Bar (X축 방향으로 길게 뻗고, Z축으로 좁게 배치하여 난이도 상향)
   BAR_Y: 0.72,
-  BAR_RADIUS: 0.085,
-  BAR_HALF_Z: 0.54,       // 앞 Bar: +0.54, 뒤 Bar: -0.54 (중심 간격 1.08, 내경 틈새 0.91)
+  BAR_RADIUS: 0.09,
+  BAR_HALF_Z: 0.46,       // 앞 Bar: +0.46, 뒤 Bar: -0.46 (중심 간격 0.92, 내경 틈새 0.74)
   BAR_LENGTH: 6.4,
 
-  // 상품 상자 크기 (가로 W < 내경 틈새 0.91 < 세로 D 1.24)
-  // 정방향일 땐 두 Bar에 걸쳐 안정적으로 서 있고, 비틀리거나 들리면 Bar 사이 0.91 틈으로 통과 가능
-  BOX_W: 0.84,
+  // 상품 상자 크기 (가로 W 0.68 < 내경 틈새 0.74 < 세로 D 1.56)
+  // 길이를 길게(1.56) 설정해 양쪽 Bar에 깊게 걸치므로, 여러 번 비틀거나 밀어내야 통과 가능
+  BOX_W: 0.68,
   BOX_H: 0.44,
-  BOX_D: 1.24,
-  BOX_MASS: 1.4,
+  BOX_D: 1.56,
+  BOX_MASS: 1.55,
 
   // 낙하 승리 판정 Y 임계값 (Bar 아래 WIN 슈트 영역 진입)
   DROP_Y_THRESHOLD: -0.28,
 
   // 외곽 안전 벽 / 경사 가이드 범위 (Bar 바깥으로 탈출하지 않고 중앙 틈새로만 떨어지도록 설계)
   CABINET_HALF_X: 3.18,
-  CABINET_HALF_Z: 1.45,
+  CABINET_HALF_Z: 1.52,
 
   // 크레인 이동 범위 및 속도
   CLAW_HOME_X: -2.65,
@@ -46,7 +46,7 @@ export const GACHA_SLOT_X = [-2.05, -0.68, 0.68, 2.05] as const;
 
 export const GACHA_COLOR_THEMES: GachaColorTheme[] = ['gold', 'cyan', 'rose', 'purple'];
 
-export const GACHA_DEFAULT_REWARD_AMOUNT = 0.02; // 기본 당첨 상품: 0.02 SOL
+export const GACHA_DEFAULT_REWARD_AMOUNT = 0.002; // 기본 당첨 상품: 0.002 SOL
 
 /**
  * 슬롯 인덱스(0..3)에 대한 초기 안착 좌표 반환

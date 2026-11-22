@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   Calendar,
   ChevronLeft,
@@ -54,6 +54,7 @@ import { MealDetailModal } from '@/components/MealDetailModal';
 import { getLocalMeals, saveLocalMeals, calculateMemberWinStats } from '@/lib/storage';
 
 export default function Home() {
+  const router = useRouter();
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedSlot, setSelectedSlot] = useState<MealSlot>('아침');
   const [meals, setMeals] = useState<MealEntry[]>([]);
@@ -92,7 +93,7 @@ export default function Home() {
   // 관리자 모달 상태
   const [adminTargetMeal, setAdminTargetMeal] = useState<MealEntry | null>(null);
   const [adminAction, setAdminAction] = useState<AdminActionType>('delete');
-  const [gachaTicketNotice, setGachaTicketNotice] = useState<string | null>(null);
+  const [gachaPromptMember, setGachaPromptMember] = useState<string | null>(null);
 
   // 초기 날짜 및 타임 설정, 관리자 세션 복원, 로컬 캐시 즉시 표시 (KST 기준)
   useEffect(() => {
@@ -226,7 +227,8 @@ export default function Home() {
       isRewardOpen ||
       !!selectedDetailMeal ||
       !!viewerImage ||
-      !!adminTargetMeal;
+      !!adminTargetMeal ||
+      !!gachaPromptMember;
 
     if (isAnyModalOpen) return;
 
@@ -837,7 +839,10 @@ export default function Home() {
     });
     setSelectedDate(newMeal.date);
     setSelectedSlot(newMeal.slot);
-    setGachaTicketNotice(`${newMeal.member}님에게 UFO 뽑기권 1회가 적립되었습니다!`);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('aial_gacha_member', newMeal.member);
+    }
+    setGachaPromptMember(newMeal.member);
   };
 
   // 댓글 등록 완료 핸들러 (실시간 상태 반영 및 캐시 저장)
@@ -1317,31 +1322,6 @@ export default function Home() {
 
         {/* AI 모델 헬스체크 상태 표시 (데스크톱: 3개 모델 헬스체크 상황, 모바일: 콤팩트 표시) */}
         <ModelHealthBar />
-
-        {/* 관리자 전용 식사 등록 -> 뽑기권 적립 알림 배너 */}
-        {isAdmin && gachaTicketNotice && (
-          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-cyan-500/20 via-blue-500/15 to-slate-900 border border-cyan-400/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 animate-fade-in">
-            <div className="text-xs sm:text-sm font-bold text-cyan-200 flex items-center gap-2">
-              <span>🎟️</span>
-              <span>{gachaTicketNotice}</span>
-            </div>
-            <div className="flex items-center gap-2 self-end sm:self-auto">
-              <Link
-                href="/gacha"
-                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-black text-xs shadow-md hover:brightness-110 transition-all"
-              >
-                뽑기하러 가기 →
-              </Link>
-              <button
-                type="button"
-                onClick={() => setGachaTicketNotice(null)}
-                className="px-2 py-1 text-xs text-slate-400 hover:text-white cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* 2. 멤버별 필터링 안내 배너 (멤버 선택 시 표시) */}
         {selectedMemberFilter && (
@@ -1864,6 +1844,44 @@ export default function Home() {
         imageUrl={viewerImage?.url || null}
         title={viewerImage?.title}
       />
+
+      {/* 식사 등록 완료 후 UFO 뽑기 이동 확인 모달 */}
+      {gachaPromptMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-cyan-500/50 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-5 text-center">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-cyan-500/25 to-blue-500/25 border border-cyan-400/50 flex items-center justify-center text-3xl shadow-lg">
+              🎟️
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base sm:text-lg font-black text-white">
+                뽑기권이 1회 생겼습니다!
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+                <strong className="text-amber-300">{gachaPromptMember}</strong>님, 지금 바로 UFO 브릿지 뽑기하러 가시겠습니까?
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => setGachaPromptMember(null)}
+                className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs sm:text-sm transition-colors cursor-pointer"
+              >
+                아니오
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setGachaPromptMember(null);
+                  router.push('/gacha');
+                }}
+                className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-cyan-500/25 transition-all cursor-pointer"
+              >
+                예 (뽑기하러 가기)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

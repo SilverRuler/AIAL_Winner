@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
       .replace('T', ' ')
       .substring(0, 19);
     const trimmedMemo = (memo || '').trim();
-    const rewardAmount = typeof winDoc.rewardAmount === 'number' ? winDoc.rewardAmount : 0.02;
+    const rewardAmount = typeof winDoc.rewardAmount === 'number' ? winDoc.rewardAmount : 0.002;
 
     await db.collection('gacha_wins').updateOne(
       { $or: [{ id: winId }, { _id: winId as any }] },

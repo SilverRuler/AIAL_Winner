@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Bell, Sparkles, ShieldCheck, Info, Award, ChevronDown, ChevronUp, Gift } from 'lucide-react';
+import { X, Bell, Sparkles, ShieldCheck, Info, Award, ChevronDown, ChevronUp, Gift, Gamepad2 } from 'lucide-react';
 
 interface NoticeModalProps {
   isOpen: boolean;
@@ -12,6 +12,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
   const [open261030, setOpen261030] = useState(false);
   const [open261101, setOpen261101] = useState(false);
   const [open261102, setOpen261102] = useState(false);
+  const [open261122, setOpen261122] = useState(true);
 
   if (!isOpen) return null;
 
@@ -177,6 +178,45 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                 <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
                   관리자를 제외하고 히든 멤버를 추가하였습니다.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 261122 공지 카드 (UFO 가챠 구현) */}
+          <div className="bg-slate-950/80 rounded-xl border border-cyan-500/40 overflow-hidden transition-all">
+            <button
+              type="button"
+              onClick={() => setOpen261122(!open261122)}
+              className="w-full p-4 flex items-center justify-between gap-2 text-left hover:bg-slate-900/60 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 shrink-0">
+                  📌 261122 공지
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-white truncate">
+                  UFO 가챠 구현
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <span className="text-[11px] text-slate-400 hidden xs:inline">2026-11-22</span>
+                {open261122 ? (
+                  <ChevronUp className="w-4 h-4 text-cyan-400 shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                )}
+              </div>
+            </button>
+
+            {open261122 && (
+              <div className="px-4 pb-4 pt-1 space-y-2.5 border-t border-slate-800/80 text-slate-200 leading-relaxed font-medium">
+                <p className="text-sm sm:text-base font-bold text-white flex items-center gap-2 pt-2">
+                  <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                  승점에 관계 없이 식사를 올리면 매 1회 가챠권이 생깁니다.
+                </p>
+                <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                  12인 공유 3D UFO 크레인에서 Bar 사이로 상자를 통과시키면 0.002 SOL 리워드를 신청할 수 있습니다.
                 </p>
               </div>
             )}

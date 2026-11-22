@@ -777,7 +777,11 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           if (state.wonSet.has(ent.data.id)) continue;
           const dx = Math.abs(ent.body.position.x - state.clawX);
           const dz = Math.abs(ent.body.position.z - state.clawZ);
-          if (dx < 0.42 && dz < 0.56 && state.clawY <= ent.body.position.y + 0.34) {
+          if (
+            dx < 0.42 &&
+            dz < GACHA_PHYSICS.BOX_D / 2 - 0.04 &&
+            state.clawY <= ent.body.position.y + GACHA_PHYSICS.BOX_H / 2 + 0.14
+          ) {
             hitBoxTop = true;
             break;
           }

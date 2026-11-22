@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import {
   Calendar,
   ChevronLeft,
@@ -91,6 +92,7 @@ export default function Home() {
   // 관리자 모달 상태
   const [adminTargetMeal, setAdminTargetMeal] = useState<MealEntry | null>(null);
   const [adminAction, setAdminAction] = useState<AdminActionType>('delete');
+  const [gachaTicketNotice, setGachaTicketNotice] = useState<string | null>(null);
 
   // 초기 날짜 및 타임 설정, 관리자 세션 복원, 로컬 캐시 즉시 표시 (KST 기준)
   useEffect(() => {
@@ -835,6 +837,7 @@ export default function Home() {
     });
     setSelectedDate(newMeal.date);
     setSelectedSlot(newMeal.slot);
+    setGachaTicketNotice(`${newMeal.member}님에게 UFO 뽑기권 1회가 적립되었습니다!`);
   };
 
   // 댓글 등록 완료 핸들러 (실시간 상태 반영 및 캐시 저장)
@@ -1314,6 +1317,31 @@ export default function Home() {
 
         {/* AI 모델 헬스체크 상태 표시 (데스크톱: 3개 모델 헬스체크 상황, 모바일: 콤팩트 표시) */}
         <ModelHealthBar />
+
+        {/* 관리자 전용 식사 등록 -> 뽑기권 적립 알림 배너 */}
+        {isAdmin && gachaTicketNotice && (
+          <div className="p-3.5 rounded-2xl bg-gradient-to-r from-cyan-500/20 via-blue-500/15 to-slate-900 border border-cyan-400/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 animate-fade-in">
+            <div className="text-xs sm:text-sm font-bold text-cyan-200 flex items-center gap-2">
+              <span>🎟️</span>
+              <span>{gachaTicketNotice}</span>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <Link
+                href="/gacha"
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-black text-xs shadow-md hover:brightness-110 transition-all"
+              >
+                뽑기하러 가기 →
+              </Link>
+              <button
+                type="button"
+                onClick={() => setGachaTicketNotice(null)}
+                className="px-2 py-1 text-xs text-slate-400 hover:text-white cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 2. 멤버별 필터링 안내 배너 (멤버 선택 시 표시) */}
         {selectedMemberFilter && (

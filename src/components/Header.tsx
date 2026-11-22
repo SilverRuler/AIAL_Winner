@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell } from 'lucide-react';
+import Link from 'next/link';
+import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell, Gamepad2 } from 'lucide-react';
 
 interface HeaderProps {
   onOpenNewMeal: () => void;
@@ -158,6 +159,18 @@ export const Header: React.FC<HeaderProps> = ({
                 <HelpCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
                 <span>QUIZ</span>
               </button>
+            )}
+
+            {/* 3-2) 관리자 전용 UFO 뽑기하러 가기 버튼 */}
+            {isAdmin && (
+              <Link
+                href="/gacha"
+                className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-600/25 border border-cyan-400/60 text-cyan-200 hover:text-white hover:from-cyan-500/35 hover:to-blue-600/40 transition-all text-xs sm:text-sm font-black shrink-0 shadow-sm shadow-cyan-900/40"
+                title="UFO 브릿지 뽑기 (관리자 테스트)"
+              >
+                <Gamepad2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-300" />
+                <span>뽑기하러 가기</span>
+              </Link>
             )}
 
             {/* 4) 사용 방법 */}

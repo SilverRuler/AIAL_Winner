@@ -3,6 +3,7 @@ import { getDatabase } from '@/lib/mongodb';
 import { MealEntry } from '@/types/meal';
 import { MEMBERS, LEGACY_MEMBERS, checkCanRegisterMeal, getKSTNow } from '@/constants/members';
 import { getClientIp, maskIp, normalizeIp } from '@/lib/ip';
+import { grantGachaTickets } from '@/lib/gachaServer';
 
 const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
 const ADMIN_PW = process.env.ADMIN_PW || 'bbb';
@@ -248,6 +249,14 @@ export async function POST(request: NextRequest) {
         _id: newEntry.id as any,
       });
 
+      // 식사 등록 시 승패 무관하게 해당 멤버에게 UFO 뽑기권 1회 자동 적립
+      let newTicketBalance: number | undefined = undefined;
+      try {
+        newTicketBalance = await grantGachaTickets(db, newEntry.member, 1);
+      } catch (ticketErr) {
+        console.warn('Failed to grant gacha ticket on meal insert:', ticketErr);
+      }
+
       // 클라이언트 응답 시에는 IP를 제거하여 브라우저에 노출되지 않도록 처리
       const responseMeal = {
         ...newEntry,
@@ -260,6 +269,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         meal: responseMeal,
+        gachaTicketGranted: true,
+        gachaTicketBalance: newTicketBalance,
         storageMode: 'mongodb',
       });
     }

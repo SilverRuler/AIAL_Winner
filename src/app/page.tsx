@@ -830,8 +830,8 @@ export default function Home() {
     }
   };
 
-  // 새 식사 등록 완료 시
-  const handleMealSuccess = (newMeal: MealEntry) => {
+  // 새 식사 등록 완료 시 (동일 타임 삭제 후 재등록으로 티켓 미지급 시에는 뽑기권 획득 모달 띄우지 않음)
+  const handleMealSuccess = (newMeal: MealEntry, gachaTicketGranted = true) => {
     setMeals((prev) => {
       const updated = [newMeal, ...prev];
       saveLocalMeals(updated);
@@ -842,7 +842,9 @@ export default function Home() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('aial_gacha_member', newMeal.member);
     }
-    setGachaPromptMember(newMeal.member);
+    if (gachaTicketGranted) {
+      setGachaPromptMember(newMeal.member);
+    }
   };
 
   // 댓글 등록 완료 핸들러 (실시간 상태 반영 및 캐시 저장)

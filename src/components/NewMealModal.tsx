@@ -33,7 +33,7 @@ import { validateMealImageExif } from '@/lib/exif';
 interface NewMealModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (newMeal: MealEntry) => void;
+  onSuccess: (newMeal: MealEntry, gachaTicketGranted?: boolean) => void;
   defaultDate?: string;
   defaultSlot?: MealSlot;
   submittedMembers?: string[];
@@ -514,7 +514,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
         origin: { y: 0.6 },
       });
 
-      onSuccess(data.meal);
+      onSuccess(data.meal, Boolean(data.gachaTicketGranted));
       onClose();
     } catch (err: any) {
       console.error(err);

@@ -415,16 +415,16 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       roughness: 0.2,
     });
     const frontRampMesh = new THREE.Mesh(rampVisualGeo, rampVisualMat);
-    frontRampMesh.position.set(0, 0.96, 1.18);
-    frontRampMesh.rotation.x = -0.58;
+    frontRampMesh.position.set(0, 1.24, 1.38);
+    frontRampMesh.rotation.x = -0.72;
     cabinetGroup.add(frontRampMesh);
 
     const backRampMesh = new THREE.Mesh(rampVisualGeo, rampVisualMat);
-    backRampMesh.position.set(0, 0.96, -1.18);
-    backRampMesh.rotation.x = 0.58;
+    backRampMesh.position.set(0, 1.24, -1.38);
+    backRampMesh.rotation.x = 0.72;
     cabinetGroup.add(backRampMesh);
 
-    // 2개의 평행 UFO 브릿지 Bar (크롬 바 + 실리콘 논슬립 링)
+    // 4개의 평행 UFO 브릿지 Bar (중앙 낙하용 2개 + 앞/뒤 외곽 높은 보조 Bar 2개)
     const barGeo = new THREE.CylinderGeometry(
       GACHA_PHYSICS.BAR_RADIUS,
       GACHA_PHYSICS.BAR_RADIUS,
@@ -445,18 +445,31 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       emissiveIntensity: 0.35,
       roughness: 0.5,
     });
+    const outerRingMat = new THREE.MeshStandardMaterial({
+      color: '#38bdf8',
+      emissive: '#0284c7',
+      emissiveIntensity: 0.35,
+      roughness: 0.5,
+    });
 
-    [-GACHA_PHYSICS.BAR_HALF_Z, GACHA_PHYSICS.BAR_HALF_Z].forEach((bz) => {
+    const allBarSpecs = [
+      { y: GACHA_PHYSICS.BAR_Y, z: -GACHA_PHYSICS.BAR_HALF_Z, isOuter: false },
+      { y: GACHA_PHYSICS.BAR_Y, z: GACHA_PHYSICS.BAR_HALF_Z, isOuter: false },
+      { y: GACHA_PHYSICS.OUTER_BAR_Y, z: -GACHA_PHYSICS.OUTER_BAR_HALF_Z, isOuter: true },
+      { y: GACHA_PHYSICS.OUTER_BAR_Y, z: GACHA_PHYSICS.OUTER_BAR_HALF_Z, isOuter: true },
+    ];
+
+    allBarSpecs.forEach(({ y: by, z: bz, isOuter }) => {
       const barMesh = new THREE.Mesh(barGeo, barMatVisual);
-      barMesh.position.set(0, GACHA_PHYSICS.BAR_Y, bz);
+      barMesh.position.set(0, by, bz);
       barMesh.castShadow = true;
       barMesh.receiveShadow = true;
       cabinetGroup.add(barMesh);
 
-      // 슬롯 경계마다 미끄럼방지 실리콘 링 배치
+      // 슬롯 경계마다 미끄럼방지 실리콘 링 배치 (중앙: 레드, 외곽 높은 바: 스카이블루)
       for (let rx = -2.8; rx <= 2.81; rx += 0.7) {
-        const ring = new THREE.Mesh(ringGeo, ringMat);
-        ring.position.set(rx, GACHA_PHYSICS.BAR_Y, bz);
+        const ring = new THREE.Mesh(ringGeo, isOuter ? outerRingMat : ringMat);
+        ring.position.set(rx, by, bz);
         cabinetGroup.add(ring);
       }
     });
@@ -570,8 +583,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       })
     );
 
-    // 정적 물리 바디: 평행 Bar 2개
-    [-GACHA_PHYSICS.BAR_HALF_Z, GACHA_PHYSICS.BAR_HALF_Z].forEach((bz) => {
+    // 정적 물리 바디: 평행 Bar 4개 (중앙 낙하용 2개 + 앞/뒤 외곽 높은 보조 Bar 2개)
+    allBarSpecs.forEach(({ y: by, z: bz }) => {
       const barBody = new CANNON.Body({ mass: 0, material: barPhysMat });
       const cylShape = new CANNON.Cylinder(
         GACHA_PHYSICS.BAR_RADIUS,
@@ -582,7 +595,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       const q = new CANNON.Quaternion();
       q.setFromEuler(0, 0, Math.PI / 2);
       barBody.addShape(cylShape, new CANNON.Vec3(0, 0, 0), q);
-      barBody.position.set(0, GACHA_PHYSICS.BAR_Y, bz);
+      barBody.position.set(0, by, bz);
       world.addBody(barBody);
     });
 
@@ -594,18 +607,18 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       world.addBody(wallBody);
     });
 
-    // 앞 경사 가이드
+    // 앞 경사 가이드 (외곽 Bar 바깥쪽 보호 벽)
     const frontRampBody = new CANNON.Body({ mass: 0, material: barPhysMat });
     frontRampBody.addShape(new CANNON.Box(new CANNON.Vec3(GACHA_PHYSICS.BAR_LENGTH / 2, 0.05, 0.42)));
-    frontRampBody.position.set(0, 0.96, 1.18);
-    frontRampBody.quaternion.setFromEuler(-0.58, 0, 0);
+    frontRampBody.position.set(0, 1.24, 1.38);
+    frontRampBody.quaternion.setFromEuler(-0.72, 0, 0);
     world.addBody(frontRampBody);
 
-    // 뒤 경사 가이드
+    // 뒤 경사 가이드 (외곽 Bar 바깥쪽 보호 벽)
     const backRampBody = new CANNON.Body({ mass: 0, material: barPhysMat });
     backRampBody.addShape(new CANNON.Box(new CANNON.Vec3(GACHA_PHYSICS.BAR_LENGTH / 2, 0.05, 0.42)));
-    backRampBody.position.set(0, 0.96, -1.18);
-    backRampBody.quaternion.setFromEuler(0.58, 0, 0);
+    backRampBody.position.set(0, 1.24, -1.38);
+    backRampBody.quaternion.setFromEuler(0.72, 0, 0);
     world.addBody(backRampBody);
 
     // 하단 WIN 슈트 바닥 콜라이더 (떨어진 상자가 안착)

@@ -250,11 +250,29 @@ export async function POST(request: NextRequest) {
       });
 
       // 식사 등록 시 승패 무관하게 해당 멤버에게 UFO 뽑기권 5회 자동 적립
+      // 단, 동일 날짜·타임·멤버로 삭제 후 재등록 시 중복 지급(악용) 원천 차단
+      let gachaTicketGranted = false;
       let newTicketBalance: number | undefined = undefined;
       try {
+        const grantKey = `${newEntry.date}_${newEntry.slot}_${newEntry.member}`;
+        await db.collection('gacha_ticket_grants').insertOne({
+          _id: grantKey as any,
+          date: newEntry.date,
+          slot: newEntry.slot,
+          member: newEntry.member,
+          amount: 5,
+          mealId: newEntry.id,
+          grantedAt: Date.now(),
+        });
         newTicketBalance = await grantGachaTickets(db, newEntry.member, 5);
-      } catch (ticketErr) {
-        console.warn('Failed to grant gacha ticket on meal insert:', ticketErr);
+        gachaTicketGranted = true;
+      } catch (ticketErr: any) {
+        if (ticketErr?.code === 11000) {
+          // 이미 해당 날짜·타임에 뽑기권이 지급된 이력이 있으므로 중복 지급 생략
+          gachaTicketGranted = false;
+        } else {
+          console.warn('Failed to grant gacha ticket on meal insert:', ticketErr);
+        }
       }
 
       // 클라이언트 응답 시에는 IP를 제거하여 브라우저에 노출되지 않도록 처리
@@ -269,7 +287,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         meal: responseMeal,
-        gachaTicketGranted: true,
+        gachaTicketGranted,
         gachaTicketBalance: newTicketBalance,
         storageMode: 'mongodb',
       });

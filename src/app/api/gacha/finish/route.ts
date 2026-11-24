@@ -8,6 +8,7 @@ import {
 import {
   getAllMemberTicketBalances,
   getOrInitMachineState,
+  getTelegramConfig,
   sanitizeMachineForClient,
 } from '@/lib/gachaServer';
 
@@ -209,6 +210,54 @@ export async function POST(request: NextRequest) {
       },
       { returnDocument: 'after' }
     );
+
+    // 누군가가 뽑기에 성공하면 관리자에게 텔레그램 즉시 알람 발송 (남은 재고 수 표기)
+    if (wonRecords.length > 0) {
+      try {
+        const { token: teleToken, chatId: teleChatId } = getTelegramConfig();
+        const kstDate = new Date(now + 9 * 3600 * 1000)
+          .toISOString()
+          .replace('T', ' ')
+          .substring(0, 19);
+        const wonLabels = wonRecords.map((w) => w.boxLabel).join(', ');
+        const totalRewardSol = Number(
+          wonRecords.reduce((sum, w) => sum + (w.rewardAmount || 0.01), 0).toFixed(4)
+        );
+        const stockCount = remainingItems.length;
+        const stockLine =
+          stockCount === 0
+            ? `📦 <b>현재 뽑기판에 재고가 0개 남았습니다! (완판 - 리필 필요)</b>`
+            : `📦 <b>현재 뽑기판에 재고가 ${stockCount}개 남았습니다.</b>`;
+
+        const telegramText =
+          `🎉 <b>[AIAL Winner] UFO 뽑기 당첨 알림!</b>\n` +
+          `━━━━━━━━━━━━━━━━━━\n` +
+          `👤 <b>당첨 멤버:</b> <b>${member}</b>\n` +
+          `🎁 <b>획득 상품:</b> ${wonLabels} (${totalRewardSol} SOL)\n` +
+          `${stockLine}\n` +
+          `⏰ <b>당첨 일시:</b> ${kstDate} (KST)\n` +
+          `━━━━━━━━━━━━━━━━━━`;
+
+        const teleResp = await fetch(
+          `https://api.telegram.org/bot${teleToken}/sendMessage`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: teleChatId,
+              text: telegramText,
+              parse_mode: 'HTML',
+            }),
+            signal: AbortSignal.timeout(5000),
+          }
+        );
+        if (!teleResp.ok) {
+          console.warn('Telegram gacha win alert failed:', await teleResp.text());
+        }
+      } catch (teleErr) {
+        console.error('Telegram gacha win alert error:', teleErr);
+      }
+    }
 
     const ticketsByMember = await getAllMemberTicketBalances(db);
 

@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { ArrowRight, ArrowUp, Volume2, VolumeX, Sparkles } from 'lucide-react';
 import { GachaBoxItem } from '@/types/gacha';
-import { GACHA_PHYSICS } from '@/constants/gacha';
+import { GACHA_PHYSICS, getBoxDimensions } from '@/constants/gacha';
 
 export type CranePhase =
   | 'idle'
@@ -640,7 +640,6 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       body: CANNON.Body;
     }
     const boxEntities = new Map<string, BoxEntity>();
-    const boxGeo = new THREE.BoxGeometry(GACHA_PHYSICS.BOX_W, GACHA_PHYSICS.BOX_H, GACHA_PHYSICS.BOX_D);
 
     const syncFromItems = (nextItems: GachaBoxItem[]) => {
       const nextIds = new Set(nextItems.map((it) => it.id));
@@ -660,25 +659,26 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         }
       }
 
-      // 추가 및 위치 동기화
+      // 추가 및 위치 동기화 (슬롯별 고유 크기·질량 반영)
       for (const it of nextItems) {
         let ent = boxEntities.get(it.id);
         if (!ent) {
+          const dims = getBoxDimensions(it.slotIndex);
           const mats = createFigureBoxMaterials(it.slotIndex, it.label);
-          const mesh = new THREE.Mesh(boxGeo.clone(), mats);
+          const mesh = new THREE.Mesh(new THREE.BoxGeometry(dims.w, dims.h, dims.d), mats);
           mesh.castShadow = true;
           mesh.receiveShadow = true;
           scene.add(mesh);
 
           const body = new CANNON.Body({
-            mass: GACHA_PHYSICS.BOX_MASS,
+            mass: dims.mass,
             material: boxPhysMat,
             linearDamping: 0.2,
             angularDamping: 0.3,
           });
           body.addShape(
             new CANNON.Box(
-              new CANNON.Vec3(GACHA_PHYSICS.BOX_W / 2, GACHA_PHYSICS.BOX_H / 2, GACHA_PHYSICS.BOX_D / 2)
+              new CANNON.Vec3(dims.w / 2, dims.h / 2, dims.d / 2)
             )
           );
           world.addBody(body);
@@ -782,16 +782,17 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         );
         state.prongAngle = 0.62;
 
-        // 상자 상단에 닿으면 조기 정지
+        // 상자 상단에 닿으면 조기 정지 (슬롯별 상자 치수 반영)
         let hitBoxTop = false;
         for (const ent of boxEntities.values()) {
           if (state.wonSet.has(ent.data.id)) continue;
+          const dims = getBoxDimensions(ent.data.slotIndex);
           const dx = Math.abs(ent.body.position.x - state.clawX);
           const dz = Math.abs(ent.body.position.z - state.clawZ);
           if (
-            dx < 0.42 &&
-            dz < GACHA_PHYSICS.BOX_D / 2 - 0.04 &&
-            state.clawY <= ent.body.position.y + GACHA_PHYSICS.BOX_H / 2 + 0.14
+            dx < dims.w / 2 + 0.12 &&
+            dz < dims.d / 2 - 0.04 &&
+            state.clawY <= ent.body.position.y + dims.h / 2 + 0.14
           ) {
             hitBoxTop = true;
             break;
@@ -817,20 +818,21 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
           for (const ent of boxEntities.values()) {
             if (state.wonSet.has(ent.data.id)) continue;
+            const dims = getBoxDimensions(ent.data.slotIndex);
             const localPt = ent.body.pointToLocalFrame(pinchWorld);
             if (
-              Math.abs(localPt.x) <= GACHA_PHYSICS.BOX_W / 2 + 0.2 &&
-              Math.abs(localPt.z) <= GACHA_PHYSICS.BOX_D / 2 + 0.14 &&
-              Math.abs(localPt.y) <= GACHA_PHYSICS.BOX_H / 2 + 0.25
+              Math.abs(localPt.x) <= dims.w / 2 + 0.2 &&
+              Math.abs(localPt.z) <= dims.d / 2 + 0.14 &&
+              Math.abs(localPt.y) <= dims.h / 2 + 0.25
             ) {
               const d = pinchWorld.distanceTo(ent.body.position);
               if (d < bestDist) {
                 bestDist = d;
                 bestEnt = ent;
                 bestLocal = new CANNON.Vec3(
-                  Math.max(-GACHA_PHYSICS.BOX_W * 0.35, Math.min(GACHA_PHYSICS.BOX_W * 0.35, localPt.x)),
-                  GACHA_PHYSICS.BOX_H * 0.25,
-                  Math.max(-GACHA_PHYSICS.BOX_D * 0.42, Math.min(GACHA_PHYSICS.BOX_D * 0.42, localPt.z))
+                  Math.max(-dims.w * 0.35, Math.min(dims.w * 0.35, localPt.x)),
+                  dims.h * 0.25,
+                  Math.max(-dims.d * 0.42, Math.min(dims.d * 0.42, localPt.z))
                 );
               }
             }

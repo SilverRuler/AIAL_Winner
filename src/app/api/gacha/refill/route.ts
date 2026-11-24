@@ -4,7 +4,7 @@ import { GachaBoxItem } from '@/types/gacha';
 import {
   createBoxForSlot,
   createInitialGachaBoxes,
-  GACHA_PHYSICS,
+  getBoxDimensions,
   getRestingBoxPosition,
 } from '@/constants/gacha';
 import { isAdminAuthorized, sanitizeMachineForClient } from '@/lib/gachaServer';
@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
           (item) => Math.abs(item.position[0] - rx) < 0.92 && item.position[1] > 0.35
         );
         if (overlapsExisting) {
-          newBox.position = [rx, ry + GACHA_PHYSICS.BOX_H + 0.25, rz];
+          const { h } = getBoxDimensions(slotIdx);
+          newBox.position = [rx, ry + h + 0.25, rz];
         }
         nextItems.push(newBox);
       }

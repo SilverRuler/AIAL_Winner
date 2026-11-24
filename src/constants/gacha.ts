@@ -45,17 +45,34 @@ export const GACHA_PHYSICS = {
 
 export const GACHA_SLOT_X = [-2.05, -0.68, 0.68, 2.05] as const;
 
+/**
+ * 슬롯별(1번~4번) 상자 규격 (이미지는 기존 유지, #1은 기존 정사각형 밑면 그대로 유지하고 #2~#4는 모양·크기 차별화)
+ * 모든 4종 모두 Bar 내경(0.82) 위에서 안정적으로 안착되며 cannon-es 물리 기준 정상 낙하 가능 검증 완료
+ */
+export const GACHA_SLOT_BOX_DIMS = [
+  { w: 0.60, h: 0.60, d: 1.46, mass: 1.55 }, // #1 프리렌: 기존 정사각형 밑면 그대로
+  { w: 0.68, h: 0.44, d: 1.40, mass: 1.50 }, // #2 네즈코: 납작하고 와이드한 박스
+  { w: 0.52, h: 0.68, d: 1.50, mass: 1.55 }, // #3 프리렌: 슬림하고 키 크며 살짝 긴 박스
+  { w: 0.64, h: 0.54, d: 1.36, mass: 1.50 }, // #4 네즈코: 살짝 짧고 두툼한 컴팩트 박스
+] as const;
+
+export function getBoxDimensions(slotIndex: number) {
+  const safeIdx = Math.max(0, Math.min(GACHA_SLOT_BOX_DIMS.length - 1, slotIndex));
+  return GACHA_SLOT_BOX_DIMS[safeIdx];
+}
+
 export const GACHA_COLOR_THEMES: GachaColorTheme[] = ['gold', 'cyan', 'rose', 'purple'];
 
 export const GACHA_DEFAULT_REWARD_AMOUNT = 0.01; // 기본 당첨 상품: 0.01 SOL
 
 /**
- * 슬롯 인덱스(0..3)에 대한 초기 안착 좌표 반환
+ * 슬롯 인덱스(0..3)에 대한 초기 안착 좌표 반환 (슬롯별 상자 높이 반영)
  */
 export function getRestingBoxPosition(slotIndex: number): [number, number, number] {
   const safeIdx = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, slotIndex));
   const x = GACHA_SLOT_X[safeIdx];
-  const y = GACHA_PHYSICS.BAR_Y + GACHA_PHYSICS.BAR_RADIUS + GACHA_PHYSICS.BOX_H / 2 + 0.01;
+  const { h } = getBoxDimensions(safeIdx);
+  const y = GACHA_PHYSICS.BAR_Y + GACHA_PHYSICS.BAR_RADIUS + h / 2 + 0.01;
   const z = 0;
   return [x, y, z];
 }

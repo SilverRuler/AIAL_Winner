@@ -53,6 +53,16 @@ export default function GachaPage() {
   const [rewardStartApply, setRewardStartApply] = useState<boolean>(false);
 
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
+  const [activeTurnKey, setActiveTurnKey] = useState<string | null>(null);
+  const [pendingNextTurnKey, setPendingNextTurnKey] = useState<string | null>(null);
+  const [sessionProgress, setSessionProgress] = useState<{
+    current: number;
+    total: number;
+    bonusPlays: number;
+  } | null>(null);
+  const [isStartModalOpen, setIsStartModalOpen] = useState<boolean>(false);
+  const [startPlayInput, setStartPlayInput] = useState<string>('1');
+  const [startModalError, setStartModalError] = useState<string>('');
   const [isStarting, setIsStarting] = useState<boolean>(false);
   const [isFinishing, setIsFinishing] = useState<boolean>(false);
   const [serverClockOffset, setServerClockOffset] = useState<number>(0);
@@ -152,6 +162,14 @@ export default function GachaPage() {
     return machine.lock.member || '다른 멤버';
   }, [machine, activeTurnId, serverClockOffset]);
 
+  const otherSessionProgress = useMemo(() => {
+    if (!lockedByOther || !machine?.lock) return null;
+    const total = Number(machine.lock.totalPlays) || 1;
+    const current = Math.min(total, Math.max(1, Number(machine.lock.shotIndex) || 1));
+    if (total <= 1) return null;
+    return { current, total };
+  }, [lockedByOther, machine]);
+
   // 상태 폴링: 다른 사람이 진행 중이면 1초마다 빠르게 동기화, 대기 중이면 2초마다 동기화
   // 본인이 턴 시작/진행/저장 중일 때는 폴링 일시 정지하여 로컬 3D 물리/저장 충돌 방지
   useEffect(() => {
@@ -180,18 +198,41 @@ export default function GachaPage() {
     return () => clearInterval(hb);
   }, [activeTurnId, selectedMember]);
 
-  const handleStartTurn = async () => {
+  const handleOpenStartModal = () => {
     if (isStarting || isFinishing || activeTurnId || lockedByOther) return;
+    if (selectedBalance.tickets < 1) {
+      setStatusMessage(`${selectedMember}님의 보유 뽑기권이 부족합니다.`);
+      return;
+    }
+    setStartPlayInput('1');
+    setStartModalError('');
+    setIsStartModalOpen(true);
+  };
+
+  const handleStartTurn = async (requestedPlayCount: number) => {
+    if (isStarting || isFinishing || activeTurnId || lockedByOther) return;
+    const maxTickets = selectedBalance.tickets;
+    if (!Number.isInteger(requestedPlayCount) || requestedPlayCount < 1) {
+      setStartModalError('1 이상의 숫자를 입력해주세요.');
+      return;
+    }
+    if (requestedPlayCount > maxTickets) {
+      setStartModalError(`보유 뽑기권(${maxTickets}장)을 초과하여 입력할 수 없습니다.`);
+      return;
+    }
+
+    setStartModalError('');
     setStatusMessage('');
     try {
       setIsStarting(true);
       const resp = await fetch('/api/gacha/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member: selectedMember }),
+        body: JSON.stringify({ member: selectedMember, playCount: requestedPlayCount }),
       });
       const data = await resp.json();
       if (!resp.ok || !data.success) {
+        setStartModalError(data.message || '뽑기를 시작할 수 없습니다.');
         setStatusMessage(data.message || '뽑기를 시작할 수 없습니다.');
         await fetchState();
         return;
@@ -200,10 +241,24 @@ export default function GachaPage() {
       if (typeof data.serverNow === 'number') {
         setServerClockOffset(data.serverNow - Date.now());
       }
+      setIsStartModalOpen(false);
       setMachine(data.machine);
       if (data.ticketsByMember) setTicketsByMember(data.ticketsByMember);
+      const total = Number(data.totalPlays) || requestedPlayCount;
+      const bonus = Number(data.bonusPlays) || 0;
+      setSessionProgress({ current: 1, total, bonusPlays: bonus });
+      setPendingNextTurnKey(null);
       setActiveTurnId(data.turnId);
+      setActiveTurnKey(`${data.turnId}_s1`);
+      if (bonus > 0) {
+        setStatusMessage(
+          `🔥 ${selectedMember}님 연속 ${requestedPlayCount}가챠 시작! (+${bonus}회 무료 보너스 → 총 ${total}회 연속 플레이)`
+        );
+      } else if (total > 1) {
+        setStatusMessage(`🕹️ ${selectedMember}님 ${total}회 연속 뽑기를 시작합니다!`);
+      }
     } catch (err: any) {
+      setStartModalError(err.message || '뽑기 시작 오류');
       setStatusMessage(err.message || '뽑기 시작 오류');
     } finally {
       setIsStarting(false);
@@ -217,6 +272,7 @@ export default function GachaPage() {
 
       // DB에 최종 상자 좌표와 락 해제가 완전히 반영될 때까지 activeTurnId & isFinishing 유지
       setIsFinishing(true);
+      let keepSession = false;
       try {
         const resp = await fetch('/api/gacha/finish', {
           method: 'POST',
@@ -236,15 +292,46 @@ export default function GachaPage() {
           }
           setMachine(data.machine);
           if (data.ticketsByMember) setTicketsByMember(data.ticketsByMember);
-          if (Array.isArray(data.wonRecords) && data.wonRecords.length > 0) {
+
+          const hasWon = Array.isArray(data.wonRecords) && data.wonRecords.length > 0;
+          if (hasWon) {
             setActiveWinModal(data.wonRecords[0]);
+            const refundText =
+              data.refundedTickets > 0
+                ? ` (상품 완판으로 미사용 뽑기권 ${data.refundedTickets}장 자동 환불)`
+                : '';
             setStatusMessage(
-              `🎉 축하합니다! ${selectedMember}님이 ${data.wonRecords.map((w: GachaWinRecord) => w.boxLabel).join(', ')}을 뽑았습니다!`
+              `🎉 축하합니다! ${selectedMember}님이 ${data.wonRecords.map((w: GachaWinRecord) => w.boxLabel).join(', ')}을 뽑았습니다!${refundText}`
             );
-          } else {
-            setStatusMessage('상자가 이동되어 모든 플레이어에게 반영되었습니다!');
           }
-          await fetchState();
+
+          if (data.sessionContinue && data.nextShotIndex > 0) {
+            keepSession = true;
+            const nextKey = `${turnId}_s${data.nextShotIndex}`;
+            const total = Number(data.totalPlays) || 1;
+            const bonus = Number(data.bonusPlays) || 0;
+            setSessionProgress({
+              current: data.nextShotIndex,
+              total,
+              bonusPlays: bonus,
+            });
+            if (!hasWon) {
+              setStatusMessage(
+                `🔥 연속 뽑기 ${data.nextShotIndex}/${total}회차 진행 중!${
+                  bonus > 0 && data.nextShotIndex > total - bonus ? ' (🎁 보너스 무료 회차!)' : ''
+                }`
+              );
+              setActiveTurnKey(nextKey);
+            } else {
+              // 당첨 축하 팝업을 닫은 직후 다음 연속 회차 자동 시작
+              setPendingNextTurnKey(nextKey);
+            }
+          } else {
+            if (!hasWon) {
+              setStatusMessage('상자가 이동되어 모든 플레이어에게 반영되었습니다!');
+            }
+            await fetchState();
+          }
         } else {
           setStatusMessage(data.message || '결과 반영 실패');
           await fetchState();
@@ -253,7 +340,12 @@ export default function GachaPage() {
         setStatusMessage('결과 저장 중 오류가 발생했습니다.');
         await fetchState();
       } finally {
-        setActiveTurnId(null);
+        if (!keepSession) {
+          setActiveTurnId(null);
+          setActiveTurnKey(null);
+          setPendingNextTurnKey(null);
+          setSessionProgress(null);
+        }
         setIsFinishing(false);
       }
     },
@@ -533,16 +625,18 @@ export default function GachaPage() {
         {/* 2. 3D UFO 크레인 머신 */}
         <UfoClawMachine3D
           items={machine?.items || []}
-          isMyTurn={Boolean(activeTurnId) && !isFinishing}
+          isMyTurn={Boolean(activeTurnId) && !isFinishing && !pendingNextTurnKey}
           lockedByOther={lockedByOther}
-          turnKey={activeTurnId}
+          turnKey={activeTurnKey}
           onTurnFinish={handleTurnFinish}
-          onStartTurnRequest={handleStartTurn}
+          onStartTurnRequest={handleOpenStartModal}
           canStartTurn={selectedBalance.tickets >= 1 && !activeTurnId && !isFinishing && !lockedByOther}
           selectedMember={selectedMember}
           selectedMemberTickets={selectedBalance.tickets}
           isStarting={isStarting}
           isFinishing={isFinishing}
+          sessionProgress={sessionProgress}
+          otherSessionProgress={otherSessionProgress}
         />
 
         {/* 3. 최근 뽑기 당첨 내역 */}
@@ -596,10 +690,179 @@ export default function GachaPage() {
         </section>
       </main>
 
+      {/* 뽑기 시작 횟수 선택 & 연속 5가챠(+1 무료) 모달 */}
+      {isStartModalOpen && (() => {
+        const maxTickets = selectedBalance.tickets;
+        const parsedInput = parseInt(startPlayInput, 10);
+        const validCount =
+          !isNaN(parsedInput) && parsedInput >= 1 && parsedInput <= maxTickets
+            ? parsedInput
+            : null;
+        const inputBonus = validCount ? Math.floor(validCount / 5) : 0;
+        const inputTotal = validCount ? validCount + inputBonus : 0;
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+            onClick={() => !isStarting && setIsStartModalOpen(false)}
+          >
+            <div
+              className="bg-slate-900 border border-cyan-500/50 w-full max-w-sm rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-400/40 text-amber-300 text-xs font-black">
+                  <Ticket className="w-3.5 h-3.5" />
+                  <span>{selectedMember} · 보유 뽑기권 {maxTickets}장</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-white pt-1">
+                  {maxTickets >= 5
+                    ? '연속 5가챠를 진행하겠습니까?'
+                    : '몇 회 하시겠습니까?'}
+                </h3>
+                {maxTickets >= 5 && (
+                  <p className="text-xs text-cyan-300 font-bold">
+                    (연속 5가챠시 1회 무료지급 → 총 6번 연속 플레이!)
+                  </p>
+                )}
+              </div>
+
+              {/* 보유 뽑기권 5장 이상: 연속 5가챠 (+1회 무료 = 총 6회) 메인 CTA */}
+              {maxTickets >= 5 && (
+                <button
+                  type="button"
+                  disabled={isStarting}
+                  onClick={() => handleStartTurn(5)}
+                  className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-black text-sm shadow-lg shadow-orange-500/25 transition-all active:scale-95 disabled:opacity-50 cursor-pointer flex flex-col items-center leading-tight gap-0.5"
+                >
+                  <span>🔥 예! 연속 5가챠 진행 (총 6회)</span>
+                  <span className="text-[11px] font-bold text-slate-900/90">
+                    뽑기권 5장 사용 + 1회 무료 보너스 지급
+                  </span>
+                </button>
+              )}
+
+              {/* 직접 횟수 입력 (디폴트 1, 보유 수량 초과 입력 원천 차단) */}
+              <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-300">
+                    {maxTickets >= 5 ? '또는 직접 횟수 입력' : '진행할 뽑기 횟수 입력'}
+                  </span>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    최대 {maxTickets}회
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={maxTickets}
+                    value={startPlayInput}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === '') {
+                        setStartPlayInput('');
+                        setStartModalError('');
+                        return;
+                      }
+                      const num = parseInt(raw, 10);
+                      if (isNaN(num)) return;
+                      if (num > maxTickets) {
+                        setStartPlayInput(String(maxTickets));
+                        setStartModalError(`보유 뽑기권(${maxTickets}장)을 넘을 수 없습니다.`);
+                      } else if (num < 1) {
+                        setStartPlayInput('1');
+                        setStartModalError('');
+                      } else {
+                        setStartPlayInput(String(num));
+                        setStartModalError('');
+                      }
+                    }}
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-cyan-400 rounded-xl px-3.5 py-2.5 text-center text-base font-black text-white font-mono outline-none"
+                  />
+                  <span className="text-xs font-bold text-slate-400 shrink-0">회</span>
+                </div>
+
+                {/* 빠른 선택 버튼 (보유 수량 내) */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[1, 2, 3, 4].filter((n) => n <= maxTickets).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => {
+                        setStartPlayInput(String(n));
+                        setStartModalError('');
+                      }}
+                      className={`flex-1 min-w-[48px] py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${
+                        startPlayInput === String(n)
+                          ? 'bg-cyan-500/25 border-cyan-400 text-cyan-200'
+                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      {n}회
+                    </button>
+                  ))}
+                </div>
+
+                {validCount !== null && inputBonus > 0 && (
+                  <p className="text-[11px] text-amber-300 font-bold text-center">
+                    🎁 {validCount}장 사용 → 보너스 +{inputBonus}회 무료 (총 {inputTotal}회 연속!)
+                  </p>
+                )}
+
+                {maxTickets < 5 && (
+                  <p className="text-[10px] text-slate-500 text-center">
+                    💡 뽑기권 5장 이상 보유 시 연속 5가챠(+1회 무료)를 이용할 수 있습니다.
+                  </p>
+                )}
+              </div>
+
+              {startModalError && (
+                <p className="text-xs text-rose-400 font-bold text-center">{startModalError}</p>
+              )}
+
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  disabled={isStarting}
+                  onClick={() => setIsStartModalOpen(false)}
+                  className="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs sm:text-sm cursor-pointer disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  disabled={isStarting || validCount === null}
+                  onClick={() => validCount !== null && handleStartTurn(validCount)}
+                  className="py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-cyan-500/20 cursor-pointer disabled:opacity-40"
+                >
+                  {isStarting
+                    ? '준비 중...'
+                    : validCount
+                    ? inputBonus > 0
+                      ? `${validCount}장 시작 (총 ${inputTotal}회)`
+                      : `${validCount}회 뽑기 시작`
+                    : '횟수 입력'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 당첨 축하 폭죽 팝업 */}
       <GachaWinModal
         isOpen={!!activeWinModal}
-        onClose={() => setActiveWinModal(null)}
+        onClose={() => {
+          setActiveWinModal(null);
+          if (pendingNextTurnKey) {
+            const nextKey = pendingNextTurnKey;
+            setPendingNextTurnKey(null);
+            setActiveTurnKey(nextKey);
+          }
+        }}
         winRecord={activeWinModal}
       />
 

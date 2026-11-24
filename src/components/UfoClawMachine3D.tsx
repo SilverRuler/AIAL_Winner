@@ -41,6 +41,8 @@ interface UfoClawMachine3DProps {
   selectedMemberTickets: number;
   isStarting: boolean;
   isFinishing?: boolean;
+  sessionProgress?: { current: number; total: number; bonusPlays: number } | null;
+  otherSessionProgress?: { current: number; total: number } | null;
 }
 
 function createSidePanelTexture(title: string, accent: string, bg: string): THREE.CanvasTexture {
@@ -170,6 +172,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   selectedMemberTickets,
   isStarting,
   isFinishing = false,
+  sessionProgress = null,
+  otherSessionProgress = null,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<CranePhase>('idle');
@@ -1119,13 +1123,32 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           </div>
         )}
 
+        {/* 연속 뽑기 진행 회차 뱃지 */}
+        {isMyTurn && sessionProgress && sessionProgress.total > 1 && (
+          <div className="absolute top-2.5 right-2.5 pointer-events-none px-3 py-1 rounded-xl bg-indigo-950/90 border border-cyan-400/50 text-xs font-black text-cyan-200 shadow-lg backdrop-blur-sm flex items-center gap-1.5">
+            <span>
+              🔥 연속 뽑기 {sessionProgress.current} / {sessionProgress.total}회
+            </span>
+            {sessionProgress.bonusPlays > 0 &&
+              sessionProgress.current > sessionProgress.total - sessionProgress.bonusPlays && (
+                <span className="px-1.5 py-0.5 rounded-md bg-amber-500 text-slate-950 text-[10px] font-black">
+                  🎁 무료 보너스!
+                </span>
+              )}
+          </div>
+        )}
+
         {/* 다른 멤버가 뽑기 진행 중일 때 동시 진행 방지 안내 오버레이 */}
         {lockedByOther && !isMyTurn && (
           <div className="absolute inset-0 z-10 bg-slate-950/45 backdrop-blur-[1.5px] flex items-center justify-center p-4 pointer-events-auto">
             <div className="px-5 py-3.5 rounded-2xl bg-slate-900/95 border border-rose-500/60 shadow-2xl text-center space-y-1 max-w-xs">
               <div className="inline-flex items-center gap-1.5 text-rose-300 text-xs font-black">
                 <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
-                <span>현재 뽑기 진행 중</span>
+                <span>
+                  {otherSessionProgress && otherSessionProgress.total > 1
+                    ? `연속 뽑기 진행 중 (${otherSessionProgress.current}/${otherSessionProgress.total}회)`
+                    : '현재 뽑기 진행 중'}
+                </span>
               </div>
               <p className="text-sm font-black text-white">
                 🔒 <span className="text-amber-300">{lockedByOther}</span>님이 뽑기를 진행 중입니다
@@ -1162,7 +1185,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
                 ? '📦 모든 상품 완판 (운영자 리필 대기)'
                 : selectedMemberTickets < 1
                 ? '뽑기권이 부족합니다 (식사 등록 시 +5장)'
-                : '🕹️ 뽑기 시작! (뽑기권 1장 사용)'}
+                : '🕹️ 뽑기 시작!'}
             </button>
           </div>
         ) : (

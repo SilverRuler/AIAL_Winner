@@ -127,38 +127,80 @@ export async function POST(request: NextRequest) {
       wonRecords.push(winRecord);
     }
 
+    // 실제 플레이 횟수(+1) 및 당첨 수 기록
+    const ticketInc: Record<string, number> = { totalPlayed: 1 };
     if (wonRecords.length > 0) {
+      ticketInc.totalWins = wonRecords.length;
       await db.collection('gacha_wins').insertMany(wonRecords.map((r) => ({ ...r, _id: r.id as any })));
-      await db.collection('gacha_tickets').updateOne(
-        { _id: member as any },
-        { $inc: { totalWins: wonRecords.length }, $set: { updatedAt: now } }
-      );
     }
+
+    // 연속 뽑기 세션 잔여 횟수 계산
+    const totalPlays = Math.max(1, Number(lock.totalPlays) || 1);
+    const prevRemaining = Math.max(1, Number(lock.remainingPlays) || 1);
+    const prevShotIndex = Math.max(1, Number(lock.shotIndex) || 1);
+    const paidTickets = Math.max(1, Number(lock.paidTickets) || totalPlays);
+    const bonusPlays = Math.max(0, Number(lock.bonusPlays) || 0);
+    const nextRemaining = Math.max(0, prevRemaining - 1);
+
+    // 남은 상품이 있고 잔여 회차가 남아있으면 락 유지한 채 다음 연속 회차로 이어감
+    const sessionContinue = nextRemaining > 0 && remainingItems.length > 0;
+    const nextShotIndex = prevShotIndex + 1;
+
+    // 도중에 모든 상품이 완판되어 연속 뽑기가 조기 종료된 경우 미사용 유료 티켓 자동 환불
+    let refundedTickets = 0;
+    if (nextRemaining > 0 && remainingItems.length === 0) {
+      const usedShots = totalPlays - nextRemaining;
+      refundedTickets = Math.max(0, paidTickets - usedShots);
+      if (refundedTickets > 0) {
+        ticketInc.tickets = refundedTickets;
+      }
+    }
+
+    await db.collection('gacha_tickets').updateOne(
+      { _id: member as any },
+      { $inc: ticketInc, $set: { updatedAt: now } }
+    );
 
     // slotIndex 순 정렬
     remainingItems.sort((a, b) => a.slotIndex - b.slotIndex);
 
+    const progressTag = totalPlays > 1 ? ` (${prevShotIndex}/${totalPlays}회)` : '';
+    const refundNote =
+      refundedTickets > 0 ? ` · 미사용 뽑기권 ${refundedTickets}장 자동 환불` : '';
     const actionSummary =
       wonRecords.length > 0
         ? remainingItems.length === 0
-          ? `🎉 ${member}님이 마지막 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공! 모든 상품이 뽑혔습니다. (운영자 리필 대기)`
-          : `🎉 ${member}님이 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공했습니다! (남은 상품 ${remainingItems.length}개)`
-        : `${member}님이 크레인을 조작하여 상자 위치를 움직였습니다.`;
+          ? `🎉 ${member}님이 마지막 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공! 모든 상품이 뽑혔습니다. (운영자 리필 대기${refundNote})`
+          : `🎉 ${member}님이 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공했습니다!${progressTag} (남은 상품 ${remainingItems.length}개)`
+        : `${member}님이 크레인을 조작하여 상자 위치를 움직였습니다.${progressTag}`;
 
-    const clearedLock = {
-      active: false,
-      member: null,
-      turnId: null,
-      startedAt: null,
-      expiresAt: null,
-    };
+    const nextLock = sessionContinue
+      ? {
+          active: true,
+          member,
+          turnId,
+          startedAt: lock.startedAt || now,
+          expiresAt: now + GACHA_PHYSICS.LOCK_TTL_MS,
+          totalPlays,
+          remainingPlays: nextRemaining,
+          shotIndex: nextShotIndex,
+          paidTickets,
+          bonusPlays,
+        }
+      : {
+          active: false,
+          member: null,
+          turnId: null,
+          startedAt: null,
+          expiresAt: null,
+        };
 
     const nextMachine = await col.findOneAndUpdate(
       { _id: 'main_ufo_bridge' as any },
       {
         $set: {
           items: remainingItems,
-          lock: clearedLock,
+          lock: nextLock,
           lastPlayedBy: member,
           lastPlayedAt: now,
           lastActionSummary: actionSummary,
@@ -174,6 +216,12 @@ export async function POST(request: NextRequest) {
       success: true,
       serverNow: Date.now(),
       wonRecords,
+      sessionContinue,
+      totalPlays,
+      remainingPlays: sessionContinue ? nextRemaining : 0,
+      nextShotIndex: sessionContinue ? nextShotIndex : 0,
+      bonusPlays,
+      refundedTickets,
       machine: sanitizeMachineForClient((nextMachine || rawMachine) as any),
       ticketsByMember,
     });

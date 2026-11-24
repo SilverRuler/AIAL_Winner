@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const member = (body?.member || '').trim();
+    const rawPlayCount = body?.playCount !== undefined ? Number(body.playCount) : 1;
 
     if (!member || !MEMBERS.some((m) => m.name === member)) {
       return NextResponse.json(
@@ -19,6 +20,18 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    if (!Number.isInteger(rawPlayCount) || rawPlayCount < 1 || rawPlayCount > 100) {
+      return NextResponse.json(
+        { success: false, message: '올바른 뽑기 횟수(1회 이상 정수)를 입력해주세요.' },
+        { status: 400 }
+      );
+    }
+
+    const playCount = rawPlayCount;
+    // 연속 5가챠당 1회 무료 보너스 지급 (예: 5장 사용 -> 총 6회 연속)
+    const bonusPlays = Math.floor(playCount / 5);
+    const totalPlays = playCount + bonusPlays;
 
     const db = await getDatabase();
     if (!db) {
@@ -37,7 +50,8 @@ export async function POST(request: NextRequest) {
         {
           success: false,
           lockedBy: machine.lock.member,
-          message: `현재 ${machine.lock.member}님이 크레인을 조작 중입니다. 잠시만 기다려주세요!`,
+          serverNow: now,
+          message: `현재 ${machine.lock.member}님이 크레인을 조작 중입니다. 완료될 때까지 잠시만 기다려주세요!`,
         },
         { status: 409 }
       );
@@ -53,27 +67,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 2. 뽑기권 1장 원자적 차감
+    // 2. 뽑기권 playCount장 원자적 차감 (보유 수량 초과 요청 원천 차단)
     const ticketRes = await db.collection('gacha_tickets').findOneAndUpdate(
-      { _id: member as any, tickets: { $gte: 1 } },
+      { _id: member as any, tickets: { $gte: playCount } },
       {
-        $inc: { tickets: -1, totalPlayed: 1 },
+        $inc: { tickets: -playCount },
         $set: { updatedAt: now },
       },
       { returnDocument: 'after' }
     );
 
     if (!ticketRes) {
+      const currentDoc = (await db
+        .collection('gacha_tickets')
+        .findOne({ _id: member as any })) as any;
+      const curTickets = Math.max(0, Number(currentDoc?.tickets) || 0);
       return NextResponse.json(
         {
           success: false,
-          message: `${member}님의 보유 뽑기권이 없습니다. 식사 사진을 등록하면 뽑기권 5장이 지급됩니다!`,
+          message:
+            curTickets === 0
+              ? `${member}님의 보유 뽑기권이 없습니다. 식사 사진을 등록하면 뽑기권 5장이 지급됩니다!`
+              : `${member}님의 보유 뽑기권(${curTickets}장)보다 많은 ${playCount}회는 진행할 수 없습니다.`,
         },
         { status: 400 }
       );
     }
 
-    // 3. 원자적 머신 락 획득 (동시 시작 경합 시 티켓 복구)
+    // 3. 원자적 머신 락 획득 (동시 시작 경합 시 차감한 티켓 전액 롤백)
     const turnId = `turn_${now}_${Math.random().toString(36).substring(2, 8)}`;
     const newLock = {
       active: true,
@@ -81,6 +102,11 @@ export async function POST(request: NextRequest) {
       turnId,
       startedAt: now,
       expiresAt: now + GACHA_PHYSICS.LOCK_TTL_MS,
+      totalPlays,
+      remainingPlays: totalPlays,
+      shotIndex: 1,
+      paidTickets: playCount,
+      bonusPlays,
     };
 
     const lockRes = await db.collection('gacha_machine').findOneAndUpdate(
@@ -105,7 +131,7 @@ export async function POST(request: NextRequest) {
       // 동시 클릭으로 락 획득 실패 시 차감했던 티켓 롤백
       await db.collection('gacha_tickets').updateOne(
         { _id: member as any },
-        { $inc: { tickets: 1, totalPlayed: -1 }, $set: { updatedAt: Date.now() } }
+        { $inc: { tickets: playCount }, $set: { updatedAt: Date.now() } }
       );
       const latestMachine = (await db
         .collection('gacha_machine')
@@ -128,6 +154,11 @@ export async function POST(request: NextRequest) {
       success: true,
       serverNow: Date.now(),
       turnId,
+      shotIndex: 1,
+      totalPlays,
+      remainingPlays: totalPlays,
+      paidTickets: playCount,
+      bonusPlays,
       expiresAt: newLock.expiresAt,
       machine: sanitizeMachineForClient(lockRes as any),
       ticketsByMember,

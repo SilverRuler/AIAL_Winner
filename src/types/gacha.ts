@@ -20,6 +20,11 @@ export interface GachaMachineLock {
   turnId: string | null;
   startedAt: number | null;
   expiresAt: number | null;
+  totalPlays?: number;
+  remainingPlays?: number;
+  shotIndex?: number;
+  paidTickets?: number;
+  bonusPlays?: number;
 }
 
 export interface GachaMachineState {

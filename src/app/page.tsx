@@ -39,6 +39,7 @@ import { NewMealModal } from '@/components/NewMealModal';
 import { LeaderboardModal } from '@/components/LeaderboardModal';
 import { HowToModal } from '@/components/HowToModal';
 import { NoticeModal } from '@/components/NoticeModal';
+import { OperatorBalanceModal } from '@/components/OperatorBalanceModal';
 import { AdminLoginModal } from '@/components/AdminLoginModal';
 import { ImageViewerModal } from '@/components/ImageViewerModal';
 import { AdminAuthModal, AdminActionType } from '@/components/AdminAuthModal';
@@ -78,6 +79,7 @@ export default function Home() {
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState<boolean>(false);
   const [isHowToOpen, setIsHowToOpen] = useState<boolean>(false);
   const [isNoticeOpen, setIsNoticeOpen] = useState<boolean>(false);
+  const [isOperatorBalanceOpen, setIsOperatorBalanceOpen] = useState<boolean>(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState<boolean>(false);
   const [isAdminQuizOpen, setIsAdminQuizOpen] = useState<boolean>(false);
   const [isBestWinnerOpen, setIsBestWinnerOpen] = useState<boolean>(false);
@@ -220,6 +222,7 @@ export default function Home() {
       isLeaderboardOpen ||
       isHowToOpen ||
       isNoticeOpen ||
+      isOperatorBalanceOpen ||
       isAdminLoginOpen ||
       isBestWinnerOpen ||
       isBestScoreOpen ||
@@ -372,6 +375,7 @@ export default function Home() {
     isLeaderboardOpen,
     isHowToOpen,
     isNoticeOpen,
+    isOperatorBalanceOpen,
     isAdminLoginOpen,
     isBestWinnerOpen,
     isBestScoreOpen,
@@ -1159,6 +1163,7 @@ export default function Home() {
         onOpenNewMeal={() => setIsNewMealOpen(true)}
         onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
         onOpenNotice={() => setIsNoticeOpen(true)}
+        onOpenOperatorBalance={() => setIsOperatorBalanceOpen(true)}
         onOpenHowTo={() => setIsHowToOpen(true)}
         onOpenAdminLogin={() => setIsAdminLoginOpen(true)}
         onAdminLogout={handleAdminLogout}
@@ -1754,6 +1759,11 @@ export default function Home() {
       <NoticeModal
         isOpen={isNoticeOpen}
         onClose={() => setIsNoticeOpen(false)}
+      />
+
+      <OperatorBalanceModal
+        isOpen={isOperatorBalanceOpen}
+        onClose={() => setIsOperatorBalanceOpen(false)}
       />
 
       <AdminLoginModal

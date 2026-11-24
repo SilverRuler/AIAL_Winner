@@ -2,12 +2,13 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell, Gamepad2 } from 'lucide-react';
+import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell, Gamepad2, Wallet } from 'lucide-react';
 
 interface HeaderProps {
   onOpenNewMeal: () => void;
   onOpenLeaderboard: () => void;
   onOpenNotice: () => void;
+  onOpenOperatorBalance: () => void;
   onOpenHowTo: () => void;
   onOpenAdminLogin: () => void;
   onAdminLogout: () => void;
@@ -22,6 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewMeal,
   onOpenLeaderboard,
   onOpenNotice,
+  onOpenOperatorBalance,
   onOpenHowTo,
   onOpenAdminLogin,
   onAdminLogout,
@@ -148,6 +150,17 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="sm:hidden">공지</span>
               <span className="hidden sm:inline">공지사항</span>
               <span className="w-1.5 h-1.5 rounded-full bg-blue-400 absolute top-1.5 right-1.5 animate-pulse" />
+            </button>
+
+            {/* 2-2) 운영자 잔고 (공지사항과 뽑기하러 가기 사이) */}
+            <button
+              onClick={onOpenOperatorBalance}
+              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-900 border border-emerald-500/40 text-emerald-300 hover:text-white hover:bg-emerald-500/15 hover:border-emerald-400/70 transition-all text-[11px] sm:text-sm font-semibold shrink-0 cursor-pointer"
+              title="운영자 솔라나(SOL) 리워드 잔고 및 시세 확인"
+            >
+              <Wallet className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400" />
+              <span className="sm:hidden">잔고</span>
+              <span className="hidden sm:inline">운영자 잔고</span>
             </button>
 
             {/* 3) 관리자 QUIZ 메뉴 버튼 */}

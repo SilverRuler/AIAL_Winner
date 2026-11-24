@@ -35,9 +35,9 @@ export const GACHA_PHYSICS = {
   CLAW_MAX_Z: 0.85,
   CLAW_DROP_Y: 0.96,      // 하강 시 집게 중심 Y (Bar 위 상자 높이에 최적화)
   CLAW_LIFT_Y: 2.35,      // 들어올림 최고 높이
-  MOVE_SPEED_X: 1.65,     // 초당 X 이동 속도
-  MOVE_SPEED_Z: 1.25,     // 초당 Z 이동 속도
-  CLAW_DESCEND_SPEED: 0.95, // 초당 집게 하강 속도 (기존 1.9에서 완화)
+  MOVE_SPEED_X: 0.825,      // 초당 X 이동 속도 (기존 1.65의 1/2)
+  MOVE_SPEED_Z: 0.625,      // 초당 Z 이동 속도 (기존 1.25의 1/2)
+  CLAW_DESCEND_SPEED: 0.475, // 초당 집게 하강 속도 (기존 0.95의 1/2)
 
   // 턴 락 타임아웃 (25초 - 플레이 중 8초마다 하트비트로 자동 연장, 비정상 이탈 시 25초 내 자동 해제)
   LOCK_TTL_MS: 25 * 1000,

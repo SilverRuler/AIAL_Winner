@@ -54,8 +54,8 @@ export const GACHA_SLOT_X = [-2.05, -0.68, 0.68, 2.05] as const;
 export const GACHA_SLOT_BOX_DIMS = [
   { w: 0.60, h: 0.60, d: 1.46, mass: 1.55 }, // #1 프리렌: 기존 정사각형 밑면 그대로
   { w: 0.68, h: 0.44, d: 1.40, mass: 1.50 }, // #2 네즈코: 납작하고 와이드한 박스
-  { w: 0.52, h: 0.68, d: 1.50, mass: 1.55 }, // #3 프리렌: 슬림하고 키 크며 살짝 긴 박스
-  { w: 0.64, h: 0.54, d: 1.36, mass: 1.50 }, // #4 네즈코: 살짝 짧고 두툼한 컴팩트 박스
+  { w: 0.52, h: 0.68, d: 1.50, mass: 1.55 }, // #3 노엘 실바: 슬림하고 키 크며 살짝 긴 박스
+  { w: 0.64, h: 0.54, d: 1.36, mass: 1.50 }, // #4 레제: 살짝 짧고 두툼한 컴팩트 박스
 ] as const;
 
 export function getBoxDimensions(slotIndex: number) {
@@ -82,10 +82,17 @@ export function getRestingBoxPosition(slotIndex: number): [number, number, numbe
 /**
  * 특정 슬롯에 새 미스터리 박스 1개 생성 (서버 측 보상 포함)
  */
+const GACHA_SLOT_LABELS = [
+  '프리렌 박스 #1',
+  '네즈코 박스 #2',
+  '노엘 실바 박스 #3',
+  '레제 박스 #4',
+] as const;
+
 export function createBoxForSlot(slotIndex: number, nowTs = Date.now()): GachaBoxItem {
   const safeIdx = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, slotIndex));
   const theme = GACHA_COLOR_THEMES[safeIdx % GACHA_COLOR_THEMES.length];
-  const charLabel = safeIdx % 2 === 0 ? `프리렌 박스 #${safeIdx + 1}` : `네즈코 박스 #${safeIdx + 1}`;
+  const charLabel = GACHA_SLOT_LABELS[safeIdx] || `미스터리 박스 #${safeIdx + 1}`;
   return {
     id: `box_s${safeIdx}_${nowTs}_${Math.random().toString(36).substring(2, 7)}`,
     slotIndex: safeIdx,

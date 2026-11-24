@@ -89,12 +89,49 @@ function createSidePanelTexture(title: string, accent: string, bg: string): THRE
   return tex;
 }
 
+const FIGURE_SLOT_STYLES = [
+  {
+    imgSrc: '/gacha/frieren.png',
+    frontAccent: '#bae6fd',
+    frontBg: '#0369a1',
+    sideAccent: '#7dd3fc',
+    sideBg: '#0c4a6e',
+    title: 'FRIEREN',
+  },
+  {
+    imgSrc: '/gacha/nezuko.png',
+    frontAccent: '#fbcfe8',
+    frontBg: '#be123c',
+    sideAccent: '#f9a8d4',
+    sideBg: '#881337',
+    title: 'NEZUKO',
+  },
+  {
+    imgSrc: '/gacha/noel_silva.png',
+    frontAccent: '#bfdbfe',
+    frontBg: '#1d4ed8',
+    sideAccent: '#93c5fd',
+    sideBg: '#1e3a8a',
+    title: 'NOEL SILVA',
+  },
+  {
+    imgSrc: '/gacha/reze.png',
+    frontAccent: '#f5d0fe',
+    frontBg: '#7e22ce',
+    sideAccent: '#e879f9',
+    sideBg: '#581c87',
+    title: 'REZE',
+  },
+] as const;
+
+function getFigureSlotStyle(slotIndex: number) {
+  const safeIdx = ((slotIndex % FIGURE_SLOT_STYLES.length) + FIGURE_SLOT_STYLES.length) % FIGURE_SLOT_STYLES.length;
+  return FIGURE_SLOT_STYLES[safeIdx];
+}
+
 function createFigureFrontTexture(slotIndex: number, label: string): THREE.CanvasTexture {
-  const isFrieren = slotIndex % 2 === 0;
-  const imgSrc = isFrieren ? '/gacha/frieren.png' : '/gacha/nezuko.png';
-  const accent = isFrieren ? '#bae6fd' : '#fbcfe8';
-  const bg = isFrieren ? '#0369a1' : '#be123c';
-  const title = isFrieren ? 'FRIEREN' : 'NEZUKO';
+  const style = getFigureSlotStyle(slotIndex);
+  const { imgSrc, frontAccent: accent, frontBg: bg, title } = style;
 
   const canvas = document.createElement('canvas');
   canvas.width = 256;
@@ -158,10 +195,7 @@ function createFigureFrontTexture(slotIndex: number, label: string): THREE.Canva
 }
 
 function createFigureBoxMaterials(slotIndex: number, label: string): THREE.MeshStandardMaterial[] {
-  const isFrieren = slotIndex % 2 === 0;
-  const accent = isFrieren ? '#7dd3fc' : '#f9a8d4';
-  const bg = isFrieren ? '#0c4a6e' : '#881337';
-  const title = isFrieren ? 'FRIEREN' : 'NEZUKO';
+  const { sideAccent: accent, sideBg: bg, title } = getFigureSlotStyle(slotIndex);
 
   const frontTex = createFigureFrontTexture(slotIndex, label);
   const sideTex = createSidePanelTexture(title, accent, bg);

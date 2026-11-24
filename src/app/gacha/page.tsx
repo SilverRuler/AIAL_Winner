@@ -1007,9 +1007,15 @@ export default function GachaPage() {
                 </div>
                 <div className="p-4 space-y-2.5 text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
                   <p className="flex items-start gap-2">
+                    <Sparkles className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                    <span>
+                      현재 뽑기판의 평균 난이도는 <strong className="text-rose-300">6.5(중상)</strong>입니다.
+                    </span>
+                  </p>
+                  <p className="flex items-start gap-2">
                     <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <span>
-                      뽑기 상품의 재정렬과 refill은 <strong className="text-amber-300">10:30, 14:00, 23:00</strong>에 자동으로 진행됩니다.
+                      뽑기 상품의 재정렬은 <strong className="text-amber-300">10:30, 14:00, 23:00</strong>에 자동으로 진행됩니다. (리필은 관리자 별도 진행)
                     </span>
                   </p>
                   <p className="flex items-start gap-2 text-slate-300">

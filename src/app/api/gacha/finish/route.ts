@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { GachaBoxItem, GachaWinRecord } from '@/types/gacha';
-import { GACHA_DEFAULT_REWARD_AMOUNT, GACHA_PHYSICS } from '@/constants/gacha';
+import {
+  createInitialGachaBoxes,
+  GACHA_DEFAULT_REWARD_AMOUNT,
+  GACHA_PHYSICS,
+} from '@/constants/gacha';
 import {
   getAllMemberTicketBalances,
   getOrInitMachineState,
-  refillWonSlot,
   sanitizeMachineForClient,
 } from '@/lib/gachaServer';
 
@@ -103,7 +106,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 당첨 처리 및 뽑힌 슬롯 자동 리필
+    // 당첨 처리 (개별 뽑기 시에는 즉시 리필하지 않고, 4개 상품이 모두 뽑혀 비었을 때 4개 일괄 리필)
     const wonRecords: GachaWinRecord[] = [];
     for (let i = 0; i < wonBoxes.length; i++) {
       const won = wonBoxes[i];
@@ -123,10 +126,12 @@ export async function POST(request: NextRequest) {
         createdAt: now + i,
       };
       wonRecords.push(winRecord);
+    }
 
-      // 자동 리필: 방금 빠진 슬롯(또는 여유 슬롯)에 새 캡슐 즉시 보충
-      const refilled = refillWonSlot(remainingItems, won.slotIndex, now + i + 10);
-      remainingItems.push(refilled);
+    let didFullRefill = false;
+    if (remainingItems.length === 0) {
+      remainingItems.push(...createInitialGachaBoxes());
+      didFullRefill = true;
     }
 
     if (wonRecords.length > 0) {
@@ -142,7 +147,9 @@ export async function POST(request: NextRequest) {
 
     const actionSummary =
       wonRecords.length > 0
-        ? `🎉 ${member}님이 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공했습니다! (자동 리필 완료)`
+        ? didFullRefill
+          ? `🎉 ${member}님이 마지막 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공! 4개 모두 뽑혀 새 상품 4개가 리필되었습니다.`
+          : `🎉 ${member}님이 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공했습니다! (남은 상품 ${remainingItems.length}개)`
         : `${member}님이 크레인을 조작하여 상자 위치를 움직였습니다.`;
 
     const clearedLock = {

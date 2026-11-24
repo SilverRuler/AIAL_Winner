@@ -37,14 +37,18 @@ export async function GET(request: NextRequest) {
       .sort({ createdAt: -1 })
       .toArray();
 
-    // 전체 멤버별 기신청 차감 승수 및 푼 퀴즈 ID 목록 집계 (반려 rejected 건 제외)
-    const allValidApps = await db
-      .collection('reward_applications')
-      .find({ status: { $ne: 'rejected' } })
-      .toArray();
+    // 전체 멤버별 기신청 차감 승수, 푼 퀴즈 ID, 뽑기권 교환 차감 승수 집계 (반려 rejected 건 제외)
+    const [allValidApps, allExchanges] = await Promise.all([
+      db
+        .collection('reward_applications')
+        .find({ status: { $ne: 'rejected' } })
+        .toArray(),
+      db.collection('gacha_win_exchanges').find({}).toArray(),
+    ]);
 
     const memberUsedWins: Record<string, number> = {};
     const memberSolvedQuizIds: Record<string, string[]> = {};
+    const memberExchangedWins: Record<string, number> = {};
 
     for (const app of allValidApps) {
       memberUsedWins[app.member] =
@@ -59,6 +63,13 @@ export async function GET(request: NextRequest) {
             memberSolvedQuizIds[app.member].push(qId);
           }
         }
+      }
+    }
+
+    for (const ex of allExchanges as any[]) {
+      if (ex.member) {
+        memberExchangedWins[ex.member] =
+          (memberExchangedWins[ex.member] || 0) + (Number(ex.winsUsed) || 1);
       }
     }
 
@@ -77,6 +88,7 @@ export async function GET(request: NextRequest) {
         date: app.date || '',
       })),
       memberUsedWins,
+      memberExchangedWins,
       memberSolvedQuizIds,
     });
   } catch (err: any) {
@@ -136,36 +148,45 @@ export async function POST(request: NextRequest) {
 
     const actualWins = winMeals.length;
 
-    // 2. 해당 유저의 기존 리워드 신청 차감 승수(usedWins) 집계 (rejected 제외)
-    const existingApps = await db
-      .collection('reward_applications')
-      .find({ member: trimmedMember, status: { $ne: 'rejected' } })
-      .toArray();
+    // 2. 해당 유저의 기존 리워드 신청 차감 승수(usedWins) 및 뽑기권 교환 차감 승수(exchangedWins) 집계
+    const [existingApps, existingExchanges] = await Promise.all([
+      db
+        .collection('reward_applications')
+        .find({ member: trimmedMember, status: { $ne: 'rejected' } })
+        .toArray(),
+      db.collection('gacha_win_exchanges').find({ member: trimmedMember }).toArray(),
+    ]);
 
     const usedWins = existingApps.reduce(
       (sum: number, app: any) => sum + (app.requestedWins || 0),
       0
     );
+    const exchangedWins = existingExchanges.reduce(
+      (sum: number, ex: any) => sum + (Number(ex.winsUsed) || 1),
+      0
+    );
 
-    // 3. 남은 신청 가능 승수(availableWins) 계산 (자신의 승수는 유지되지만 신청 가능 수만 차감)
-    const availableWins = Math.max(0, actualWins - usedWins);
-    const maxAllowedWins = Math.floor(availableWins / 5) * 5;
+    // 3. 남은 신청 가능 승수(availableWins) 계산 (총 승수는 유지, 기신청 + 뽑기권 교환 차감; 음수 가능)
+    const availableWins = actualWins - usedWins - exchangedWins;
+    const maxAllowedWins = availableWins >= 5 ? Math.floor(availableWins / 5) * 5 : 0;
 
     if (availableWins < 5) {
+      const exNote = exchangedWins > 0 ? `, 뽑기권과 승수 교환 ${exchangedWins}회 차감` : '';
       return NextResponse.json(
         {
           success: false,
-          message: `남은 신청 가능 승수(${availableWins}WIN)가 최소 요구치(5WIN)에 미달합니다. (총 ${actualWins}WIN 중 ${usedWins}WIN 기신청)`,
+          message: `남은 신청 가능 승수(${availableWins}WIN)가 최소 요구치(5WIN)에 미달합니다. (총 ${actualWins}WIN 중 ${usedWins}WIN 기신청${exNote})`,
         },
         { status: 400 }
       );
     }
 
     if (parsedWins > maxAllowedWins) {
+      const exNote = exchangedWins > 0 ? `, 뽑기권 교환 ${exchangedWins}회 차감` : '';
       return NextResponse.json(
         {
           success: false,
-          message: `신청 승수(${parsedWins}WIN)가 남은 신청 가능 승수(${maxAllowedWins}WIN)를 초과했습니다. (총 ${actualWins}WIN 중 ${usedWins}WIN 기신청, 잔여 ${availableWins}WIN)`,
+          message: `신청 승수(${parsedWins}WIN)가 남은 신청 가능 승수(${maxAllowedWins}WIN)를 초과했습니다. (총 ${actualWins}WIN 중 ${usedWins}WIN 기신청${exNote}, 잔여 ${availableWins}WIN)`,
         },
         { status: 400 }
       );

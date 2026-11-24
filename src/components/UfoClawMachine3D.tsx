@@ -3,9 +3,22 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { ArrowRight, ArrowUp, Volume2, VolumeX, Sparkles } from 'lucide-react';
+import {
+  ArrowRight,
+  ArrowUp,
+  Volume2,
+  VolumeX,
+  Sparkles,
+  ChevronUp,
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  Camera,
+} from 'lucide-react';
 import { GachaBoxItem } from '@/types/gacha';
 import { GACHA_PHYSICS, getBoxDimensions } from '@/constants/gacha';
+
+type CameraView = 'front' | 'top' | 'right';
 
 export type CranePhase =
   | 'idle'
@@ -179,10 +192,12 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   const [phase, setPhase] = useState<CranePhase>('idle');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [droppedThisTurn, setDroppedThisTurn] = useState<number>(0);
+  const [cameraView, setCameraView] = useState<CameraView>('front');
 
   // Refs for animation loop access without re-creating Three.js scene
   const phaseRef = useRef<CranePhase>('idle');
   const soundEnabledRef = useRef<boolean>(true);
+  const cameraViewRef = useRef<CameraView>('front');
   const itemsRef = useRef<GachaBoxItem[]>(items);
   const onTurnFinishRef = useRef(onTurnFinish);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -190,6 +205,10 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
+
+  useEffect(() => {
+    cameraViewRef.current = cameraView;
+  }, [cameraView]);
 
   useEffect(() => {
     onTurnFinishRef.current = onTurnFinish;
@@ -282,17 +301,53 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     scene.fog = new THREE.FogExp2('#070b18', 0.045);
 
     const camera = new THREE.PerspectiveCamera(42, width / height, 0.1, 100);
-    const applyResponsiveCamera = (w: number, h: number) => {
+    let viewportW = width;
+    let viewportH = height;
+
+    const getCameraPose = (view: CameraView, w: number, h: number) => {
       const aspect = Math.max(0.55, w / Math.max(1, h));
-      camera.aspect = aspect;
-      // 모바일 세로/정사각 화면에서는 가로폭 전체(좌우 기둥 ±3.3)가 잘리지 않도록 카메라 거리 및 화각 자동 보정
       const scale = aspect < 1.48 ? Math.min(1.95, 1.52 / aspect) : 1.0;
-      camera.fov = aspect < 1.15 ? 48 : 42;
-      camera.position.set(0, 4.15 * (1 + (scale - 1) * 0.72), 6.25 * scale);
-      camera.lookAt(0, 0.78, 0);
+      const fov = aspect < 1.15 ? 48 : 42;
+      if (view === 'top') {
+        // 항공뷰: 위에서 4-Bar와 상자·조준링을 수직에 가깝게 내려다봄
+        return {
+          fov,
+          pos: new THREE.Vector3(0, 7.6 * Math.max(1, scale * 0.92), 0.72),
+          look: new THREE.Vector3(0, 0.75, 0),
+        };
+      }
+      if (view === 'right') {
+        // 우측뷰: 오른쪽(+X) 측면에서 4-Bar 단면과 크레인 Z축 깊이를 정밀 확인
+        return {
+          fov,
+          pos: new THREE.Vector3(6.25 * Math.max(1, scale * 0.85), 2.35 * (1 + (scale - 1) * 0.35), 0),
+          look: new THREE.Vector3(0, 0.85, 0),
+        };
+      }
+      // 정면뷰 (기본)
+      return {
+        fov,
+        pos: new THREE.Vector3(0, 4.15 * (1 + (scale - 1) * 0.72), 6.25 * scale),
+        look: new THREE.Vector3(0, 0.78, 0),
+      };
+    };
+
+    const currentLookAt = new THREE.Vector3(0, 0.78, 0);
+    const applyResponsiveCamera = (w: number, h: number, snap = false) => {
+      viewportW = w;
+      viewportH = h;
+      const aspect = Math.max(0.55, w / Math.max(1, h));
+      const pose = getCameraPose(cameraViewRef.current, w, h);
+      camera.aspect = aspect;
+      camera.fov = pose.fov;
+      if (snap) {
+        camera.position.copy(pose.pos);
+        currentLookAt.copy(pose.look);
+        camera.lookAt(currentLookAt);
+      }
       camera.updateProjectionMatrix();
     };
-    applyResponsiveCamera(width, height);
+    applyResponsiveCamera(width, height, true);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setSize(width, height);
@@ -981,6 +1036,13 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         aimBeam.position.set(state.clawX, GACHA_PHYSICS.BAR_Y + 0.12 + beamH / 2, state.clawZ);
       }
 
+      // 카메라 시점(정면/항공/우측) 부드러운 보간 이동
+      const desiredPose = getCameraPose(cameraViewRef.current, viewportW, viewportH);
+      const lerpAlpha = Math.min(1, dt * 8.5);
+      camera.position.lerp(desiredPose.pos, lerpAlpha);
+      currentLookAt.lerp(desiredPose.look, lerpAlpha);
+      camera.lookAt(currentLookAt);
+
       renderer.render(scene, camera);
     };
 
@@ -990,7 +1052,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       if (!container) return;
       const w = container.clientWidth || 720;
       const h = container.clientHeight || 460;
-      applyResponsiveCamera(w, h);
+      applyResponsiveCamera(w, h, false);
       renderer.setSize(w, h);
     };
     window.addEventListener('resize', handleResize);
@@ -1127,13 +1189,76 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       <div className="relative w-full h-[280px] sm:h-[440px] bg-[#070b18] select-none">
         <div ref={mountRef} className="w-full h-full" />
 
+        {/* 좌측 상단 현재 카메라 시점 표시 (정면이 아닐 때 클릭 시 정면 복귀) */}
+        <button
+          type="button"
+          onClick={() => setCameraView('front')}
+          className={`absolute top-2.5 left-2.5 z-20 inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] sm:text-[11px] font-bold backdrop-blur-sm transition-all cursor-pointer ${
+            cameraView === 'front'
+              ? 'bg-slate-900/75 border-slate-700/80 text-slate-300'
+              : 'bg-cyan-950/85 border-cyan-400/60 text-cyan-200 hover:bg-cyan-900/85'
+          }`}
+          title="정면 뷰로 복귀"
+        >
+          <Camera className="w-3 h-3 text-cyan-400" />
+          <span>{cameraView === 'front' ? '정면뷰' : cameraView === 'top' ? '항공뷰 · 정면복귀' : '우측뷰 · 정면복귀'}</span>
+        </button>
+
+        {/* 상단 중앙 작은 위 화살표 버튼: 항공뷰 ↔ 정면뷰 전환 */}
+        <button
+          type="button"
+          onClick={() => setCameraView((prev) => (prev === 'top' ? 'front' : 'top'))}
+          className={`absolute top-2 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] sm:text-xs font-black backdrop-blur-sm shadow-md transition-all active:scale-95 cursor-pointer ${
+            cameraView === 'top'
+              ? 'bg-cyan-500/90 border-cyan-300 text-slate-950'
+              : 'bg-slate-900/80 hover:bg-slate-800/90 border-slate-600/80 text-slate-200 hover:text-cyan-300'
+          }`}
+          title={cameraView === 'top' ? '정면 뷰로 돌아가기' : '항공 뷰 (위에서 보기)'}
+        >
+          {cameraView === 'top' ? (
+            <>
+              <ChevronDown className="w-3.5 h-3.5" />
+              <span>정면뷰</span>
+            </>
+          ) : (
+            <>
+              <ChevronUp className="w-3.5 h-3.5" />
+              <span>항공뷰</span>
+            </>
+          )}
+        </button>
+
+        {/* 우측 중앙 작은 오른 화살표 버튼: 우측뷰 ↔ 정면뷰 전환 */}
+        <button
+          type="button"
+          onClick={() => setCameraView((prev) => (prev === 'right' ? 'front' : 'right'))}
+          className={`absolute right-2 top-1/2 -translate-y-1/2 z-20 inline-flex flex-col items-center justify-center px-1.5 py-2 rounded-2xl border text-[10px] font-black backdrop-blur-sm shadow-md transition-all active:scale-95 cursor-pointer gap-0.5 ${
+            cameraView === 'right'
+              ? 'bg-amber-500/90 border-amber-300 text-slate-950'
+              : 'bg-slate-900/80 hover:bg-slate-800/90 border-slate-600/80 text-slate-200 hover:text-amber-300'
+          }`}
+          title={cameraView === 'right' ? '정면 뷰로 돌아가기' : '우측 뷰 (오른쪽에서 보기)'}
+        >
+          {cameraView === 'right' ? (
+            <>
+              <ChevronLeft className="w-4 h-4" />
+              <span className="leading-none">정면</span>
+            </>
+          ) : (
+            <>
+              <ChevronRight className="w-4 h-4" />
+              <span className="leading-none">우측</span>
+            </>
+          )}
+        </button>
+
         {/* Bar 사이 낙하 안내 뱃지 */}
         <div className="absolute bottom-2.5 left-2.5 pointer-events-none px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-300 backdrop-blur-sm">
           🎯 두 Bar 사이로 박스를 통과시키면 <span className="text-amber-300">0.01 SOL</span> 당첨!
         </div>
 
         {droppedThisTurn > 0 && (
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-none px-4 py-1.5 rounded-full bg-amber-500 text-slate-950 font-black text-xs sm:text-sm shadow-lg animate-bounce">
+          <div className="absolute top-11 left-1/2 -translate-x-1/2 pointer-events-none px-4 py-1.5 rounded-full bg-amber-500 text-slate-950 font-black text-xs sm:text-sm shadow-lg animate-bounce">
             🎊 통과 성공!! 상자 획득!
           </div>
         )}

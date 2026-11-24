@@ -118,6 +118,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
   // 멤버별 기신청 차감 승수 맵
   const [memberUsedWins, setMemberUsedWins] = useState<Record<string, number>>({});
 
+  // 멤버별 뽑기권 교환 차감 승수 맵 (식사배틀 전용)
+  const [memberExchangedWins, setMemberExchangedWins] = useState<Record<string, number>>({});
+
   // 멤버별 기 풀이 완료한 퀴즈 ID 목록 맵 (중복 배정 방지)
   const [memberSolvedQuizIds, setMemberSolvedQuizIds] = useState<Record<string, string[]>>({});
 
@@ -140,13 +143,21 @@ export const RewardModal: React.FC<RewardModalProps> = ({
     return memberUsedWins[selectedMember] || 0;
   }, [selectedMember, memberUsedWins]);
 
-  // 남은 신청 가능 리워드 승수 (자신의 총 승수는 불변, 신청 가능 수만 차감)
+  // 현재 선택된 멤버의 뽑기권 교환 차감 승수 (식사배틀 전용)
+  const exchangedWins = useMemo(() => {
+    if (isGacha || selectedMember === 'all') return 0;
+    return memberExchangedWins[selectedMember] || 0;
+  }, [isGacha, selectedMember, memberExchangedWins]);
+
+  // 남은 신청 가능 리워드 승수 (식사배틀에서는 뽑기권 교환으로 음수 표기 가능)
   const availableWins = useMemo(() => {
-    return Math.max(0, userWins - usedWins);
-  }, [userWins, usedWins]);
+    if (isGacha) return Math.max(0, userWins - usedWins);
+    return userWins - usedWins - exchangedWins;
+  }, [isGacha, userWins, usedWins, exchangedWins]);
 
   // 최대 신청 가능 수량 (식사: 5WIN 단위, 뽑기: 1개 단위)
   const maxClaimableWins = useMemo(() => {
+    if (availableWins < minUnit) return 0;
     return Math.floor(availableWins / minUnit) * minUnit;
   }, [availableWins, minUnit]);
 
@@ -337,6 +348,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         }
         if (data.memberUsedWins) {
           setMemberUsedWins(data.memberUsedWins);
+        }
+        if (data.memberExchangedWins) {
+          setMemberExchangedWins(data.memberExchangedWins);
         }
         if (data.memberSolvedQuizIds) {
           setMemberSolvedQuizIds(data.memberSolvedQuizIds);
@@ -857,8 +871,13 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                         )}
                         <span className="block mt-1">
                           남은 신청 가능 리워드 WIN은 <strong className="text-cyan-300 font-bold">{availableWins}</strong>입니다.
+                          {exchangedWins > 0 && (
+                            <span className="text-amber-300 font-semibold">
+                              (뽑기권과 승수 교환 {exchangedWins}회 차감)
+                            </span>
+                          )}
                         </span>
-                        앞으로 <strong className="text-rose-300 font-bold">{5 - (availableWins % 5)}WIN</strong>을 더 달성하시면 추가 리워드 신청이 가능합니다!
+                        앞으로 <strong className="text-rose-300 font-bold">{5 - availableWins}WIN</strong>을 더 달성하시면 추가 리워드 신청이 가능합니다!
                       </>
                     )}
                   </p>
@@ -887,7 +906,13 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                         {usedWins > 0 && (
                           <span className="text-slate-400"> (기신청 {usedWins}WIN 제외) </span>
                         )}
-                        현재 <strong className="text-cyan-300 font-bold">남은 신청 가능 리워드 WIN은 {availableWins}</strong> (최대 {maxClaimableWins}WIN 신청 가능)입니다.
+                        현재 <strong className="text-cyan-300 font-bold">남은 신청 가능 리워드 WIN은 {availableWins}입니다.</strong>
+                        {exchangedWins > 0 && (
+                          <span className="text-amber-300 font-semibold">
+                            (뽑기권과 승수 교환 {exchangedWins}회 차감)
+                          </span>
+                        )}{' '}
+                        (최대 {maxClaimableWins}WIN 신청 가능)
                       </>
                     )}
                   </p>
@@ -1251,9 +1276,11 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                       ? `남은 신청 가능: ${availableWins}개 (${formatGachaSol(availableWins)})`
                       : `남은 신청 가능 리워드 WIN: ${availableWins}`}
                   </span>
-                  {usedWins > 0 && (
+                  {(usedWins > 0 || exchangedWins > 0) && (
                     <span className="text-[10px] text-slate-500 block">
-                      (기신청 {formatUnit(usedWins)} 차감됨)
+                      ({usedWins > 0 ? `기신청 ${formatUnit(usedWins)} 차감` : ''}
+                      {usedWins > 0 && exchangedWins > 0 ? ' · ' : ''}
+                      {exchangedWins > 0 ? `뽑기권과 승수 교환 ${exchangedWins}회 차감` : ''})
                     </span>
                   )}
                 </div>
@@ -1403,7 +1430,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold font-mono">
                           {isGacha
                             ? `신청 가능: ${availableWins}개 (${formatGachaSol(availableWins)})`
-                            : `남은 신청 가능 리워드 WIN: ${availableWins}`}
+                            : `남은 신청 가능 리워드 WIN: ${availableWins}${exchangedWins > 0 ? ` (뽑기권과 승수 교환 ${exchangedWins}회 차감)` : ''}`}
                         </span>
                       </>
                     )}

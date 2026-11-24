@@ -11,10 +11,12 @@ import {
   Coins,
   Gift,
   Plus,
+  Minus,
   Loader2,
   Trophy,
   RefreshCw,
   PackagePlus,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { MEMBERS } from '@/constants/members';
 import { GachaMachineState, GachaTicketBalance, GachaWinRecord } from '@/types/gacha';
@@ -45,6 +47,10 @@ export default function GachaPage() {
   const [recentWins, setRecentWins] = useState<GachaWinRecord[]>([]);
   const [gachaWinStats, setGachaWinStats] = useState<MemberWinStats[]>([]);
   const [usedWinsByMember, setUsedWinsByMember] = useState<Record<string, number>>({});
+  const [mealWinSummaryByMember, setMealWinSummaryByMember] = useState<
+    Record<string, { actualWins: number; rewardUsedWins: number; exchangedWins: number; availableMealWins: number }>
+  >({});
+  const [isExchangingWin, setIsExchangingWin] = useState<boolean>(false);
   const [selectedMember, setSelectedMember] = useState<string>(MEMBERS[0].name);
 
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState<boolean>(false);
@@ -115,6 +121,9 @@ export default function GachaPage() {
         }
         if (data.usedWinsByMember) {
           setUsedWinsByMember(data.usedWinsByMember);
+        }
+        if (data.mealWinSummaryByMember) {
+          setMealWinSummaryByMember(data.mealWinSummaryByMember);
         }
       }
     } catch (e) {
@@ -417,6 +426,47 @@ export default function GachaPage() {
     }
   };
 
+  const handleExchangeWinForTickets = async () => {
+    if (isExchangingWin || activeTurnId) return;
+    const summary = mealWinSummaryByMember[selectedMember];
+    const actualWins = summary?.actualWins ?? 0;
+    const exchangedWins = summary?.exchangedWins ?? 0;
+    const availAfter = (summary?.availableMealWins ?? 0) - 1;
+
+    if (actualWins - exchangedWins < 1) {
+      setStatusMessage(`${selectedMember}님은 교환 가능한 식사배틀 승점이 없습니다.`);
+      return;
+    }
+
+    const ok = confirm(
+      `[${selectedMember}] 식사배틀 승점 1WIN을 소모하여 뽑기권 5장으로 교환하시겠습니까?\n\n` +
+        `• 식사배틀 총 승수(${actualWins}WIN) 표시는 그대로 유지됩니다.\n` +
+        `• 식사배틀 리워드 신청 가능 WIN이 1 차감되어 ${availAfter}WIN이 됩니다. (뽑기권과 승수 교환 ${exchangedWins + 1}회 차감)`
+    );
+    if (!ok) return;
+
+    try {
+      setIsExchangingWin(true);
+      const resp = await fetch('/api/gacha/exchange', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member: selectedMember }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        if (data.ticketsByMember) setTicketsByMember(data.ticketsByMember);
+        setStatusMessage(data.message);
+        await fetchState();
+      } else {
+        setStatusMessage(data.message || '승점 교환 실패');
+      }
+    } catch (err: any) {
+      setStatusMessage('승점 교환 중 오류가 발생했습니다.');
+    } finally {
+      setIsExchangingWin(false);
+    }
+  };
+
   const handleAdminGrantTicket = async (amount: number) => {
     try {
       setIsGranting(true);
@@ -493,10 +543,21 @@ export default function GachaPage() {
                   onClick={() => handleAdminGrantTicket(1)}
                   disabled={isGranting}
                   className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold cursor-pointer disabled:opacity-50"
-                  title="현재 선택된 멤버에게 테스트 뽑기권 +1 지급"
+                  title="현재 선택된 멤버에게 뽑기권 +1 지급"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>{selectedMember} 티켓 +1</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleAdminGrantTicket(-1)}
+                  disabled={isGranting || selectedBalance.tickets <= 0}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-xs font-bold cursor-pointer disabled:opacity-40"
+                  title="현재 선택된 멤버의 뽑기권 -1 차감"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                  <span>티켓 -1</span>
                 </button>
 
                 <button
@@ -569,14 +630,41 @@ export default function GachaPage() {
                 (식사 사진 등록 시 승패 무관하게 뽑기권 5회 자동 적립)
               </span>
             </div>
-            <button
-              type="button"
-              onClick={fetchState}
-              className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-cyan-300 cursor-pointer"
-            >
-              <RefreshCw className="w-3 h-3" />
-              <span>동기화</span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleExchangeWinForTickets}
+                disabled={
+                  isExchangingWin ||
+                  !!activeTurnId ||
+                  ((mealWinSummaryByMember[selectedMember]?.actualWins ?? 0) -
+                    (mealWinSummaryByMember[selectedMember]?.exchangedWins ?? 0) <
+                    1)
+                }
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/50 text-purple-200 text-[11px] font-black transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title="식사배틀 승점 1WIN을 소모해 뽑기권 5장으로 교환 (식사배틀 리워드 신청 가능 승수에서 1WIN 차감)"
+              >
+                {isExchangingWin ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <ArrowRightLeft className="w-3 h-3 text-purple-300" />
+                )}
+                <span>
+                  승점 1WIN → 뽑기권 5회 교환
+                  {mealWinSummaryByMember[selectedMember]
+                    ? ` (보유 ${mealWinSummaryByMember[selectedMember].actualWins}WIN)`
+                    : ''}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={fetchState}
+                className="inline-flex items-center gap-1 text-[11px] text-slate-400 hover:text-cyan-300 cursor-pointer"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>동기화</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">

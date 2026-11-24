@@ -19,19 +19,32 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [machine, ticketsByMember, allWinsRaw, validAppsRaw] = await Promise.all([
-      getOrInitMachineState(db),
-      getAllMemberTicketBalances(db),
-      db
-        .collection('gacha_wins')
-        .find({})
-        .sort({ createdAt: -1 })
-        .toArray(),
-      db
-        .collection('gacha_reward_applications')
-        .find({ status: { $ne: 'rejected' } })
-        .toArray(),
-    ]);
+    const [machine, ticketsByMember, allWinsRaw, validAppsRaw, mealWinDocs, mealRewardApps, winExchanges] =
+      await Promise.all([
+        getOrInitMachineState(db),
+        getAllMemberTicketBalances(db),
+        db
+          .collection('gacha_wins')
+          .find({})
+          .sort({ createdAt: -1 })
+          .toArray(),
+        db
+          .collection('gacha_reward_applications')
+          .find({ status: { $ne: 'rejected' } })
+          .toArray(),
+        db
+          .collection('meals')
+          .find({ isWinner: true }, { projection: { member: 1 } })
+          .toArray(),
+        db
+          .collection('reward_applications')
+          .find({ status: { $ne: 'rejected' } }, { projection: { member: 1, requestedWins: 1 } })
+          .toArray(),
+        db
+          .collection('gacha_win_exchanges')
+          .find({}, { projection: { member: 1, winsUsed: 1 } })
+          .toArray(),
+      ]);
 
     const formatWin = (doc: any) => ({
       id: doc.id || doc._id.toString(),
@@ -93,6 +106,41 @@ export async function GET(request: NextRequest) {
       return b.totalSubmissions - a.totalSubmissions;
     });
 
+    // 식사배틀 승점 ↔ 뽑기권 교환 현황 집계
+    const mealWinsByMember: Record<string, number> = {};
+    for (const d of mealWinDocs as any[]) {
+      if (d.member) mealWinsByMember[d.member] = (mealWinsByMember[d.member] || 0) + 1;
+    }
+    const mealRewardUsedByMember: Record<string, number> = {};
+    for (const a of mealRewardApps as any[]) {
+      if (a.member) {
+        mealRewardUsedByMember[a.member] =
+          (mealRewardUsedByMember[a.member] || 0) + (Number(a.requestedWins) || 0);
+      }
+    }
+    const exchangedWinsByMember: Record<string, number> = {};
+    for (const ex of winExchanges as any[]) {
+      if (ex.member) {
+        exchangedWinsByMember[ex.member] =
+          (exchangedWinsByMember[ex.member] || 0) + (Number(ex.winsUsed) || 1);
+      }
+    }
+    const mealWinSummaryByMember: Record<
+      string,
+      { actualWins: number; rewardUsedWins: number; exchangedWins: number; availableMealWins: number }
+    > = {};
+    for (const m of MEMBERS) {
+      const actualWins = mealWinsByMember[m.name] || 0;
+      const rewardUsedWins = mealRewardUsedByMember[m.name] || 0;
+      const exchangedWins = exchangedWinsByMember[m.name] || 0;
+      mealWinSummaryByMember[m.name] = {
+        actualWins,
+        rewardUsedWins,
+        exchangedWins,
+        availableMealWins: actualWins - rewardUsedWins - exchangedWins,
+      };
+    }
+
     const recentWins = allWinsRaw.slice(0, 20).map(formatWin);
     const unclaimedWins = allWinsRaw
       .filter((d: any) => (d.claimStatus || 'unclaimed') === 'unclaimed')
@@ -108,6 +156,7 @@ export async function GET(request: NextRequest) {
         recentWins,
         gachaWinStats,
         usedWinsByMember,
+        mealWinSummaryByMember,
       },
       {
         headers: {

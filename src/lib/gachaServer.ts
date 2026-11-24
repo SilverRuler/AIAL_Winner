@@ -39,6 +39,21 @@ export function getTelegramConfig() {
  */
 export async function grantGachaTickets(db: Db, member: string, amount = 1): Promise<number> {
   const now = Date.now();
+  if (amount < 0) {
+    const current = (await db.collection('gacha_tickets').findOne({ _id: member as any })) as any;
+    const curTickets = Math.max(0, Number(current?.tickets) || 0);
+    const nextTickets = Math.max(0, curTickets + amount);
+    await db.collection('gacha_tickets').updateOne(
+      { _id: member as any },
+      {
+        $set: { member, tickets: nextTickets, updatedAt: now },
+        $setOnInsert: { totalEarned: 0, totalPlayed: 0, totalWins: 0 },
+      },
+      { upsert: true }
+    );
+    return nextTickets;
+  }
+
   const res = await db.collection('gacha_tickets').findOneAndUpdate(
     { _id: member as any },
     {

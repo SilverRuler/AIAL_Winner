@@ -1006,12 +1006,32 @@ export default function GachaPage() {
                   <span className="text-[11px] text-slate-400 font-mono">2026-11-24</span>
                 </div>
                 <div className="p-4 space-y-2.5 text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
-                  <p className="flex items-start gap-2">
-                    <Sparkles className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                    <span>
-                      현재 뽑기판의 평균 난이도는 <strong className="text-rose-300">6.5(중상)</strong>입니다.
-                    </span>
-                  </p>
+                  <div className="space-y-1.5">
+                    <p className="flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                      <span>
+                        현재 뽑기판의 평균 난이도는 <strong className="text-rose-300">6.5(중상)</strong>입니다.
+                      </span>
+                    </p>
+                    <div className="ml-6 grid grid-cols-2 gap-1.5 text-[11px] sm:text-xs">
+                      <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-1">
+                        <span className="text-sky-300 font-bold truncate">1번 프리렌</span>
+                        <span className="font-mono font-black text-emerald-300 shrink-0">난이도 5</span>
+                      </div>
+                      <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-1">
+                        <span className="text-pink-300 font-bold truncate">2번 네즈코</span>
+                        <span className="font-mono font-black text-amber-300 shrink-0">난이도 6</span>
+                      </div>
+                      <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-1">
+                        <span className="text-blue-300 font-bold truncate">3번 노엘 실바</span>
+                        <span className="font-mono font-black text-orange-300 shrink-0">난이도 7</span>
+                      </div>
+                      <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-1">
+                        <span className="text-purple-300 font-bold truncate">4번 레제</span>
+                        <span className="font-mono font-black text-rose-400 shrink-0">난이도 8</span>
+                      </div>
+                    </div>
+                  </div>
                   <p className="flex items-start gap-2">
                     <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <span>

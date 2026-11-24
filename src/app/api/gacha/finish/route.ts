@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
         colorTheme: won.colorTheme,
         rewardType: won.rewardType || 'SOL',
         rewardAmount,
-        unboxed: false,
+        unboxed: true,
         claimStatus: 'unclaimed',
         notified: false,
         createdAt: now + i,
@@ -172,6 +172,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      serverNow: Date.now(),
       wonRecords,
       machine: sanitizeMachineForClient((nextMachine || rawMachine) as any),
       ticketsByMember,

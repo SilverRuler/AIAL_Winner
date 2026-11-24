@@ -40,6 +40,7 @@ interface UfoClawMachine3DProps {
   selectedMember: string;
   selectedMemberTickets: number;
   isStarting: boolean;
+  isFinishing?: boolean;
 }
 
 function createSidePanelTexture(title: string, accent: string, bg: string): THREE.CanvasTexture {
@@ -168,6 +169,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   selectedMember,
   selectedMemberTickets,
   isStarting,
+  isFinishing = false,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<CranePhase>('idle');
@@ -238,27 +240,29 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     resetClawToHome: () => void;
   } | null>(null);
 
-  // 새 턴 시작 감지 -> ready_right 진입
+  // 새 턴 시작 감지 -> ready_right 진입 (최신 서버 좌표 items를 즉시 반영)
+  itemsRef.current = items;
   useEffect(() => {
     if (isMyTurn && turnKey) {
       setDroppedThisTurn(0);
       if (simControlRef.current) {
         simControlRef.current.resetClawToHome();
-        simControlRef.current.syncFromItems(itemsRef.current);
+        simControlRef.current.syncFromItems(items);
       }
       setCranePhase('ready_right');
       playTone(523.25, 0.12, 'sine', 0.1);
     } else if (!isMyTurn && phaseRef.current !== 'idle') {
       setCranePhase('idle');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMyTurn, turnKey, setCranePhase, playTone]);
 
-  // 대기 상태에서 서버 폴링으로 items 변경 시 3D 씬 동기화
+  // 대기 상태에서 서버 폴링으로 items 변경 시 3D 씬 동기화 (본인 턴/저장 중이 아닐 때)
   useEffect(() => {
-    if (phaseRef.current === 'idle' && simControlRef.current) {
+    if (!isMyTurn && !isFinishing && phaseRef.current === 'idle' && simControlRef.current) {
       simControlRef.current.syncFromItems(items);
     }
-  }, [items]);
+  }, [items, isMyTurn, isFinishing]);
 
   // Three.js + Cannon-es 씬 초기화
   useEffect(() => {
@@ -1114,6 +1118,24 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             🎊 통과 성공!! 상자 획득!
           </div>
         )}
+
+        {/* 다른 멤버가 뽑기 진행 중일 때 동시 진행 방지 안내 오버레이 */}
+        {lockedByOther && !isMyTurn && (
+          <div className="absolute inset-0 z-10 bg-slate-950/45 backdrop-blur-[1.5px] flex items-center justify-center p-4 pointer-events-auto">
+            <div className="px-5 py-3.5 rounded-2xl bg-slate-900/95 border border-rose-500/60 shadow-2xl text-center space-y-1 max-w-xs">
+              <div className="inline-flex items-center gap-1.5 text-rose-300 text-xs font-black">
+                <span className="w-2 h-2 rounded-full bg-rose-400 animate-ping" />
+                <span>현재 뽑기 진행 중</span>
+              </div>
+              <p className="text-sm font-black text-white">
+                🔒 <span className="text-amber-300">{lockedByOther}</span>님이 뽑기를 진행 중입니다
+              </p>
+              <p className="text-[11px] text-slate-400">
+                완료 후 상자 위치가 반영되면 바로 참여할 수 있습니다.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 하단 아케이드 조작 패널 */}
@@ -1126,14 +1148,16 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             </div>
             <button
               type="button"
-              disabled={!canStartTurn || isStarting || !!lockedByOther || items.length === 0}
+              disabled={!canStartTurn || isStarting || isFinishing || !!lockedByOther || items.length === 0}
               onClick={onStartTurnRequest}
               className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-black text-sm shadow-lg shadow-orange-500/25 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
-              {isStarting
+              {isFinishing
+                ? '💾 상자 위치 저장 중...'
+                : isStarting
                 ? '크레인 준비 중...'
                 : lockedByOther
-                ? `${lockedByOther}님 플레이 중...`
+                ? `🔒 ${lockedByOther}님 뽑기 완료 대기 중...`
                 : items.length === 0
                 ? '📦 모든 상품 완판 (운영자 리필 대기)'
                 : selectedMemberTickets < 1

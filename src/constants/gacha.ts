@@ -39,8 +39,8 @@ export const GACHA_PHYSICS = {
   MOVE_SPEED_Z: 1.25,     // 초당 Z 이동 속도
   CLAW_DESCEND_SPEED: 0.95, // 초당 집게 하강 속도 (기존 1.9에서 완화)
 
-  // 턴 락 타임아웃 (45초)
-  LOCK_TTL_MS: 45 * 1000,
+  // 턴 락 타임아웃 (25초 - 플레이 중 8초마다 하트비트로 자동 연장, 비정상 이탈 시 25초 내 자동 해제)
+  LOCK_TTL_MS: 25 * 1000,
 };
 
 export const GACHA_SLOT_X = [-2.05, -0.68, 0.68, 2.05] as const;

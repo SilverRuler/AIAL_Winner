@@ -107,10 +107,16 @@ export async function POST(request: NextRequest) {
         { _id: member as any },
         { $inc: { tickets: 1, totalPlayed: -1 }, $set: { updatedAt: Date.now() } }
       );
+      const latestMachine = (await db
+        .collection('gacha_machine')
+        .findOne({ _id: 'main_ufo_bridge' as any })) as any;
+      const currentOwner = latestMachine?.lock?.member || '다른 멤버';
       return NextResponse.json(
         {
           success: false,
-          message: '다른 멤버가 방금 뽑기를 시작했습니다. 잠시 후 다시 시도해주세요.',
+          lockedBy: currentOwner,
+          serverNow: Date.now(),
+          message: `현재 ${currentOwner}님이 뽑기를 진행 중입니다. 완료될 때까지 잠시만 기다려주세요!`,
         },
         { status: 409 }
       );
@@ -120,6 +126,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      serverNow: Date.now(),
       turnId,
       expiresAt: newLock.expiresAt,
       machine: sanitizeMachineForClient(lockRes as any),

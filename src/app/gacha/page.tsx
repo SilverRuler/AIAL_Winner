@@ -54,6 +54,8 @@ export default function GachaPage() {
 
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState<boolean>(false);
+  const [isFinishing, setIsFinishing] = useState<boolean>(false);
+  const [serverClockOffset, setServerClockOffset] = useState<number>(0);
   const [isRefilling, setIsRefilling] = useState<boolean>(false);
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const [isGranting, setIsGranting] = useState<boolean>(false);
@@ -91,6 +93,9 @@ export default function GachaPage() {
       const resp = await fetch(`/api/gacha/state?_t=${Date.now()}`, { cache: 'no-store' });
       const data = await resp.json();
       if (data.success) {
+        if (typeof data.serverNow === 'number') {
+          setServerClockOffset(data.serverNow - Date.now());
+        }
         setMachine(data.machine);
         setTicketsByMember(data.ticketsByMember || {});
         setUnclaimedWins(data.unclaimedWins || []);
@@ -106,17 +111,6 @@ export default function GachaPage() {
       console.warn('Failed to fetch gacha state:', e);
     }
   }, []);
-
-  useEffect(() => {
-    fetchState();
-    const timer = setInterval(() => {
-      // 본인이 턴 진행 중일 때는 3D 로컬 물리 상태를 덮어쓰지 않음
-      if (!activeTurnId) {
-        fetchState();
-      }
-    }, 3500);
-    return () => clearInterval(timer);
-  }, [activeTurnId, fetchState]);
 
   const handleSelectMember = (name: string) => {
     setSelectedMember(name);
@@ -153,12 +147,41 @@ export default function GachaPage() {
   const lockedByOther = useMemo(() => {
     if (!machine?.lock?.active) return null;
     if (activeTurnId && machine.lock.turnId === activeTurnId) return null;
-    if (machine.lock.expiresAt && machine.lock.expiresAt < Date.now()) return null;
+    const approxServerNow = Date.now() + serverClockOffset;
+    if (machine.lock.expiresAt && machine.lock.expiresAt < approxServerNow) return null;
     return machine.lock.member || '다른 멤버';
-  }, [machine, activeTurnId]);
+  }, [machine, activeTurnId, serverClockOffset]);
+
+  // 상태 폴링: 다른 사람이 진행 중이면 1초마다 빠르게 동기화, 대기 중이면 2초마다 동기화
+  // 본인이 턴 시작/진행/저장 중일 때는 폴링 일시 정지하여 로컬 3D 물리/저장 충돌 방지
+  useEffect(() => {
+    fetchState();
+  }, [fetchState]);
+
+  useEffect(() => {
+    if (activeTurnId || isStarting || isFinishing) return;
+    const intervalMs = lockedByOther ? 1000 : 2000;
+    const timer = setInterval(() => {
+      fetchState();
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [activeTurnId, isStarting, isFinishing, lockedByOther, fetchState]);
+
+  // 본인 턴 진행 중 8초마다 하트비트 전송 (플레이 도중 락 만료 방지, 비정상 이탈 시 25초 내 자동 해제)
+  useEffect(() => {
+    if (!activeTurnId) return;
+    const hb = setInterval(() => {
+      fetch('/api/gacha/heartbeat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ turnId: activeTurnId, member: selectedMember }),
+      }).catch(() => {});
+    }, 8000);
+    return () => clearInterval(hb);
+  }, [activeTurnId, selectedMember]);
 
   const handleStartTurn = async () => {
-    if (isStarting || activeTurnId) return;
+    if (isStarting || isFinishing || activeTurnId || lockedByOther) return;
     setStatusMessage('');
     try {
       setIsStarting(true);
@@ -174,6 +197,9 @@ export default function GachaPage() {
         return;
       }
 
+      if (typeof data.serverNow === 'number') {
+        setServerClockOffset(data.serverNow - Date.now());
+      }
       setMachine(data.machine);
       if (data.ticketsByMember) setTicketsByMember(data.ticketsByMember);
       setActiveTurnId(data.turnId);
@@ -187,9 +213,10 @@ export default function GachaPage() {
   const handleTurnFinish = useCallback(
     async (payload: TurnFinishPayload) => {
       const turnId = activeTurnId;
-      setActiveTurnId(null);
       if (!turnId) return;
 
+      // DB에 최종 상자 좌표와 락 해제가 완전히 반영될 때까지 activeTurnId & isFinishing 유지
+      setIsFinishing(true);
       try {
         const resp = await fetch('/api/gacha/finish', {
           method: 'POST',
@@ -204,13 +231,18 @@ export default function GachaPage() {
         });
         const data = await resp.json();
         if (data.success) {
+          if (typeof data.serverNow === 'number') {
+            setServerClockOffset(data.serverNow - Date.now());
+          }
           setMachine(data.machine);
           if (data.ticketsByMember) setTicketsByMember(data.ticketsByMember);
           if (Array.isArray(data.wonRecords) && data.wonRecords.length > 0) {
             setActiveWinModal(data.wonRecords[0]);
-            setStatusMessage(`🎉 축하합니다! ${selectedMember}님이 상자 뽑기에 성공했습니다!`);
+            setStatusMessage(
+              `🎉 축하합니다! ${selectedMember}님이 ${data.wonRecords.map((w: GachaWinRecord) => w.boxLabel).join(', ')}을 뽑았습니다!`
+            );
           } else {
-            setStatusMessage('상자가 조금 움직였습니다! 이어서 공략하거나 다른 멤버와 협력해보세요.');
+            setStatusMessage('상자가 이동되어 모든 플레이어에게 반영되었습니다!');
           }
           await fetchState();
         } else {
@@ -220,6 +252,9 @@ export default function GachaPage() {
       } catch (err: any) {
         setStatusMessage('결과 저장 중 오류가 발생했습니다.');
         await fetchState();
+      } finally {
+        setActiveTurnId(null);
+        setIsFinishing(false);
       }
     },
     [activeTurnId, selectedMember, fetchState]
@@ -498,15 +533,16 @@ export default function GachaPage() {
         {/* 2. 3D UFO 크레인 머신 */}
         <UfoClawMachine3D
           items={machine?.items || []}
-          isMyTurn={Boolean(activeTurnId)}
+          isMyTurn={Boolean(activeTurnId) && !isFinishing}
           lockedByOther={lockedByOther}
           turnKey={activeTurnId}
           onTurnFinish={handleTurnFinish}
           onStartTurnRequest={handleStartTurn}
-          canStartTurn={selectedBalance.tickets >= 1 && !activeTurnId}
+          canStartTurn={selectedBalance.tickets >= 1 && !activeTurnId && !isFinishing && !lockedByOther}
           selectedMember={selectedMember}
           selectedMemberTickets={selectedBalance.tickets}
           isStarting={isStarting}
+          isFinishing={isFinishing}
         />
 
         {/* 3. 최근 뽑기 당첨 내역 */}
@@ -560,15 +596,11 @@ export default function GachaPage() {
         </section>
       </main>
 
-      {/* 당첨 상자 뜯기 & 즉시 리워드 신청 확인 모달 */}
+      {/* 당첨 축하 폭죽 팝업 */}
       <GachaWinModal
         isOpen={!!activeWinModal}
         onClose={() => setActiveWinModal(null)}
         winRecord={activeWinModal}
-        onRequestApplyNow={(member) => {
-          setActiveWinModal(null);
-          handleOpenGachaReward(member, true);
-        }}
       />
 
       {/* UFO 뽑기 명예의 전당 모달 (식사배틀과 별도 DB) */}

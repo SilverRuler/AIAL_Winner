@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
+        serverNow: Date.now(),
         machine: sanitizeMachineForClient(machine),
         ticketsByMember,
         unclaimedWins,

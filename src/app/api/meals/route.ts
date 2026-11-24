@@ -249,10 +249,10 @@ export async function POST(request: NextRequest) {
         _id: newEntry.id as any,
       });
 
-      // 식사 등록 시 승패 무관하게 해당 멤버에게 UFO 뽑기권 1회 자동 적립
+      // 식사 등록 시 승패 무관하게 해당 멤버에게 UFO 뽑기권 5회 자동 적립
       let newTicketBalance: number | undefined = undefined;
       try {
-        newTicketBalance = await grantGachaTickets(db, newEntry.member, 1);
+        newTicketBalance = await grantGachaTickets(db, newEntry.member, 5);
       } catch (ticketErr) {
         console.warn('Failed to grant gacha ticket on meal insert:', ticketErr);
       }

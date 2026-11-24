@@ -212,7 +212,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
               <div className="px-4 pb-4 pt-1 space-y-2.5 border-t border-slate-800/80 text-slate-200 leading-relaxed font-medium">
                 <p className="text-sm sm:text-base font-bold text-white flex items-center gap-2 pt-2">
                   <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                  승점에 관계 없이 식사를 올리면 매 1회 가챠권이 생깁니다.
+                  승점에 관계 없이 식사를 올리면 가챠권 5회가 생깁니다.
                 </p>
                 <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />

@@ -1135,7 +1135,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
                 : lockedByOther
                 ? `${lockedByOther}님 플레이 중...`
                 : selectedMemberTickets < 1
-                ? '뽑기권이 부족합니다 (식사 등록 시 +1장)'
+                ? '뽑기권이 부족합니다 (식사 등록 시 +5장)'
                 : '🕹️ 뽑기 시작! (뽑기권 1장 사용)'}
             </button>
           </div>

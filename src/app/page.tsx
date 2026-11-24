@@ -1854,7 +1854,7 @@ export default function Home() {
             </div>
             <div className="space-y-1.5">
               <h3 className="text-base sm:text-lg font-black text-white">
-                뽑기권이 1회 생겼습니다!
+                뽑기권이 5회 생겼습니다!
               </h3>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                 <strong className="text-amber-300">{gachaPromptMember}</strong>님, 지금 바로 UFO 브릿지 뽑기하러 가시겠습니까?

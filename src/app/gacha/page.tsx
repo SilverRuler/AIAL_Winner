@@ -333,7 +333,7 @@ export default function GachaPage() {
               <Ticket className="w-4 h-4 text-amber-400" />
               <span className="text-xs sm:text-sm font-black text-white">플레이어 선택 & 보유 뽑기권</span>
               <span className="text-[11px] text-slate-400 hidden sm:inline">
-                (식사 사진 등록 시 승패 무관하게 뽑기권 1회 자동 적립)
+                (식사 사진 등록 시 승패 무관하게 뽑기권 5회 자동 적립)
               </span>
             </div>
             <button

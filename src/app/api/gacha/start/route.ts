@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: `${member}님의 보유 뽑기권이 없습니다. 식사 사진을 등록하면 뽑기권 1장이 지급됩니다!`,
+          message: `${member}님의 보유 뽑기권이 없습니다. 식사 사진을 등록하면 뽑기권 5장이 지급됩니다!`,
         },
         { status: 400 }
       );

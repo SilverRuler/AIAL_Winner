@@ -92,7 +92,7 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
   const existing = (await col.findOne({ _id: 'main_ufo_bridge' as any })) as any;
   const now = Date.now();
 
-  if (!existing || !Array.isArray(existing.items) || existing.items.length === 0) {
+  if (!existing || !Array.isArray(existing.items)) {
     const initial: GachaMachineState = {
       id: 'main_ufo_bridge',
       items: createInitialGachaBoxes(),

@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { GachaBoxItem, GachaWinRecord } from '@/types/gacha';
 import {
-  createInitialGachaBoxes,
   GACHA_DEFAULT_REWARD_AMOUNT,
   GACHA_PHYSICS,
 } from '@/constants/gacha';
@@ -106,7 +105,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 당첨 처리 (개별 뽑기 시에는 즉시 리필하지 않고, 4개 상품이 모두 뽑혀 비었을 때 4개 일괄 리필)
+    // 당첨 처리 (자동 리필 없음: 운영자가 '뽑기판 리필' 버튼으로 직접 리필)
     const wonRecords: GachaWinRecord[] = [];
     for (let i = 0; i < wonBoxes.length; i++) {
       const won = wonBoxes[i];
@@ -128,12 +127,6 @@ export async function POST(request: NextRequest) {
       wonRecords.push(winRecord);
     }
 
-    let didFullRefill = false;
-    if (remainingItems.length === 0) {
-      remainingItems.push(...createInitialGachaBoxes());
-      didFullRefill = true;
-    }
-
     if (wonRecords.length > 0) {
       await db.collection('gacha_wins').insertMany(wonRecords.map((r) => ({ ...r, _id: r.id as any })));
       await db.collection('gacha_tickets').updateOne(
@@ -147,8 +140,8 @@ export async function POST(request: NextRequest) {
 
     const actionSummary =
       wonRecords.length > 0
-        ? didFullRefill
-          ? `🎉 ${member}님이 마지막 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공! 4개 모두 뽑혀 새 상품 4개가 리필되었습니다.`
+        ? remainingItems.length === 0
+          ? `🎉 ${member}님이 마지막 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공! 모든 상품이 뽑혔습니다. (운영자 리필 대기)`
           : `🎉 ${member}님이 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공했습니다! (남은 상품 ${remainingItems.length}개)`
         : `${member}님이 크레인을 조작하여 상자 위치를 움직였습니다.`;
 

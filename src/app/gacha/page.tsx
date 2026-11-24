@@ -14,6 +14,7 @@ import {
   Loader2,
   Trophy,
   RefreshCw,
+  PackagePlus,
 } from 'lucide-react';
 import { MEMBERS } from '@/constants/members';
 import { GachaMachineState, GachaTicketBalance, GachaWinRecord } from '@/types/gacha';
@@ -32,6 +33,7 @@ export default function GachaPage() {
 
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState<boolean>(false);
+  const [isRefilling, setIsRefilling] = useState<boolean>(false);
   const [isResetting, setIsResetting] = useState<boolean>(false);
   const [isGranting, setIsGranting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -186,8 +188,46 @@ export default function GachaPage() {
     [activeTurnId, selectedMember, fetchState]
   );
 
+  const handleAdminRefill = async () => {
+    const currentCount = machine?.items?.length ?? 0;
+    const missingCount = Math.max(0, 4 - currentCount);
+    if (missingCount === 0) {
+      setStatusMessage('이미 4개 상품이 모두 채워져 있습니다.');
+      return;
+    }
+    if (!confirm(`비어있는 상품 ${missingCount}개를 새로 리필하시겠습니까?`)) return;
+    try {
+      setIsRefilling(true);
+      const { adminId, adminPw } = getAdminCreds();
+      const resp = await fetch('/api/gacha/refill', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-id': adminId,
+          'x-admin-pw': adminPw,
+        },
+        body: JSON.stringify({ adminId, adminPw }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        if (data.machine) setMachine(data.machine);
+        setActiveTurnId(null);
+        setStatusMessage(data.message || '📦 뽑기판 리필이 완료되었습니다.');
+      } else {
+        setStatusMessage(data.message || '리필 실패');
+      }
+    } finally {
+      setIsRefilling(false);
+    }
+  };
+
   const handleAdminReset = async () => {
-    if (!confirm('정말 뽑기판의 모든 상자 위치를 초기 정위치로 재세팅하시겠습니까?')) return;
+    const currentCount = machine?.items?.length ?? 0;
+    if (currentCount === 0) {
+      setStatusMessage('초기화할 남은 상품이 없습니다. [뽑기판 리필] 버튼을 눌러주세요.');
+      return;
+    }
+    if (!confirm(`현재 남아있는 상품 ${currentCount}개만 초기 정위치로 되돌리시겠습니까?`)) return;
     try {
       setIsResetting(true);
       const { adminId, adminPw } = getAdminCreds();
@@ -204,7 +244,7 @@ export default function GachaPage() {
       if (data.success) {
         setMachine(data.machine);
         setActiveTurnId(null);
-        setStatusMessage('🔄 관리자 권한으로 뽑기판을 초기 상태로 재세팅했습니다.');
+        setStatusMessage(data.message || '🔄 남아있는 상품들을 초기 정위치로 재세팅했습니다.');
       } else {
         setStatusMessage(data.message || '초기화 실패');
       }
@@ -286,10 +326,21 @@ export default function GachaPage() {
 
               <button
                 type="button"
+                onClick={handleAdminRefill}
+                disabled={isRefilling || isResetting || !!activeTurnId}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 text-xs font-black cursor-pointer disabled:opacity-50"
+                title="뽑혀서 비어있는 상품 슬롯만 새로 리필 (4개 모두 뽑혔으면 4개 전부 리필)"
+              >
+                {isRefilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
+                <span>뽑기판 리필</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleAdminReset}
-                disabled={isResetting || !!activeTurnId}
+                disabled={isResetting || isRefilling || !!activeTurnId}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-xs font-black cursor-pointer disabled:opacity-50"
-                title="각도가 틀어졌을 때 모든 상자를 초기 위치로 복구"
+                title="각도가 틀어졌을 때 현재 남아있는 상자들만 초기 정위치로 복구"
               >
                 {isResetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
                 <span>뽑기판 초기화</span>

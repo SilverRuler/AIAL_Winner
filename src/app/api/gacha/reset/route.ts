@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
-import { createInitialGachaBoxes } from '@/constants/gacha';
+import { GachaBoxItem } from '@/types/gacha';
+import { createInitialGachaBoxes, getRestingBoxPosition } from '@/constants/gacha';
 import { isAdminAuthorized, sanitizeMachineForClient } from '@/lib/gachaServer';
 
 export async function POST(request: NextRequest) {
@@ -21,8 +22,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const col = db.collection('gacha_machine');
+    const existing = (await col.findOne({ _id: 'main_ufo_bridge' as any })) as any;
     const now = Date.now();
-    const initialBoxes = createInitialGachaBoxes();
+
     const clearedLock = {
       active: false,
       member: null,
@@ -31,14 +34,48 @@ export async function POST(request: NextRequest) {
       expiresAt: null,
     };
 
-    const updated = await db.collection('gacha_machine').findOneAndUpdate(
+    // 기존 문서가 아예 없는 경우에만 최초 4개 생성, 그 외에는 현재 남아있는 상품들만 정위치로 복귀
+    let resetItems: GachaBoxItem[];
+    if (!existing || !Array.isArray(existing.items)) {
+      resetItems = createInitialGachaBoxes();
+    } else {
+      resetItems = existing.items.map((item: GachaBoxItem) => ({
+        ...item,
+        position: getRestingBoxPosition(item.slotIndex),
+        quaternion: [0, 0, 0, 1] as [number, number, number, number],
+      }));
+      resetItems.sort((a, b) => a.slotIndex - b.slotIndex);
+    }
+
+    if (resetItems.length === 0) {
+      const updatedEmpty = await col.findOneAndUpdate(
+        { _id: 'main_ufo_bridge' as any },
+        {
+          $set: {
+            lock: clearedLock,
+            updatedAt: now,
+          },
+        },
+        { returnDocument: 'after' }
+      );
+
+      return NextResponse.json({
+        success: true,
+        message: '초기화할 남은 상품이 없습니다. [뽑기판 리필] 버튼을 눌러 상품을 보충하세요.',
+        machine: sanitizeMachineForClient((updatedEmpty || existing) as any),
+      });
+    }
+
+    const summary = `🔄 운영자(관리자)가 남은 상품 ${resetItems.length}개를 초기 정위치로 재정비했습니다.`;
+
+    const updated = await col.findOneAndUpdate(
       { _id: 'main_ufo_bridge' as any },
       {
         $set: {
           id: 'main_ufo_bridge',
-          items: initialBoxes,
+          items: resetItems,
           lock: clearedLock,
-          lastActionSummary: '🔄 운영자(관리자)가 뽑기판 상자 위치를 초기 상태로 재정비했습니다.',
+          lastActionSummary: summary,
           updatedAt: now,
         },
         $inc: { resetCount: 1 },
@@ -48,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: '뽑기판이 초기 정위치로 재세팅되었습니다.',
+      message: `남아있는 상품 ${resetItems.length}개가 초기 정위치로 재세팅되었습니다.`,
       machine: sanitizeMachineForClient(updated as any),
     });
   } catch (error: any) {

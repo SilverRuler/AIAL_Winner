@@ -43,6 +43,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!Array.isArray(machine.items) || machine.items.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: '현재 남은 상품이 없습니다. 운영자가 뽑기판을 리필할 때까지 기다려주세요!',
+        },
+        { status: 400 }
+      );
+    }
+
     // 2. 뽑기권 1장 원자적 차감
     const ticketRes = await db.collection('gacha_tickets').findOneAndUpdate(
       { _id: member as any, tickets: { $gte: 1 } },

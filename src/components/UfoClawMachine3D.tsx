@@ -1126,7 +1126,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             </div>
             <button
               type="button"
-              disabled={!canStartTurn || isStarting || !!lockedByOther}
+              disabled={!canStartTurn || isStarting || !!lockedByOther || items.length === 0}
               onClick={onStartTurnRequest}
               className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-black text-sm shadow-lg shadow-orange-500/25 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
@@ -1134,6 +1134,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
                 ? '크레인 준비 중...'
                 : lockedByOther
                 ? `${lockedByOther}님 플레이 중...`
+                : items.length === 0
+                ? '📦 모든 상품 완판 (운영자 리필 대기)'
                 : selectedMemberTickets < 1
                 ? '뽑기권이 부족합니다 (식사 등록 시 +5장)'
                 : '🕹️ 뽑기 시작! (뽑기권 1장 사용)'}

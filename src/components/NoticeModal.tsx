@@ -220,7 +220,11 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                 </p>
                 <p className="text-amber-300 text-xs sm:text-sm flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
-                  신뢰를 기반으로 운영중이며 남의 닉을 사용하지 마시기 바랍니다.
+                  신뢰를 기반으로 운영중이며 타인의 닉을 사용하지 마시기 바랍니다.
+                </p>
+                <p className="text-purple-300 text-xs sm:text-sm flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
+                  승점 1WIN을 소모하여 +5 가챠권을 획득할 수 있습니다
                 </p>
                 <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
                   <Info className="w-4 h-4 text-cyan-400 shrink-0" />

@@ -768,7 +768,10 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           playTone(440, 0.12);
         }
       } else if (curPhase === 'descending') {
-        state.clawY = Math.max(GACHA_PHYSICS.CLAW_DROP_Y, state.clawY - 1.9 * dt);
+        state.clawY = Math.max(
+          GACHA_PHYSICS.CLAW_DROP_Y,
+          state.clawY - GACHA_PHYSICS.CLAW_DESCEND_SPEED * dt
+        );
         state.prongAngle = 0.62;
 
         // 상자 상단에 닿으면 조기 정지

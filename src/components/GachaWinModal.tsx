@@ -6,12 +6,9 @@ import {
   Gift,
   Coins,
   Sparkles,
-  Wallet,
-  Send,
-  Loader2,
-  CheckCircle2,
-  AlertCircle,
   PackageOpen,
+  AlertTriangle,
+  ArrowRight,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { GachaWinRecord } from '@/types/gacha';
@@ -20,32 +17,20 @@ interface GachaWinModalProps {
   isOpen: boolean;
   onClose: () => void;
   winRecord: GachaWinRecord | null;
-  onClaimSuccess: () => void;
+  onRequestApplyNow: (member: string) => void;
 }
 
 export const GachaWinModal: React.FC<GachaWinModalProps> = ({
   isOpen,
   onClose,
   winRecord,
-  onClaimSuccess,
+  onRequestApplyNow,
 }) => {
   const [isUnboxed, setIsUnboxed] = useState(false);
-  const [walletAddress, setWalletAddress] = useState('');
-  const [memo, setMemo] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
 
   useEffect(() => {
     if (isOpen && winRecord) {
       setIsUnboxed(Boolean(winRecord.unboxed));
-      setErrorMsg('');
-      setSuccessMsg('');
-      setMemo('');
-      if (typeof window !== 'undefined') {
-        const savedWallet = localStorage.getItem(`aial_sol_wallet_${winRecord.member}`) || '';
-        setWalletAddress(savedWallet);
-      }
     }
   }, [isOpen, winRecord]);
 
@@ -70,46 +55,6 @@ export const GachaWinModal: React.FC<GachaWinModalProps> = ({
         }),
       });
     } catch {}
-  };
-
-  const handleClaim = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg('');
-
-    const trimmedWallet = walletAddress.trim();
-    if (!trimmedWallet) {
-      setErrorMsg('SOL을 수령할 솔라나 지갑 주소를 입력해주세요.');
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      const resp = await fetch('/api/gacha/claim', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          winId: winRecord.id,
-          member: winRecord.member,
-          walletAddress: trimmedWallet,
-          memo: memo.trim(),
-          action: 'claim',
-        }),
-      });
-      const data = await resp.json();
-      if (!resp.ok || !data.success) {
-        throw new Error(data.message || '수령 신청 실패');
-      }
-
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(`aial_sol_wallet_${winRecord.member}`, trimmedWallet);
-      }
-      setSuccessMsg(data.message || '관리자에게 텔레그램 수령 신청이 완료되었습니다!');
-      onClaimSuccess();
-    } catch (err: any) {
-      setErrorMsg(err.message || '신청 중 오류가 발생했습니다.');
-    } finally {
-      setIsSubmitting(false);
-    }
   };
 
   return (
@@ -160,27 +105,9 @@ export const GachaWinModal: React.FC<GachaWinModalProps> = ({
                 <span>상자 뜯어보기!</span>
               </button>
             </div>
-          ) : successMsg ? (
-            /* 3단계: 텔레그램 신청 완료 */
-            <div className="py-6 text-center space-y-4">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                <CheckCircle2 className="w-9 h-9" />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-lg font-black text-white">리워드 신청 완료!</h3>
-                <p className="text-xs text-emerald-300 leading-relaxed">{successMsg}</p>
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs cursor-pointer"
-              >
-                뽑기 화면으로 돌아가기
-              </button>
-            </div>
           ) : (
-            /* 2단계: 당첨 내용 공개 + 지갑 입력 */
-            <form onSubmit={handleClaim} className="space-y-4">
+            /* 2단계: 당첨 내용 공개 + 즉시 리워드 신청 여부 확인 (예 / 아니오) */
+            <div className="space-y-4">
               <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/20 via-purple-500/15 to-cyan-500/20 border border-amber-400/50 text-center space-y-1.5">
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[11px] font-black">
                   <Coins className="w-3.5 h-3.5" />
@@ -189,65 +116,44 @@ export const GachaWinModal: React.FC<GachaWinModalProps> = ({
                 <div className="text-2xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-200 to-cyan-300">
                   {winRecord.rewardAmount} SOL 당첨!
                 </div>
-                <p className="text-[11px] text-slate-300">
-                  지갑 주소를 입력하시면 관리자에게 즉시 텔레그램 지급 요청이 발송됩니다.
+                <p className="text-xs text-white font-bold pt-1">
+                  즉시 리워드 신청을 하시겠습니까?
                 </p>
               </div>
 
-              {errorMsg && (
-                <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                  <span>{errorMsg}</span>
+              {/* 업비트 0.01 SOL 입금 제한 안내 */}
+              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/35 text-xs text-amber-200 leading-relaxed flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold text-amber-300">업비트 입금 제한 안내 (0.02 SOL 이상 권장)</p>
+                  <p className="text-[11px] text-slate-300">
+                    업비트는 <strong className="text-amber-300">0.01 SOL 입금 제한</strong>이 있어 2개 이상(
+                    <strong className="text-cyan-300">0.02 SOL~</strong>) 모아서 받으시는 것이 안전합니다.
+                    <strong className="text-white"> 아니오</strong>를 누르셔도 당첨 기록은 유지되며, 상단{' '}
+                    <strong className="text-amber-300">[명예의 전당]</strong>에서 언제든 합산 신청하실 수 있습니다.
+                  </p>
                 </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5 flex items-center gap-1">
-                  <Wallet className="w-3.5 h-3.5 text-purple-400" />
-                  <span>솔라나(SOL) 수령 지갑 주소</span>
-                  <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={walletAddress}
-                  onChange={(e) => setWalletAddress(e.target.value)}
-                  placeholder="Solana 지갑 주소 입력 (예: 7xKXt...)"
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono outline-none"
-                />
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  관리자에게 한마디 <span className="text-slate-500 font-normal">(선택)</span>
-                </label>
-                <input
-                  type="text"
-                  value={memo}
-                  onChange={(e) => setMemo(e.target.value)}
-                  placeholder="예: 우유부단하게 걸려있던 거 한방에 뽑았습니다!"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-amber-400 rounded-xl px-3.5 py-2 text-xs text-white outline-none"
-                />
+              {/* 예 / 아니오 버튼 */}
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 font-bold text-xs sm:text-sm transition-colors cursor-pointer"
+                >
+                  아니오 (모아두기)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onRequestApplyNow(winRecord.member)}
+                  className="py-3 px-4 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-purple-600/25 flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                >
+                  <span>예 (즉시 신청)</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white font-black text-xs sm:text-sm shadow-lg flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>텔레그램 신청 전송 중...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="w-4 h-4" />
-                    <span>관리자에게 {winRecord.rewardAmount} SOL 수령 신청하기</span>
-                  </>
-                )}
-              </button>
-            </form>
+            </div>
           )}
         </div>
       </div>

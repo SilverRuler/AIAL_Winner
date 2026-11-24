@@ -5,6 +5,10 @@ import { RewardItem, OnChainSnapshot } from '@/types/meal';
 const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
 const ADMIN_PW = process.env.ADMIN_PW || 'bbb';
 
+function getRewardsCollectionName(source?: string | null): 'rewards' | 'gacha_rewards' {
+  return source === 'gacha' ? 'gacha_rewards' : 'rewards';
+}
+
 /**
  * 업비트 API를 통해 특정 시점(또는 최근)의 SOL 원화(KRW) 시세 조회
  */
@@ -232,6 +236,8 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const member = searchParams.get('member');
+    const source = searchParams.get('source');
+    const colName = getRewardsCollectionName(source);
 
     const db = await getDatabase();
     if (!db) {
@@ -244,7 +250,7 @@ export async function GET(request: NextRequest) {
     }
 
     const rawRewards = await db
-      .collection('rewards')
+      .collection(colName)
       .find(query)
       .sort({ date: -1, createdAt: -1 })
       .toArray();
@@ -254,7 +260,7 @@ export async function GET(request: NextRequest) {
       member: doc.member,
       amount: typeof doc.amount === 'number' ? doc.amount : parseFloat(doc.amount) || 0,
       unit: doc.unit || 'SOL',
-      title: doc.title || '식사 배틀 리워드',
+      title: doc.title || (source === 'gacha' ? 'UFO 뽑기 리워드' : '식사 배틀 리워드'),
       txHash: (doc.txHash || '').trim(),
       date: doc.date || '',
       memo: doc.memo || '',
@@ -283,6 +289,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
     const body = await request.json();
     const {
       member,
@@ -295,7 +302,10 @@ export async function POST(request: NextRequest) {
       recipientWallet,
       adminId,
       adminPw,
+      source: bodySource,
     } = body;
+    const source = bodySource || searchParams.get('source');
+    const colName = getRewardsCollectionName(source);
 
     // 관리자 인증
     const reqAdminId = adminId || request.headers.get('x-admin-id');
@@ -336,11 +346,11 @@ export async function POST(request: NextRequest) {
     }
 
     const newReward: RewardItem = {
-      id: `rew_${now}_${Math.random().toString(36).substring(2, 9)}`,
+      id: `${source === 'gacha' ? 'grew' : 'rew'}_${now}_${Math.random().toString(36).substring(2, 9)}`,
       member: String(member).trim(),
       amount: parseFloat(String(amount)) || 0,
       unit: String(unit || 'SOL').trim(),
-      title: String(title || '식사 배틀 우승 리워드').trim(),
+      title: String(title || (source === 'gacha' ? 'UFO 뽑기 리워드' : '식사 배틀 우승 리워드')).trim(),
       txHash: cleanTxHash,
       date: date || new Date().toISOString().split('T')[0],
       memo: memo ? String(memo).trim() : '',
@@ -350,7 +360,7 @@ export async function POST(request: NextRequest) {
       updatedAt: now,
     };
 
-    await db.collection('rewards').insertOne({ ...newReward });
+    await db.collection(colName).insertOne({ ...newReward });
 
     return NextResponse.json({
       success: true,
@@ -372,6 +382,7 @@ export async function POST(request: NextRequest) {
  */
 export async function PUT(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
     const body = await request.json();
     const {
       id,
@@ -385,7 +396,9 @@ export async function PUT(request: NextRequest) {
       recipientWallet,
       adminId,
       adminPw,
+      source: bodySource,
     } = body;
+    const colName = getRewardsCollectionName(bodySource || searchParams.get('source'));
 
     const reqAdminId = adminId || request.headers.get('x-admin-id');
     const reqAdminPw = adminPw || request.headers.get('x-admin-pw');
@@ -432,7 +445,7 @@ export async function PUT(request: NextRequest) {
     if (memo !== undefined) updateFields.memo = String(memo).trim();
     if (recipientWallet !== undefined) updateFields.recipientWallet = String(recipientWallet).trim();
 
-    const result = await db.collection('rewards').updateOne(
+    const result = await db.collection(colName).updateOne(
       { $or: [{ id }, { _id: id as any }] },
       { $set: updateFields }
     );
@@ -463,8 +476,10 @@ export async function PUT(request: NextRequest) {
  */
 export async function PATCH(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
     const body = await request.json();
-    const { id, txHash } = body;
+    const { id, txHash, source: bodySource } = body;
+    const colName = getRewardsCollectionName(bodySource || searchParams.get('source'));
 
     if (!id || !txHash) {
       return NextResponse.json(
@@ -478,7 +493,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'DB 연결 실패' }, { status: 500 });
     }
 
-    const currentDoc = await db.collection('rewards').findOne({ $or: [{ id }, { _id: id as any }] });
+    const currentDoc = await db.collection(colName).findOne({ $or: [{ id }, { _id: id as any }] });
     const registeredAmount = currentDoc?.amount;
 
     const snapshot = await fetchSolanaTxSnapshot(txHash.trim(), registeredAmount);
@@ -489,7 +504,7 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    await db.collection('rewards').updateOne(
+    await db.collection(colName).updateOne(
       { $or: [{ id }, { _id: id as any }] },
       { $set: { onChainSnapshot: snapshot, updatedAt: Date.now() } }
     );
@@ -515,6 +530,7 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const colName = getRewardsCollectionName(searchParams.get('source'));
     const adminId = searchParams.get('adminId') || request.headers.get('x-admin-id');
     const adminPw = searchParams.get('adminPw') || request.headers.get('x-admin-pw');
 
@@ -540,7 +556,7 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const result = await db.collection('rewards').deleteOne({
+    const result = await db.collection(colName).deleteOne({
       $or: [{ id }, { _id: id as any }],
     });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { RewardApplication } from '@/types/meal';
+import { getClientIp, normalizeIp } from '@/lib/ip';
 
 function getTelegramConfig() {
   const token =
@@ -176,6 +177,9 @@ export async function POST(request: NextRequest) {
       .replace('T', ' ')
       .substring(0, 19);
 
+    const rawIp = getClientIp(request);
+    const clientIp = normalizeIp(rawIp) || rawIp || '';
+
     const newApplication: RewardApplication = {
       id: `app_${now}_${Math.random().toString(36).substring(2, 8)}`,
       member: trimmedMember,
@@ -190,7 +194,11 @@ export async function POST(request: NextRequest) {
       date: kstDate,
     };
 
-    await db.collection('reward_applications').insertOne(newApplication as any);
+    // MongoDB 내부에는 신청자 접속 IP를 함께 기록 (클라이언트 응답에는 비노출)
+    await db.collection('reward_applications').insertOne({
+      ...newApplication,
+      ip: clientIp,
+    } as any);
 
     // 관리자 텔레그램 봇 채널로 즉시 알림 전송 (Vercel 즉시 발송 + OCI2 백그라운드 2중 안전망)
     const cleanWallet = `<code>${trimmedWallet}</code>`;

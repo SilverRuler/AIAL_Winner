@@ -18,8 +18,22 @@ import {
 } from 'lucide-react';
 import { MEMBERS } from '@/constants/members';
 import { GachaMachineState, GachaTicketBalance, GachaWinRecord } from '@/types/gacha';
+import { MemberWinStats } from '@/types/meal';
 import { UfoClawMachine3D, TurnFinishPayload } from '@/components/UfoClawMachine3D';
 import { GachaWinModal } from '@/components/GachaWinModal';
+import { LeaderboardModal } from '@/components/LeaderboardModal';
+import { RewardModal } from '@/components/RewardModal';
+
+function formatKstDateTime(ts?: number): string {
+  if (!ts) return '';
+  const kst = new Date(ts + 9 * 3600 * 1000);
+  const yyyy = kst.getUTCFullYear();
+  const mm = String(kst.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(kst.getUTCDate()).padStart(2, '0');
+  const hh = String(kst.getUTCHours()).padStart(2, '0');
+  const mi = String(kst.getUTCMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+}
 
 export default function GachaPage() {
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
@@ -29,7 +43,14 @@ export default function GachaPage() {
   const [ticketsByMember, setTicketsByMember] = useState<Record<string, GachaTicketBalance>>({});
   const [unclaimedWins, setUnclaimedWins] = useState<GachaWinRecord[]>([]);
   const [recentWins, setRecentWins] = useState<GachaWinRecord[]>([]);
+  const [gachaWinStats, setGachaWinStats] = useState<MemberWinStats[]>([]);
+  const [usedWinsByMember, setUsedWinsByMember] = useState<Record<string, number>>({});
   const [selectedMember, setSelectedMember] = useState<string>(MEMBERS[0].name);
+
+  const [isLeaderboardOpen, setIsLeaderboardOpen] = useState<boolean>(false);
+  const [isRewardModalOpen, setIsRewardModalOpen] = useState<boolean>(false);
+  const [rewardInitialMember, setRewardInitialMember] = useState<string | null>(null);
+  const [rewardStartApply, setRewardStartApply] = useState<boolean>(false);
 
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState<boolean>(false);
@@ -74,6 +95,12 @@ export default function GachaPage() {
         setTicketsByMember(data.ticketsByMember || {});
         setUnclaimedWins(data.unclaimedWins || []);
         setRecentWins(data.recentWins || []);
+        if (Array.isArray(data.gachaWinStats)) {
+          setGachaWinStats(data.gachaWinStats);
+        }
+        if (data.usedWinsByMember) {
+          setUsedWinsByMember(data.usedWinsByMember);
+        }
       }
     } catch (e) {
       console.warn('Failed to fetch gacha state:', e);
@@ -109,9 +136,19 @@ export default function GachaPage() {
     };
   }, [ticketsByMember, selectedMember]);
 
-  const myUnclaimedWins = useMemo(() => {
-    return unclaimedWins.filter((w) => w.member === selectedMember);
-  }, [unclaimedWins, selectedMember]);
+  const myAvailableGachaCount = useMemo(() => {
+    const stat = gachaWinStats.find((s) => s.member === selectedMember);
+    if (!stat) return 0;
+    const used = usedWinsByMember[selectedMember] || 0;
+    return Math.max(0, stat.totalWins - used);
+  }, [gachaWinStats, usedWinsByMember, selectedMember]);
+
+  const handleOpenGachaReward = (member: string, startApply = false) => {
+    setIsLeaderboardOpen(false);
+    setRewardInitialMember(member);
+    setRewardStartApply(startApply);
+    setIsRewardModalOpen(true);
+  };
 
   const lockedByOther = useMemo(() => {
     if (!machine?.lock?.active) return null;
@@ -310,69 +347,87 @@ export default function GachaPage() {
             </div>
           </div>
 
-          {/* 관리자 전용 툴바 */}
-          {isAdmin && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => handleAdminGrantTicket(1)}
-                disabled={isGranting}
-                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold cursor-pointer disabled:opacity-50"
-                title="현재 선택된 멤버에게 테스트 뽑기권 +1 지급"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{selectedMember} 티켓 +1</span>
-              </button>
+          {/* 우측 툴바: 명예의 전당(공용) + 관리자 전용 버튼 */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setIsLeaderboardOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-400/50 text-amber-300 hover:text-amber-200 text-xs font-black transition-all shadow-sm cursor-pointer"
+              title="UFO 뽑기 명예의 전당 및 리워드(SOL) 신청"
+            >
+              <Trophy className="w-3.5 h-3.5 text-amber-400" />
+              <span>명예의 전당</span>
+            </button>
 
-              <button
-                type="button"
-                onClick={handleAdminRefill}
-                disabled={isRefilling || isResetting || !!activeTurnId}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 text-xs font-black cursor-pointer disabled:opacity-50"
-                title="뽑혀서 비어있는 상품 슬롯만 새로 리필 (4개 모두 뽑혔으면 4개 전부 리필)"
-              >
-                {isRefilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
-                <span>뽑기판 리필</span>
-              </button>
+            {isAdmin && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => handleAdminGrantTicket(1)}
+                  disabled={isGranting}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-bold cursor-pointer disabled:opacity-50"
+                  title="현재 선택된 멤버에게 테스트 뽑기권 +1 지급"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{selectedMember} 티켓 +1</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={handleAdminReset}
-                disabled={isResetting || isRefilling || !!activeTurnId}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-xs font-black cursor-pointer disabled:opacity-50"
-                title="각도가 틀어졌을 때 현재 남아있는 상자들만 초기 정위치로 복구"
-              >
-                {isResetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-                <span>뽑기판 초기화</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={handleAdminRefill}
+                  disabled={isRefilling || isResetting || !!activeTurnId}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 text-xs font-black cursor-pointer disabled:opacity-50"
+                  title="뽑혀서 비어있는 상품 슬롯만 새로 리필 (4개 모두 뽑혔으면 4개 전부 리필)"
+                >
+                  {isRefilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
+                  <span>뽑기판 리필</span>
+                </button>
 
-              <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                관리자 모드
-              </span>
-            </div>
-          )}
+                <button
+                  type="button"
+                  onClick={handleAdminReset}
+                  disabled={isResetting || isRefilling || !!activeTurnId}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-xs font-black cursor-pointer disabled:opacity-50"
+                  title="각도가 틀어졌을 때 현재 남아있는 상자들만 초기 정위치로 복구"
+                >
+                  {isResetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                  <span>뽑기판 초기화</span>
+                </button>
+
+                <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  관리자 모드
+                </span>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
       {/* 메인 게임 영역 */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5">
-        {/* 미수령 당첨 상자 알림 */}
-        {myUnclaimedWins.length > 0 && (
+        {/* 미수령 당첨 리워드 신청 가능 알림 */}
+        {myAvailableGachaCount > 0 && (
           <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-rose-500/20 border border-amber-400/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
             <div className="flex items-center gap-2.5">
               <Gift className="w-5 h-5 text-amber-300 shrink-0 animate-bounce" />
               <div className="text-xs sm:text-sm">
-                <strong className="text-white">{selectedMember}</strong>님이 아직 수령 신청하지 않은{' '}
-                <strong className="text-amber-300">{myUnclaimedWins.length}개의 당첨 상자(0.01 SOL)</strong>가 있습니다!
+                <strong className="text-white">{selectedMember}</strong>님이 리워드 신청 가능한 당첨 상자가{' '}
+                <strong className="text-amber-300">
+                  {myAvailableGachaCount}개 ({Number((myAvailableGachaCount * 0.01).toFixed(4))} SOL)
+                </strong>{' '}
+                있습니다!{' '}
+                <span className="text-[11px] text-slate-300">
+                  (업비트 입금 시 2개 이상 모아서 신청 권장)
+                </span>
               </div>
             </div>
             <button
               type="button"
-              onClick={() => setActiveWinModal(myUnclaimedWins[0])}
+              onClick={() => handleOpenGachaReward(selectedMember, false)}
               className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shrink-0 cursor-pointer"
             >
-              🎁 상자 뜯고 SOL 받기
+              🎁 리워드 신청하기
             </button>
           </div>
         )}
@@ -476,28 +531,28 @@ export default function GachaPage() {
                   className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-2 text-xs"
                 >
                   <div className="space-y-0.5 min-w-0">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-black text-white">{w.member}</span>
-                      <span className="text-slate-400">· {w.boxLabel}</span>
+                      <span className="text-slate-300">· {w.boxLabel}</span>
+                      {w.createdAt ? (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          ({formatKstDateTime(w.createdAt)})
+                        </span>
+                      ) : null}
                     </div>
                     <div className="text-[11px] text-amber-300 font-mono font-bold flex items-center gap-1">
                       <Coins className="w-3 h-3" />
                       <span>{w.rewardAmount} SOL</span>
                     </div>
                   </div>
-                  {w.claimStatus === 'unclaimed' ? (
-                    <button
-                      type="button"
-                      onClick={() => setActiveWinModal(w)}
-                      className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-[11px] shrink-0 cursor-pointer"
-                    >
-                      수령 신청
-                    </button>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold shrink-0">
-                      {w.claimStatus === 'completed' ? '지급 완료' : '텔레그램 신청됨'}
-                    </span>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleOpenGachaReward(w.member, false)}
+                    className="px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 text-purple-300 font-bold text-[10px] shrink-0 cursor-pointer transition-colors"
+                    title="명예의 전당에서 리워드 신청 및 현황 확인"
+                  >
+                    리워드 현황
+                  </button>
                 </div>
               ))}
             </div>
@@ -505,12 +560,40 @@ export default function GachaPage() {
         </section>
       </main>
 
-      {/* 당첨 상자 뜯기 & 지갑 수령 신청 모달 */}
+      {/* 당첨 상자 뜯기 & 즉시 리워드 신청 확인 모달 */}
       <GachaWinModal
         isOpen={!!activeWinModal}
         onClose={() => setActiveWinModal(null)}
         winRecord={activeWinModal}
-        onClaimSuccess={fetchState}
+        onRequestApplyNow={(member) => {
+          setActiveWinModal(null);
+          handleOpenGachaReward(member, true);
+        }}
+      />
+
+      {/* UFO 뽑기 명예의 전당 모달 (식사배틀과 별도 DB) */}
+      <LeaderboardModal
+        isOpen={isLeaderboardOpen}
+        onClose={() => setIsLeaderboardOpen(false)}
+        stats={gachaWinStats}
+        mode="gacha"
+        usedWinsByMember={usedWinsByMember}
+        onSelectMemberReward={(member) => handleOpenGachaReward(member, false)}
+      />
+
+      {/* UFO 뽑기 리워드 신청(퀴즈+양식) & 지급 현황 모달 (식사배틀과 별도 DB) */}
+      <RewardModal
+        isOpen={isRewardModalOpen}
+        onClose={() => {
+          setIsRewardModalOpen(false);
+          setRewardStartApply(false);
+        }}
+        initialMember={rewardInitialMember}
+        isAdmin={isAdmin}
+        memberWinStats={gachaWinStats}
+        mode="gacha"
+        initialStartApply={rewardStartApply}
+        onApplySuccess={fetchState}
       />
     </div>
   );

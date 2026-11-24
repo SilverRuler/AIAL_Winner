@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X, Trophy, Crown, Flame, Award, Calendar, Coins } from 'lucide-react';
+import { X, Trophy, Crown, Flame, Award, Coins } from 'lucide-react';
 import { MemberWinStats } from '@/types/meal';
 import { getMemberInfo } from '@/constants/members';
 
@@ -10,6 +10,8 @@ interface LeaderboardModalProps {
   onClose: () => void;
   stats: MemberWinStats[];
   onSelectMemberReward?: (member: string) => void;
+  mode?: 'meal' | 'gacha';
+  usedWinsByMember?: Record<string, number>;
 }
 
 export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
@@ -17,8 +19,12 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   onClose,
   stats,
   onSelectMemberReward,
+  mode = 'meal',
+  usedWinsByMember = {},
 }) => {
   if (!isOpen) return null;
+
+  const isGacha = mode === 'gacha';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-fade-in overflow-y-auto">
@@ -31,13 +37,15 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-black text-white flex items-center space-x-2">
-                <span>먀미의 명예의 전당</span>
+                <span>{isGacha ? 'UFO 뽑기 명예의 전당' : '먀미의 명예의 전당'}</span>
                 <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
-                  WIN 랭킹
+                  {isGacha ? '뽑기 랭킹' : 'WIN 랭킹'}
                 </span>
               </h2>
               <p className="text-[11px] text-slate-400">
-                멤버를 클릭하면 솔라나(SOL) 리워드 지급 현황을 확인할 수 있습니다.
+                {isGacha
+                  ? '멤버를 클릭하면 UFO 뽑기 SOL 리워드 신청 및 지급 현황을 확인할 수 있습니다.'
+                  : '멤버를 클릭하면 솔라나(SOL) 리워드 지급 현황을 확인할 수 있습니다.'}
               </p>
             </div>
           </div>
@@ -71,6 +79,8 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             const isFirst = rank === 1 && stat.totalWins > 0;
             const isSecond = rank === 2 && stat.totalWins > 0;
             const isThird = rank === 3 && stat.totalWins > 0;
+            const usedCount = usedWinsByMember[stat.member] || 0;
+            const availCount = Math.max(0, stat.totalWins - usedCount);
 
             return (
               <div
@@ -111,26 +121,33 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                       {stat.totalWins >= 3 && (
                         <span className="inline-flex items-center text-[10px] text-orange-400 font-semibold gap-0.5">
                           <Flame className="w-3 h-3 fill-orange-400" />
-                          미식가
+                          {isGacha ? '뽑기 고수' : '미식가'}
+                        </span>
+                      )}
+                      {isGacha && availCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-md bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold">
+                          신청가능 {availCount}개
                         </span>
                       )}
                     </div>
                     <div className="text-[10px] text-purple-400 group-hover:text-purple-300 font-bold flex items-center gap-1 transition-colors pl-0.5">
                       <Coins className="w-3 h-3" />
-                      <span>리워드 지급현황 보기 &gt;</span>
+                      <span>{isGacha ? '리워드 신청 / 지급현황 >' : '리워드 지급현황 보기 >'}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* 통계 수치 (승리, 등록 수, 승률) */}
+                {/* 통계 수치 */}
                 <div className="flex items-center space-x-3 text-right">
                   <div>
                     <div className="text-xs sm:text-sm font-black text-amber-400 flex items-center justify-end space-x-1">
                       <Award className="w-3.5 h-3.5" />
-                      <span>{stat.totalWins} WIN</span>
+                      <span>{isGacha ? `${stat.totalWins}개 획득` : `${stat.totalWins} WIN`}</span>
                     </div>
                     <div className="text-[10px] text-slate-400">
-                      총 {stat.totalSubmissions}회 등록 · 승률 {stat.winRate}%
+                      {isGacha
+                        ? `총 ${stat.totalSubmissions}회 도전 · 성공률 ${stat.winRate}%`
+                        : `총 ${stat.totalSubmissions}회 등록 · 승률 ${stat.winRate}%`}
                     </div>
                   </div>
                 </div>

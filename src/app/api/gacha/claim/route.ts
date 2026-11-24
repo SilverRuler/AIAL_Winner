@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { getTelegramConfig } from '@/lib/gachaServer';
+import { getClientIp, normalizeIp } from '@/lib/ip';
 
 export async function POST(request: NextRequest) {
   try {
@@ -80,6 +81,9 @@ export async function POST(request: NextRequest) {
     const trimmedMemo = (memo || '').trim();
     const rewardAmount = typeof winDoc.rewardAmount === 'number' ? winDoc.rewardAmount : 0.01;
 
+    const rawIp = getClientIp(request);
+    const clientIp = normalizeIp(rawIp) || rawIp || '';
+
     await db.collection('gacha_wins').updateOne(
       { $or: [{ id: winId }, { _id: winId as any }] },
       {
@@ -89,6 +93,7 @@ export async function POST(request: NextRequest) {
           walletAddress: trimmedWallet,
           memo: trimmedMemo,
           claimedAt: now,
+          ip: clientIp,
         },
       }
     );

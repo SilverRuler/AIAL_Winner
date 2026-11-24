@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
+import { MEMBERS } from '@/constants/members';
 import {
   getAllMemberTicketBalances,
   getOrInitMachineState,
@@ -18,19 +19,17 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [machine, ticketsByMember, unclaimedRaw, recentRaw] = await Promise.all([
+    const [machine, ticketsByMember, allWinsRaw, validAppsRaw] = await Promise.all([
       getOrInitMachineState(db),
       getAllMemberTicketBalances(db),
       db
         .collection('gacha_wins')
-        .find({ claimStatus: 'unclaimed' })
+        .find({})
         .sort({ createdAt: -1 })
         .toArray(),
       db
-        .collection('gacha_wins')
-        .find({})
-        .sort({ createdAt: -1 })
-        .limit(20)
+        .collection('gacha_reward_applications')
+        .find({ status: { $ne: 'rejected' } })
         .toArray(),
     ]);
 
@@ -50,13 +49,64 @@ export async function GET(request: NextRequest) {
       claimedAt: doc.claimedAt,
     });
 
+    // 멤버별 총 뽑기 성공 수 / 기신청 수 / 남은 신청 가능 수 집계
+    const actualWinsByMember: Record<string, number> = {};
+    const lastWinDateByMember: Record<string, string> = {};
+    for (const doc of allWinsRaw as any[]) {
+      const m = doc.member;
+      if (!m) continue;
+      actualWinsByMember[m] = (actualWinsByMember[m] || 0) + 1;
+      if (!lastWinDateByMember[m] && doc.createdAt) {
+        lastWinDateByMember[m] = new Date(doc.createdAt + 9 * 3600 * 1000)
+          .toISOString()
+          .replace('T', ' ')
+          .substring(0, 16);
+      }
+    }
+
+    const usedWinsByMember: Record<string, number> = {};
+    for (const app of validAppsRaw as any[]) {
+      if (app.member) {
+        usedWinsByMember[app.member] =
+          (usedWinsByMember[app.member] || 0) + (app.requestedWins || 0);
+      }
+    }
+
+    const gachaWinStats = MEMBERS.map((m) => {
+      const totalWins = actualWinsByMember[m.name] || 0;
+      const totalSubmissions = ticketsByMember[m.name]?.totalPlayed || 0;
+      const usedWins = usedWinsByMember[m.name] || 0;
+      const availableWins = Math.max(0, totalWins - usedWins);
+      const winRate =
+        totalSubmissions > 0 ? Math.min(100, Math.round((totalWins / totalSubmissions) * 100)) : 0;
+      return {
+        member: m.name,
+        totalSubmissions,
+        totalWins,
+        usedWins,
+        availableWins,
+        winRate,
+        lastWinDate: lastWinDateByMember[m.name],
+      };
+    }).sort((a, b) => {
+      if (b.totalWins !== a.totalWins) return b.totalWins - a.totalWins;
+      return b.totalSubmissions - a.totalSubmissions;
+    });
+
+    const recentWins = allWinsRaw.slice(0, 20).map(formatWin);
+    const unclaimedWins = allWinsRaw
+      .filter((d: any) => (d.claimStatus || 'unclaimed') === 'unclaimed')
+      .map(formatWin);
+
     return NextResponse.json(
       {
         success: true,
         machine: sanitizeMachineForClient(machine),
         ticketsByMember,
-        unclaimedWins: unclaimedRaw.map(formatWin),
-        recentWins: recentRaw.map(formatWin),
+        unclaimedWins,
+        recentWins,
+        gachaWinStats,
+        usedWinsByMember,
       },
       {
         headers: {

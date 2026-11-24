@@ -1052,10 +1052,10 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             if (state.wonSet.has(ent.data.id)) continue;
             const dims = getBoxDimensions(ent.data.slotIndex);
             const localPt = ent.body.pointToLocalFrame(pinchWorld);
-            // 한쪽 집게가 옆구리에 걸릴 수 있도록 X 허용 범위를 집게 반폭까지 확인
+            // 상자가 어떤 각도(가로 90도 포함)로 돌아가 있든 한쪽 집게가 끝 모서리에 걸릴 수 있도록 X/Z 양방향 여유 확보
             if (
               Math.abs(localPt.x) <= dims.w / 2 + 0.42 &&
-              Math.abs(localPt.z) <= dims.d / 2 + 0.16 &&
+              Math.abs(localPt.z) <= dims.d / 2 + 0.42 &&
               Math.abs(localPt.y) <= dims.h / 2 + 0.36
             ) {
               const d = pinchWorld.distanceTo(ent.body.position);
@@ -1064,9 +1064,9 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
                 bestEnt = ent;
                 bestDims = dims;
                 bestLocal = new CANNON.Vec3(
-                  Math.max(-dims.w * 0.35, Math.min(dims.w * 0.35, localPt.x)),
+                  Math.max(-dims.w * 0.42, Math.min(dims.w * 0.42, localPt.x)),
                   dims.h * 0.14,
-                  Math.max(-dims.d * 0.42, Math.min(dims.d * 0.42, localPt.z))
+                  Math.max(-dims.d * 0.44, Math.min(dims.d * 0.44, localPt.z))
                 );
               }
             }
@@ -1086,24 +1086,34 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             const tooWideToStraddle = boxSpanX > CLAW_OPEN_SPAN - 0.05;
             const freeTipReachedSide = tipY < boxTopY - 0.08;
 
+            // 회전 각도(0°/45°/90° 등)에 무관하게 실제로 집게 끝단이 닿는 상자 외곽 모서리 로컬 좌표 계산 헬퍼
+            const computeWorldEdgeHookLocal = (sideSign: number) => {
+              const tipWorld = new CANNON.Vec3(
+                state.clawX + sideSign * 0.26,
+                Math.max(bestEnt!.body.position.y - bestDims.h * 0.2, state.clawY - 0.56),
+                state.clawZ
+              );
+              const loc = bestEnt!.body.pointToLocalFrame(tipWorld);
+              return new CANNON.Vec3(
+                Math.max(-bestDims.w * 0.46, Math.min(bestDims.w * 0.46, loc.x)),
+                Math.max(-bestDims.h * 0.35, Math.min(bestDims.h * 0.3, loc.y)),
+                Math.max(-bestDims.d * 0.46, Math.min(bestDims.d * 0.46, loc.z))
+              );
+            };
+
             if (bothBlocked) {
-              // 양발 모두 상자 윗면에 막힘 -> 관통 잡기 불가, 윗면 누르기/긁기만 적용
+              // 양발 모두 상자 윗면에 막힘 -> 관통 잡기 불가, 대신 윗면을 누르며 살짝 긁어 밀어내는 물리 반응 적용
+              const offsetSignX = state.clawX >= bestEnt.body.position.x ? -1 : 1;
               bestEnt.body.applyImpulse(
-                new CANNON.Vec3(0, -0.8, 0.2),
+                new CANNON.Vec3(offsetSignX * 0.55, -0.95, 0.35),
                 pinchWorld.vsub(bestEnt.body.position)
               );
-              setClawFeedback('🚫 양쪽 집게가 상자 윗면에 걸려 잡지 못했습니다! (눌림만 적용)');
-              playTone(190, 0.14, 'sawtooth', 0.05);
+              setClawFeedback('👇 양쪽 집게가 상자 윗면에 닿아 살짝 누르며 밀어냈습니다!');
+              playTone(200, 0.13, 'sawtooth', 0.045);
             } else if (oneBlocked && freeTipReachedSide) {
               // 현실 오락실 묘미! 한쪽 집게가 상자에 걸렸지만 끝까지 하강해 반대쪽 집게가 옆구리/아랫모서리를 비스듬히 후킹!
-              // 걸리지 않은 쪽(-X 또는 +X) 외곽 모서리에 앵커를 걸어 이상한 각도로 들어올리며 위치를 틀어줌
               const freeSideSign = leftBlocked ? 1 : -1;
-              const localPt = bestEnt.body.pointToLocalFrame(pinchWorld);
-              const hookLocal = new CANNON.Vec3(
-                freeSideSign * bestDims.w * 0.44,
-                -bestDims.h * 0.08,
-                Math.max(-bestDims.d * 0.42, Math.min(bestDims.d * 0.42, localPt.z))
-              );
+              const hookLocal = computeWorldEdgeHookLocal(freeSideSign);
               const clawAnchorOffset = new CANNON.Vec3(freeSideSign * 0.24, -0.56, 0);
               const roll = Math.random();
               const hookForce =
@@ -1129,19 +1139,39 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
               world.addConstraint(constraint);
               state.grabConstraint = constraint;
               setClawFeedback('🪝 한쪽 집게가 옆모서리에 걸려 비스듬히 들어올립니다!');
-            } else if (tooWideToStraddle || !freeTipReachedSide) {
-              // 상자가 가로로 너무 넓어 양쪽 다 옆면을 못 잡거나 끝단이 상자 옆면에 닿지 못함
-              const pushDirX = leftBlocked ? 0.45 : rightBlocked ? -0.45 : 0;
+            } else if (tooWideToStraddle && freeTipReachedSide) {
+              // 상자가 가로/대각선으로 넓어 양쪽을 다 감싸진 못해도, 한쪽 집게가 상자 끝을 치고 긁으며 살짝 들어올려 각도를 바꿈!
+              const sideSign = state.clawX >= bestEnt.body.position.x ? 1 : -1;
+              const hookLocal = computeWorldEdgeHookLocal(sideSign);
+              const clawAnchorOffset = new CANNON.Vec3(sideSign * 0.28, -0.56, 0);
+              // 끝 모서리를 치고 긁는 초기 물리 충격 + 비스듬히 살짝 들어올리다 미끄러지는 후킹
               bestEnt.body.applyImpulse(
-                new CANNON.Vec3(pushDirX, -0.65, 0.22),
+                new CANNON.Vec3(-sideSign * 0.65, 0.35, 0.25),
+                bestEnt.body.pointToWorldFrame(hookLocal).vsub(bestEnt.body.position)
+              );
+              const roll = Math.random();
+              const scrapeForce = roll < 0.4 ? 13.0 + Math.random() * 3.0 : 16.5 + Math.random() * 3.5;
+              state.grabSlipTime = roll < 0.4 ? 0.28 + Math.random() * 0.16 : 0.44 + Math.random() * 0.24;
+
+              const constraint = new CANNON.PointToPointConstraint(
+                clawAnchorBody,
+                clawAnchorOffset,
+                bestEnt.body,
+                hookLocal,
+                scrapeForce
+              );
+              world.addConstraint(constraint);
+              state.grabConstraint = constraint;
+              setClawFeedback('🪝 집게가 넓은 상자 끝을 긁어 비스듬히 들어올립니다!');
+            } else if (!freeTipReachedSide) {
+              // 집게 끝단이 상자 옆면까지 내려오지 못했지만 윗면/모서리를 스치며 살짝 밀어냄
+              const pushDirX = state.clawX >= bestEnt.body.position.x ? -0.55 : 0.55;
+              bestEnt.body.applyImpulse(
+                new CANNON.Vec3(pushDirX, -0.65, 0.28),
                 pinchWorld.vsub(bestEnt.body.position)
               );
-              setClawFeedback(
-                tooWideToStraddle
-                  ? '🚫 상자가 가로로 넓어 집게가 양옆을 감쌀 수 없습니다! (한쪽 끝을 공략하세요)'
-                  : '🚫 집게가 상자 옆면에 닿지 못해 헛잡았습니다!'
-              );
-              playTone(205, 0.13, 'sawtooth', 0.04);
+              setClawFeedback('👆 집게가 상자 모서리를 스치며 살짝 밀어냈습니다!');
+              playTone(210, 0.12, 'sawtooth', 0.04);
             } else {
               // 정상 양발 잡기! 현실적인 아케이드 집게 힘 편차 + 중심 이탈 페널티 적용
               const centerOffsetX = Math.abs(bestEnt.body.position.x - state.clawX);

@@ -27,16 +27,16 @@ export const GACHA_PHYSICS = {
   CABINET_HALF_X: 3.18,
   CABINET_HALF_Z: 1.52,
 
-  // 크레인 이동 범위 및 속도
+  // 크레인 이동 범위 및 속도 (길어진 집게 암에 맞춰 높이/하강 한계 최적화)
   CLAW_HOME_X: -2.65,
   CLAW_HOME_Z: 0.85,
-  CLAW_HOME_Y: 2.55,
+  CLAW_HOME_Y: 2.68,
   CLAW_MIN_X: -2.65,
   CLAW_MAX_X: 2.65,
   CLAW_MIN_Z: -0.85,
   CLAW_MAX_Z: 0.85,
-  CLAW_DROP_Y: 0.96,      // 하강 시 집게 중심 Y (Bar 위 상자 높이에 최적화)
-  CLAW_LIFT_Y: 2.35,      // 들어올림 최고 높이
+  CLAW_DROP_Y: 1.24,      // 하강 시 집게 중심 Y (길어진 집게 끝단 y ≈ 0.57로 Bar 높이 0.72 아래까지 자연 도달)
+  CLAW_LIFT_Y: 2.52,      // 들어올림 최고 높이
   MOVE_SPEED_X: 0.825,      // 초당 X 이동 속도 (기존 1.65의 1/2)
   MOVE_SPEED_Z: 0.625,      // 초당 Z 이동 속도 (기존 1.25의 1/2)
   CLAW_DESCEND_SPEED: 0.475, // 초당 집게 하강 속도 (기존 0.95의 1/2)

@@ -5,10 +5,10 @@ import { GachaBoxItem, GachaColorTheme } from '@/types/gacha';
  * Three.js 및 cannon-es가 동일한 좌표계와 치수를 사용하도록 단일 소스에서 관리
  */
 export const GACHA_PHYSICS = {
-  // 4개의 평행 Bar (중앙 낙하용 2개 Bar 그대로 + 앞/뒤 외곽 높은 보조 Bar 2개 추가)
+  // 4개의 평행 Bar (중앙 빨간색 낙하용 2개 Bar 틈새 0.73으로 소폭 좁혀 난이도 상향 + 앞/뒤 외곽 높은 보조 Bar 2개)
   BAR_Y: 0.72,
   BAR_RADIUS: 0.09,
-  BAR_HALF_Z: 0.50,       // 중앙 앞 Bar: +0.50, 뒤 Bar: -0.50 (중심 간격 1.00, 내경 틈새 0.82)
+  BAR_HALF_Z: 0.455,      // 중앙 앞 Bar: +0.455, 뒤 Bar: -0.455 (중심 간격 0.91, 내경 틈새 0.73)
   OUTER_BAR_Y: 1.06,      // 외곽 Bar 높이 (중앙 Bar보다 Y축으로 높게 배치)
   OUTER_BAR_HALF_Z: 1.02, // 외곽 앞 Bar: +1.02, 뒤 Bar: -1.02 (중앙 Bar보다 바깥쪽에 배치)
   BAR_LENGTH: 6.4,

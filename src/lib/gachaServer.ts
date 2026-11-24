@@ -100,12 +100,58 @@ export async function getAllMemberTicketBalances(db: Db): Promise<Record<string,
 }
 
 /**
- * 공유 UFO 크레인 머신 상태 조회 (미생성 시 초기화, 만료된 락 자동 해제)
+ * KST 기준 정기 자동 초기화·리필 스케줄(10:30, 14:00, 23:00) 중 가장 최근에 도래한 체크포인트 계산
+ */
+function getLatestScheduledCheckpoint(nowMs: number): {
+  key: string;
+  label: string;
+  timestampMs: number;
+} {
+  const KST_OFFSET_MS = 9 * 3600 * 1000;
+  const kstDate = new Date(nowMs + KST_OFFSET_MS);
+  const y = kstDate.getUTCFullYear();
+  const m = kstDate.getUTCMonth();
+  const d = kstDate.getUTCDate();
+
+  const makeKstMs = (year: number, month: number, day: number, hour: number, minute: number) =>
+    Date.UTC(year, month, day, hour, minute, 0, 0) - KST_OFFSET_MS;
+
+  const fmtDate = (ms: number) => {
+    const dt = new Date(ms + KST_OFFSET_MS);
+    const yy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getUTCDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  };
+
+  const candidates = [
+    { label: '23:00', ts: makeKstMs(y, m, d - 1, 23, 0) },
+    { label: '10:30', ts: makeKstMs(y, m, d, 10, 30) },
+    { label: '14:00', ts: makeKstMs(y, m, d, 14, 0) },
+    { label: '23:00', ts: makeKstMs(y, m, d, 23, 0) },
+  ];
+
+  let latest = candidates[0];
+  for (const c of candidates) {
+    if (c.ts <= nowMs) {
+      latest = c;
+    }
+  }
+  return {
+    key: `${fmtDate(latest.ts)}_${latest.label}`,
+    label: latest.label,
+    timestampMs: latest.ts,
+  };
+}
+
+/**
+ * 공유 UFO 크레인 머신 상태 조회 (미생성 시 초기화, 만료된 락 자동 해제, 10:30/14:00/23:00 정기 자동 재정렬+리필)
  */
 export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> {
   const col = db.collection('gacha_machine');
   const existing = (await col.findOne({ _id: 'main_ufo_bridge' as any })) as any;
   const now = Date.now();
+  const latestCp = getLatestScheduledCheckpoint(now);
 
   if (!existing || !Array.isArray(existing.items)) {
     const initial: GachaMachineState = {
@@ -127,7 +173,13 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
 
     await col.updateOne(
       { _id: 'main_ufo_bridge' as any },
-      { $set: initial },
+      {
+        $set: {
+          ...initial,
+          lastAutoResetSlot: latestCp.key,
+          lastAutoResetAt: now,
+        },
+      },
       { upsert: true }
     );
     return initial;
@@ -156,6 +208,64 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
       }
     );
     existing.lock = clearedLock;
+  }
+
+  // 정기 자동 초기화 및 리필 체크 (매일 KST 10:30, 14:00, 23:00)
+  // 현재 플레이 중인 턴 락이 없을 때만 안전하게 자동 재정렬 + 4개 전체 리필 실행
+  const isActivelyLocked = Boolean(
+    existing.lock?.active && existing.lock?.expiresAt && existing.lock.expiresAt > now
+  );
+  const lastHandledMs = Number(existing.lastAutoResetAt) || Number(existing.updatedAt) || 0;
+  if (
+    !isActivelyLocked &&
+    existing.lastAutoResetSlot !== latestCp.key &&
+    latestCp.timestampMs > lastHandledMs
+  ) {
+    const freshBoxes = createInitialGachaBoxes();
+    const autoSummary = `⏰ 정기 스케줄(${latestCp.label})로 뽑기판 상품 4개가 자동 재정렬 및 리필되었습니다!`;
+    const clearedLock = {
+      active: false,
+      member: null,
+      turnId: null,
+      startedAt: null,
+      expiresAt: null,
+    };
+    const autoUpdated = (await col.findOneAndUpdate(
+      {
+        _id: 'main_ufo_bridge' as any,
+        lastAutoResetSlot: { $ne: latestCp.key },
+        $or: [
+          { 'lock.active': false },
+          { 'lock.expiresAt': { $lt: now } },
+          { 'lock.active': { $exists: false } },
+        ],
+      },
+      {
+        $set: {
+          items: freshBoxes,
+          lock: clearedLock,
+          lastActionSummary: autoSummary,
+          lastAutoResetSlot: latestCp.key,
+          lastAutoResetAt: now,
+          updatedAt: now,
+        },
+        $inc: { resetCount: 1 },
+      },
+      { returnDocument: 'after' }
+    )) as any;
+
+    if (autoUpdated) {
+      return {
+        id: 'main_ufo_bridge',
+        items: autoUpdated.items,
+        lock: autoUpdated.lock || clearedLock,
+        lastPlayedBy: autoUpdated.lastPlayedBy || null,
+        lastPlayedAt: autoUpdated.lastPlayedAt || null,
+        lastActionSummary: autoUpdated.lastActionSummary || autoSummary,
+        resetCount: autoUpdated.resetCount || 0,
+        updatedAt: autoUpdated.updatedAt || now,
+      };
+    }
   }
 
   return {

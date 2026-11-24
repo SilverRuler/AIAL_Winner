@@ -17,6 +17,10 @@ import {
   RefreshCw,
   PackagePlus,
   ArrowRightLeft,
+  Megaphone,
+  X,
+  Clock,
+  Info,
 } from 'lucide-react';
 import { MEMBERS } from '@/constants/members';
 import { GachaMachineState, GachaTicketBalance, GachaWinRecord } from '@/types/gacha';
@@ -54,6 +58,7 @@ export default function GachaPage() {
   const [selectedMember, setSelectedMember] = useState<string>(MEMBERS[0].name);
 
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState<boolean>(false);
+  const [isUfoNoticeOpen, setIsUfoNoticeOpen] = useState<boolean>(false);
   const [isRewardModalOpen, setIsRewardModalOpen] = useState<boolean>(false);
   const [rewardInitialMember, setRewardInitialMember] = useState<string | null>(null);
   const [rewardStartApply, setRewardStartApply] = useState<boolean>(false);
@@ -536,6 +541,16 @@ export default function GachaPage() {
               <span>명예의 전당</span>
             </button>
 
+            <button
+              type="button"
+              onClick={() => setIsUfoNoticeOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/50 text-cyan-300 hover:text-cyan-200 text-xs font-black transition-all shadow-sm cursor-pointer"
+              title="UFO 뽑기 공지사항 보기"
+            >
+              <Megaphone className="w-3.5 h-3.5 text-cyan-400" />
+              <span>UFO 공지</span>
+            </button>
+
             {isAdmin && (
               <>
                 <button
@@ -953,6 +968,72 @@ export default function GachaPage() {
         }}
         winRecord={activeWinModal}
       />
+
+      {/* UFO 뽑기 공지사항 모달 */}
+      {isUfoNoticeOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+          onClick={() => setIsUfoNoticeOpen(false)}
+        >
+          <div
+            className="bg-slate-900 border border-cyan-500/50 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 bg-gradient-to-r from-cyan-950/70 via-slate-900 to-slate-900 border-b border-cyan-500/30 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300">
+                  <Megaphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-black text-white">UFO 공지사항</h2>
+                  <p className="text-[11px] text-slate-400">UFO 브릿지 뽑기 운영 안내</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsUfoNoticeOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                aria-label="닫기"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3">
+              <div className="rounded-2xl bg-slate-950/90 border border-cyan-500/35 overflow-hidden">
+                <div className="px-4 py-3 bg-cyan-500/10 border-b border-slate-800 flex items-center justify-between">
+                  <span className="text-xs sm:text-sm font-black text-cyan-300">261124 공지</span>
+                  <span className="text-[11px] text-slate-400 font-mono">2026-11-24</span>
+                </div>
+                <div className="p-4 space-y-2.5 text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
+                  <p className="flex items-start gap-2">
+                    <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span>
+                      뽑기 상품의 재정렬과 refill은 <strong className="text-amber-300">10:30, 14:00, 23:00</strong>에 자동으로 진행됩니다.
+                    </span>
+                  </p>
+                  <p className="flex items-start gap-2 text-slate-300">
+                    <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                    <span>
+                      불가피한 에러나 억울한 시스템 오류는 관리자에게 요청하면 초기화 해드립니다.
+                    </span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="pt-1 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsUfoNoticeOpen(false)}
+                  className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-colors cursor-pointer"
+                >
+                  확인
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* UFO 뽑기 명예의 전당 모달 (식사배틀과 별도 DB) */}
       <LeaderboardModal

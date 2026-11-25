@@ -7,6 +7,7 @@ import {
   getBoxRewardAmount,
   getMachineDocId,
   getMachineLabel,
+  isBoxAtInitialPose,
   normalizeMachineIndex,
 } from '@/constants/gacha';
 import {
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
 
     const currentItems: GachaBoxItem[] = Array.isArray(rawMachine.items) ? rawMachine.items : [];
     const wonSet = new Set<string>(Array.isArray(wonItemIds) ? wonItemIds.map(String) : []);
-    const updatedMap = new Map<string, { position: unknown; quaternion: unknown }>();
+    const updatedMap = new Map<string, { position: unknown; quaternion: unknown; isInitialState?: unknown }>();
     if (Array.isArray(updatedItems)) {
       for (const it of updatedItems) {
         if (it?.id) {
@@ -109,10 +110,26 @@ export async function POST(request: NextRequest) {
       if (isWon) {
         wonBoxes.push(orig);
       } else {
+        const nextQuat = upd ? normalizeQuat(upd.quaternion, orig.quaternion) : orig.quaternion;
+        const posMoved =
+          Math.hypot(nextPos[0] - orig.position[0], nextPos[2] - orig.position[2]) > 0.025 ||
+          Math.abs(nextPos[1] - orig.position[1]) > 0.04;
+        const quatDot = Math.abs(
+          nextQuat[0] * orig.quaternion[0] +
+            nextQuat[1] * orig.quaternion[1] +
+            nextQuat[2] * orig.quaternion[2] +
+            nextQuat[3] * orig.quaternion[3]
+        );
+        const rotMoved = quatDot < 0.999;
+        const prevInitial = isBoxAtInitialPose(orig);
+        const clientInitial = typeof upd?.isInitialState === 'boolean' ? upd.isInitialState : true;
+        const nextInitial = prevInitial && clientInitial && !posMoved && !rotMoved;
+
         remainingItems.push({
           ...orig,
           position: nextPos,
-          quaternion: upd ? normalizeQuat(upd.quaternion, orig.quaternion) : orig.quaternion,
+          quaternion: nextQuat,
+          isInitialState: nextInitial,
         });
       }
     }

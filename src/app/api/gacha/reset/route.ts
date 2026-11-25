@@ -66,6 +66,7 @@ export async function POST(request: NextRequest) {
           seatIndex: 0,
           position: getRestingBoxPosition(idx, 0),
           quaternion: [0, 0, 0, 1] as [number, number, number, number],
+          isInitialState: true,
         }));
       }
 

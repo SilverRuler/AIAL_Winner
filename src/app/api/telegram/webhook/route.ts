@@ -228,6 +228,7 @@ export async function POST(request: NextRequest) {
           seatIndex: 0,
           position: getRestingBoxPosition(idx, 0),
           quaternion: [0, 0, 0, 1] as [number, number, number, number],
+          isInitialState: true,
         }));
         const summary = `🔄 운영자(텔레그램)가 [${idx + 1}번 뽑기판] ${machineLabel}을(를) 중앙 정위치로 재정렬했습니다.`;
 

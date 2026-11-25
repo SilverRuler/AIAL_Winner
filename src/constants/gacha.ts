@@ -174,9 +174,27 @@ export function createBoxForSlot(
     colorTheme: theme,
     position: getRestingBoxPosition(safeSlot, 0),
     quaternion: [0, 0, 0, 1],
+    isInitialState: true,
     rewardType: 'SOL',
     rewardAmount: getBoxRewardAmount(safeSlot),
   };
+}
+
+/**
+ * 상품이 뽑기판 재정렬/초기화/리필 직후의 원위치 초기 상태인지 판정
+ */
+export function isBoxAtInitialPose(
+  box: Pick<GachaBoxItem, 'slotIndex' | 'position' | 'quaternion' | 'isInitialState'>
+): boolean {
+  if (typeof box.isInitialState === 'boolean') {
+    return box.isInitialState;
+  }
+  const restPos = getRestingBoxPosition(box.slotIndex, 0);
+  const dx = Math.abs((box.position?.[0] ?? 0) - restPos[0]);
+  const dy = Math.abs((box.position?.[1] ?? 0) - restPos[1]);
+  const dz = Math.abs((box.position?.[2] ?? 0) - restPos[2]);
+  const qw = Math.abs(box.quaternion?.[3] ?? 0);
+  return dx <= 0.04 && dz <= 0.04 && dy <= 0.06 && qw >= 0.9985;
 }
 
 /**
@@ -225,5 +243,6 @@ export function sanitizeBoxForClient(box: GachaBoxItem): Omit<GachaBoxItem, 'rew
     colorTheme: box.colorTheme,
     position: box.position,
     quaternion: box.quaternion,
+    isInitialState: isBoxAtInitialPose(box),
   };
 }

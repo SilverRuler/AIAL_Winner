@@ -19,7 +19,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { GachaBoxItem } from '@/types/gacha';
-import { GACHA_PHYSICS, getBoxDimensions, getBoxRewardAmount, isPlushSlot } from '@/constants/gacha';
+import { GACHA_PHYSICS, getBoxDimensions, getBoxRewardAmount, isBoxAtInitialPose, isPlushSlot } from '@/constants/gacha';
 
 type CameraView = 'front' | 'top' | 'right';
 
@@ -41,6 +41,7 @@ export interface TurnFinishPayload {
     id: string;
     position: [number, number, number];
     quaternion: [number, number, number, number];
+    isInitialState?: boolean;
   }[];
   actionSummary: string;
 }
@@ -349,6 +350,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   const [frontTiptoeDeg, setFrontTiptoeDeg] = useState<number>(0); // 정면 까치발 각도 (0° ~ 45°, 조작 가능)
   const [clawFeedback, setClawFeedback] = useState<string>('');
   const [showExtremeDrr, setShowExtremeDrr] = useState<boolean>(false);
+  const [showBalanceCatch, setShowBalanceCatch] = useState<boolean>(false);
 
   // Refs for animation loop access without re-creating Three.js scene
   const phaseRef = useRef<CranePhase>('idle');
@@ -360,16 +362,24 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   const audioCtxRef = useRef<AudioContext | null>(null);
   const drrAudioRef = useRef<HTMLAudioElement | null>(null);
   const drrTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bcAudioRef = useRef<HTMLAudioElement | null>(null);
+  const bcTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const audio = new Audio('/gacha/drr.mp3');
-      audio.preload = 'auto';
-      audio.volume = 0.85;
-      drrAudioRef.current = audio;
+      const drrAudio = new Audio('/gacha/drr.mp3');
+      drrAudio.preload = 'auto';
+      drrAudio.volume = 0.85;
+      drrAudioRef.current = drrAudio;
+
+      const bcAudio = new Audio('/gacha/bc.mp3');
+      bcAudio.preload = 'auto';
+      bcAudio.volume = 0.9;
+      bcAudioRef.current = bcAudio;
     }
     return () => {
       if (drrTimeoutRef.current) clearTimeout(drrTimeoutRef.current);
+      if (bcTimeoutRef.current) clearTimeout(bcTimeoutRef.current);
     };
   }, []);
 
@@ -383,6 +393,20 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       try {
         drrAudioRef.current.currentTime = 0;
         drrAudioRef.current.play().catch(() => {});
+      } catch {}
+    }
+  }, []);
+
+  const triggerBalanceCatch = useCallback(() => {
+    setShowBalanceCatch(true);
+    if (bcTimeoutRef.current) clearTimeout(bcTimeoutRef.current);
+    bcTimeoutRef.current = setTimeout(() => {
+      setShowBalanceCatch(false);
+    }, 1500);
+    if (soundEnabledRef.current && bcAudioRef.current) {
+      try {
+        bcAudioRef.current.currentTime = 0;
+        bcAudioRef.current.play().catch(() => {});
       } catch {}
     }
   }, []);
@@ -1113,6 +1137,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       pushDownTimer: 0,
       passedBarGapCleanly: false,
       drrTriggeredThisTurn: false,
+      balanceCatchTriggeredThisTurn: false,
+      disturbedBoxIds: new Set<string>(),
       syncFromItems,
       resetClawToHome: () => {
         if (state.grabConstraint) {
@@ -1144,6 +1170,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         state.pushDownTimer = 0;
         state.passedBarGapCleanly = false;
         state.drrTriggeredThisTurn = false;
+        state.balanceCatchTriggeredThisTurn = false;
+        state.disturbedBoxIds.clear();
         state.wonSet.clear();
       },
     };
@@ -1160,16 +1188,35 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         state.grabConstraint = null;
       }
       const wonItemIds = Array.from(state.wonSet);
-      const updatedItems = Array.from(boxEntities.values()).map((ent) => ({
-        id: ent.data.id,
-        position: [ent.body.position.x, ent.body.position.y, ent.body.position.z] as [number, number, number],
-        quaternion: [
-          ent.body.quaternion.x,
-          ent.body.quaternion.y,
-          ent.body.quaternion.z,
-          ent.body.quaternion.w,
-        ] as [number, number, number, number],
-      }));
+      const updatedItems = Array.from(boxEntities.values()).map((ent) => {
+        const wasInitial = isBoxAtInitialPose(ent.data);
+        const movedHoriz =
+          Math.hypot(
+            ent.body.position.x - ent.data.position[0],
+            ent.body.position.z - ent.data.position[2]
+          ) > 0.02;
+        const quatDot = Math.abs(
+          ent.body.quaternion.x * ent.data.quaternion[0] +
+            ent.body.quaternion.y * ent.data.quaternion[1] +
+            ent.body.quaternion.z * ent.data.quaternion[2] +
+            ent.body.quaternion.w * ent.data.quaternion[3]
+        );
+        const nextIsInitial =
+          wasInitial && !state.disturbedBoxIds.has(ent.data.id) && !movedHoriz && quatDot >= 0.999;
+        ent.data.isInitialState = nextIsInitial;
+
+        return {
+          id: ent.data.id,
+          position: [ent.body.position.x, ent.body.position.y, ent.body.position.z] as [number, number, number],
+          quaternion: [
+            ent.body.quaternion.x,
+            ent.body.quaternion.y,
+            ent.body.quaternion.z,
+            ent.body.quaternion.w,
+          ] as [number, number, number, number],
+          isInitialState: nextIsInitial,
+        };
+      });
 
       setCranePhase('idle');
       onTurnFinishRef.current({
@@ -1289,10 +1336,12 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           if (leftRes.hit) {
             curHitLeftId = ent.data.id;
             state.leftBlockedBoxId = ent.data.id;
+            state.disturbedBoxIds.add(ent.data.id);
           }
           if (rightRes.hit) {
             curHitRightId = ent.data.id;
             state.rightBlockedBoxId = ent.data.id;
+            state.disturbedBoxIds.add(ent.data.id);
           }
 
           if (leftRes.hit && rightRes.hit) {
@@ -1326,6 +1375,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             uLoc.y >= -dims.h / 2
           ) {
             ufoBodyPressing = true;
+            state.disturbedBoxIds.add(ent.data.id);
             const uPen = Math.max(0, dims.h / 2 + 0.02 - uLoc.y);
             if (uPen > maxHardPenetration) maxHardPenetration = uPen;
             const clampedU = new CANNON.Vec3(
@@ -1682,19 +1732,49 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             }
           }
 
-          // 중앙 빨간 Bar(z = ±0.455) 근처(위/아래 포함, 외곽 Bar 제외)에서 집게를 들어올릴 때 -> '극한 드르륵!' 팝업(1초) + drr.mp3 재생!
-          if (!state.passedBarGapCleanly) {
-            for (const bar of allBarSpecs) {
-              if (bar.isOuter) continue;
-              if (Math.abs(state.clawZ - bar.z) <= 0.28) {
-                state.passedBarGapCleanly = true;
-                break;
-              }
+          if (bestEnt) {
+            state.disturbedBoxIds.add(bestEnt.data.id);
+          }
+
+          const targetIsInitialState = bestEnt ? isBoxAtInitialPose(bestEnt.data) : false;
+          const boardIsInitialState = bestEnt
+            ? targetIsInitialState
+            : Array.from(boxEntities.values()).some(
+                (e) => !state.wonSet.has(e.data.id) && isBoxAtInitialPose(e.data)
+              );
+
+          // 1) 재정렬/초기화 원위치(초기 세팅) 상태일 때:
+          //    - 상품 정중앙 근처를 들어올리면 'Balance Catch!' 팝업 + /gacha/bc.mp3 재생
+          //    - 초기 세팅 상태에서는 Bar 근처를 집어 들어올려도 '극한 드르륵!'은 발동하지 않음
+          if (state.grabConstraint && bestEnt && targetIsInitialState && !state.balanceCatchTriggeredThisTurn) {
+            const centerDx = Math.abs(state.clawX - bestEnt.data.position[0]);
+            const centerDz = Math.abs(state.clawZ - bestEnt.data.position[2]);
+            const maxCenterDx = Math.max(0.20, bestDims.w * 0.30);
+            const maxCenterDz = Math.min(0.24, Math.max(0.20, bestDims.d * 0.16));
+            if (centerDx <= maxCenterDx && centerDz <= maxCenterDz) {
+              state.balanceCatchTriggeredThisTurn = true;
+              triggerBalanceCatch();
             }
           }
-          if (state.grabConstraint && state.passedBarGapCleanly && !state.drrTriggeredThisTurn) {
-            state.drrTriggeredThisTurn = true;
-            triggerExtremeDrr();
+
+          // 2) 초기 상태가 아닐 때:
+          //    - 중앙 빨간 Bar(z = ±0.455) 근처(위/아래 포함, 외곽 Bar 제외)에서 집게를 들어올릴 때
+          //      '극한 드르륵!' 팝업(1초) + /gacha/drr.mp3 재생
+          //    - 반대로 초기 상태가 아닌 경우 정중앙 근처를 들어올려도 Balance Catch!는 발동하지 않음
+          if (!boardIsInitialState) {
+            if (!state.passedBarGapCleanly) {
+              for (const bar of allBarSpecs) {
+                if (bar.isOuter) continue;
+                if (Math.abs(state.clawZ - bar.z) <= 0.28) {
+                  state.passedBarGapCleanly = true;
+                  break;
+                }
+              }
+            }
+            if (state.grabConstraint && state.passedBarGapCleanly && !state.drrTriggeredThisTurn) {
+              state.drrTriggeredThisTurn = true;
+              triggerExtremeDrr();
+            }
           }
 
           state.phaseTimer = 0;
@@ -1907,7 +1987,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       window.removeEventListener('resize', handleResize);
       renderer.dispose();
     };
-  }, [playTone, setCranePhase, triggerExtremeDrr]);
+  }, [playTone, setCranePhase, triggerExtremeDrr, triggerBalanceCatch]);
 
   const isCraneLockedToFront = isMyTurn || isFinishing || phase !== 'idle';
 
@@ -2259,11 +2339,20 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           </div>
         )}
 
-        {/* 극한 드르륵! 팝업 (Bar 사이 통과 리프트 시 1초간 노출 + /gacha/drr.mp3 재생) */}
+        {/* 극한 드르륵! 팝업 (초기 상태 이후 중앙 빨간 Bar 근처 리프트 시 1초간 노출 + /gacha/drr.mp3 재생) */}
         {showExtremeDrr && (
           <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
             <div className="px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-600 border-2 border-yellow-200 text-white font-black text-xl sm:text-3xl tracking-tight shadow-[0_0_40px_rgba(249,115,22,0.85)] animate-bounce">
               ⚡ 극한 드르륵! ⚡
+            </div>
+          </div>
+        )}
+
+        {/* Balance Catch! 팝업 (초기 원위치 세팅 상태에서 상품 정중앙 근처 리프트 시 노출 + /gacha/bc.mp3 재생) */}
+        {showBalanceCatch && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+            <div className="px-6 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 via-emerald-500 to-teal-500 border-2 border-cyan-100 text-white font-black text-xl sm:text-3xl tracking-tight shadow-[0_0_40px_rgba(16,185,129,0.85)] animate-bounce">
+              ⚖️ Balance Catch!
             </div>
           </div>
         )}

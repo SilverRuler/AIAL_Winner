@@ -10,6 +10,7 @@ export interface GachaBoxItem {
   colorTheme: GachaColorTheme;
   position: [number, number, number];
   quaternion: [number, number, number, number];
+  isInitialState?: boolean; // 재정렬/초기화/리필 직후 원위치 상태 여부
   // 서버 전용 필드 (클라이언트 GET 응답 시에는 노출하지 않음)
   rewardType?: GachaRewardType;
   rewardAmount?: number;

@@ -1072,17 +1072,18 @@ export default function GachaPage() {
               </div>
 
               <div className="p-5 space-y-3 overflow-y-auto">
-                <div className="rounded-2xl bg-slate-950/90 border border-cyan-500/35 overflow-hidden">
-                  <div className="px-4 py-3 bg-cyan-500/10 border-b border-slate-800 flex items-center justify-between">
-                    <span className="text-xs sm:text-sm font-black text-cyan-300">261124 공지</span>
-                    <span className="text-[11px] text-slate-400 font-mono">2026-11-24</span>
+                {/* 261125 공지 (최신 업데이트) */}
+                <div className="rounded-2xl bg-slate-950/90 border border-cyan-500/45 overflow-hidden">
+                  <div className="px-4 py-3 bg-cyan-500/15 border-b border-slate-800 flex items-center justify-between">
+                    <span className="text-xs sm:text-sm font-black text-cyan-300">📌 261125 공지</span>
+                    <span className="text-[11px] text-slate-400 font-mono">2026-11-25</span>
                   </div>
                   <div className="p-4 space-y-2.5 text-xs sm:text-sm text-slate-200 leading-relaxed font-medium">
                     <div className="space-y-2">
                       <p className="flex items-start gap-2">
                         <Sparkles className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                         <span>
-                          현재 뽑기판의 평균 난이도는 <strong className="text-rose-300">6.5(중상)</strong>입니다.
+                          현재 뽑기판의 평균 난이도는 <strong className="text-rose-300">6.5(중상)</strong>이며, 3·4번 신규 이미지(노엘 실바·레제) 및 상자별 차등 난이도·SOL 리워드가 적용되었습니다.
                         </span>
                       </p>
                       <p className="ml-6 text-[11px] sm:text-xs text-cyan-300/90 font-semibold">
@@ -1160,6 +1161,13 @@ export default function GachaPage() {
                         </div>
                       )}
                     </div>
+
+                    <p className="flex items-start gap-2">
+                      <RefreshCw className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+                      <span>
+                        1~4번 상자는 초기 배치·정기 리필·관리자 리필 시 항상 <strong className="text-purple-300">무작위 랜덤 위치</strong>로 배치됩니다.
+                      </span>
+                    </p>
                     <p className="flex items-start gap-2">
                       <Camera className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
                       <span>
@@ -1167,12 +1175,34 @@ export default function GachaPage() {
                       </span>
                     </p>
                     <p className="flex items-start gap-2">
+                      <Coins className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <span>
+                        뽑기 리워드 신청 시 보유 중인 신청 가능 잔고 내에서 <strong className="text-amber-300">원하는 SOL 수량을 직접 입력</strong>해 신청할 수 있습니다.
+                      </span>
+                    </p>
+                    <p className="flex items-start gap-2 text-slate-300">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <span>
+                        승점 교환은 신청 가능 리워드 WIN(1WIN 이상)만 가능(마이너스 가불 차단)하며, 모든 뽑기 최근 상황은 DB에 로그로 기록됩니다.
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* 261124 공지 (정기 운영 안내) */}
+                <div className="rounded-2xl bg-slate-950/75 border border-slate-800 overflow-hidden">
+                  <div className="px-4 py-2.5 bg-slate-900/70 border-b border-slate-800 flex items-center justify-between">
+                    <span className="text-xs font-black text-slate-300">📌 261124 공지</span>
+                    <span className="text-[11px] text-slate-500 font-mono">2026-11-24</span>
+                  </div>
+                  <div className="p-3.5 space-y-2 text-xs text-slate-300 leading-relaxed font-medium">
+                    <p className="flex items-start gap-2">
                       <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                       <span>
                         뽑기 상품의 재정렬과 refill은 <strong className="text-amber-300">10:30, 14:00, 23:00</strong>에 자동으로 진행됩니다.
                       </span>
                     </p>
-                    <p className="flex items-start gap-2 text-slate-300">
+                    <p className="flex items-start gap-2 text-slate-400">
                       <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                       <span>
                         불가피한 에러나 억울한 시스템 오류는 관리자에게 요청하면 초기화 해드립니다.

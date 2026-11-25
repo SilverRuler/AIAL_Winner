@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Bell, Sparkles, ShieldCheck, Info, Award, ChevronDown, ChevronUp, Gift, Gamepad2 } from 'lucide-react';
+import { X, Bell, Sparkles, ShieldCheck, Info, Award, ChevronDown, ChevronUp, Gift, Gamepad2, Wallet, CameraOff } from 'lucide-react';
 
 interface NoticeModalProps {
   isOpen: boolean;
@@ -12,7 +12,8 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
   const [open261030, setOpen261030] = useState(false);
   const [open261101, setOpen261101] = useState(false);
   const [open261102, setOpen261102] = useState(false);
-  const [open261122, setOpen261122] = useState(true);
+  const [open261122, setOpen261122] = useState(false);
+  const [open261125, setOpen261125] = useState(true);
 
   if (!isOpen) return null;
 
@@ -229,6 +230,65 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                 <p className="text-slate-300 text-xs sm:text-sm flex items-center gap-2">
                   <Info className="w-4 h-4 text-cyan-400 shrink-0" />
                   베타서비스이므로 요청/요구 사항이 있으면 건의 하시길 바랍니다.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 261125 공지 카드 (사내 MDM 등록, 운영자 잔고, 교환 정책 업데이트) */}
+          <div className="bg-slate-950/80 rounded-xl border border-emerald-500/45 overflow-hidden transition-all">
+            <button
+              type="button"
+              onClick={() => setOpen261125(!open261125)}
+              className="w-full p-4 flex items-center justify-between gap-2 text-left hover:bg-slate-900/60 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">
+                  📌 261125 공지
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-white truncate">
+                  MDM 사진 미첨부 등록 · 운영자 잔고 · 정책 업데이트
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <span className="text-[11px] text-slate-400 hidden xs:inline">2026-11-25</span>
+                {open261125 ? (
+                  <ChevronUp className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                )}
+              </div>
+            </button>
+
+            {open261125 && (
+              <div className="px-4 pb-4 pt-1 space-y-2.5 border-t border-slate-800/80 text-slate-200 leading-relaxed font-medium">
+                <p className="text-sm sm:text-base font-bold text-white flex items-start gap-2 pt-2">
+                  <CameraOff className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>
+                    사내 보안(MDM)으로 카메라 사용이 불가한 유저도 <strong className="text-emerald-300">사진 없이 메뉴 이름(제목)과 상세 설명</strong>만으로 식사를 등록할 수 있습니다.
+                  </span>
+                </p>
+                <div className="ml-6 bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] sm:text-xs text-slate-300">
+                  <p>• 등록 필수 조건: <strong className="text-white">사진 또는 메뉴 이름(제목) 중 1개 필수</strong> (기존처럼 사진만 올려도 등록 가능)</p>
+                  <p>• 사진 미첨부 시 기본 이미지가 적용되며, 설명을 자세히 적을수록 <strong className="text-amber-300">최대 30점 한도</strong> 내에서 AI가 최대한 평가합니다.</p>
+                </div>
+                <p className="text-slate-300 text-xs sm:text-sm flex items-start gap-2">
+                  <Wallet className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>
+                    상단 헤더에 <strong className="text-emerald-300">[운영자 잔고]</strong> 버튼을 추가했습니다. 1시간마다 갱신되는 운영자 SOL 잔고와 실시간 시세(0.01 SOL 원화 환산가)를 확인할 수 있으며, 리워드는 <strong className="text-amber-300">신청 기준 선착순</strong>으로 지급됩니다.
+                  </span>
+                </p>
+                <p className="text-amber-300 text-xs sm:text-sm flex items-start gap-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    승점 1WIN → 뽑기권 5회 교환은 <strong className="text-white">보유 중인 신청 가능 리워드 WIN(1WIN 이상)</strong>에 대해서만 가능하도록 마이너스 가불을 차단했으며, 식사 삭제 후 재등록 시 뽑기권 중복 지급도 방지됩니다.
+                  </span>
+                </p>
+                <p className="text-cyan-300 text-xs sm:text-sm flex items-start gap-2">
+                  <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <span>
+                    UFO 뽑기의 상자별 난이도·리워드 개편, 까치발 시점 조작, SOL 직접 입력 리워드 신청 등 상세 변경 사항은 뽑기 페이지의 <strong>[UFO 공지]</strong>에서 확인하실 수 있습니다.
+                  </span>
                 </p>
               </div>
             )}

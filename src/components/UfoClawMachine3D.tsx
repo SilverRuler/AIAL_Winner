@@ -228,12 +228,14 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [droppedThisTurn, setDroppedThisTurn] = useState<number>(0);
   const [cameraView, setCameraView] = useState<CameraView>('front');
+  const [frontTiptoeDeg, setFrontTiptoeDeg] = useState<number>(0); // 정면 까치발 각도 (0° ~ 45°, 조작 가능)
   const [clawFeedback, setClawFeedback] = useState<string>('');
 
   // Refs for animation loop access without re-creating Three.js scene
   const phaseRef = useRef<CranePhase>('idle');
   const soundEnabledRef = useRef<boolean>(true);
   const cameraViewRef = useRef<CameraView>('front');
+  const frontTiptoeDegRef = useRef<number>(0);
   const itemsRef = useRef<GachaBoxItem[]>(items);
   const onTurnFinishRef = useRef(onTurnFinish);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -245,6 +247,10 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   useEffect(() => {
     cameraViewRef.current = cameraView;
   }, [cameraView]);
+
+  useEffect(() => {
+    frontTiptoeDegRef.current = frontTiptoeDeg;
+  }, [frontTiptoeDeg]);
 
   useEffect(() => {
     onTurnFinishRef.current = onTurnFinish;
@@ -344,7 +350,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     let viewportW = width;
     let viewportH = height;
 
-    const getCameraPose = (view: CameraView, w: number, h: number) => {
+    const getCameraPose = (view: CameraView, w: number, h: number, tiptoeDeg = 0) => {
       const aspect = Math.max(0.55, w / Math.max(1, h));
       const scale = aspect < 1.48 ? Math.min(1.95, 1.52 / aspect) : 1.0;
       const fov = aspect < 1.15 ? 48 : 42;
@@ -364,11 +370,27 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           look: new THREE.Vector3(0, 0.85, 0),
         };
       }
-      // 정면뷰 (기본)
+      // 정면뷰 (기본 0° + 까치발 최대 45° 상향 시점)
+      const lookY = 0.78;
+      const baseY = 4.15 * (1 + (scale - 1) * 0.72);
+      const baseZ = 6.25 * scale;
+      const clampedTiptoe = Math.max(0, Math.min(45, tiptoeDeg));
+      if (clampedTiptoe <= 0) {
+        return {
+          fov,
+          pos: new THREE.Vector3(0, baseY, baseZ),
+          look: new THREE.Vector3(0, lookY, 0),
+        };
+      }
+      const dy = baseY - lookY;
+      const radius = Math.hypot(dy, baseZ);
+      const baseElevRad = Math.atan2(dy, baseZ);
+      const maxElevRad = (56.2 * Math.PI) / 180; // 까치발 45° 시 정면(28.3°)과 항공뷰(84°)의 중간 고각
+      const elevRad = baseElevRad + (clampedTiptoe / 45) * (maxElevRad - baseElevRad);
       return {
         fov,
-        pos: new THREE.Vector3(0, 4.15 * (1 + (scale - 1) * 0.72), 6.25 * scale),
-        look: new THREE.Vector3(0, 0.78, 0),
+        pos: new THREE.Vector3(0, lookY + radius * Math.sin(elevRad), radius * Math.cos(elevRad)),
+        look: new THREE.Vector3(0, lookY, 0),
       };
     };
 
@@ -377,7 +399,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       viewportW = w;
       viewportH = h;
       const aspect = Math.max(0.55, w / Math.max(1, h));
-      const pose = getCameraPose(cameraViewRef.current, w, h);
+      const pose = getCameraPose(cameraViewRef.current, w, h, frontTiptoeDegRef.current);
       camera.aspect = aspect;
       camera.fov = pose.fov;
       if (snap) {
@@ -1378,8 +1400,13 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         aimBeam.position.set(state.clawX, GACHA_PHYSICS.BAR_Y + 0.12 + beamH / 2, state.clawZ);
       }
 
-      // 카메라 시점(정면/항공/우측) 부드러운 보간 이동
-      const desiredPose = getCameraPose(cameraViewRef.current, viewportW, viewportH);
+      // 카메라 시점(정면/까치발/항공/우측) 부드러운 보간 이동
+      const desiredPose = getCameraPose(
+        cameraViewRef.current,
+        viewportW,
+        viewportH,
+        frontTiptoeDegRef.current
+      );
       const lerpAlpha = Math.min(1, dt * 8.5);
       camera.position.lerp(desiredPose.pos, lerpAlpha);
       currentLookAt.lerp(desiredPose.look, lerpAlpha);
@@ -1553,21 +1580,26 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       <div className="relative w-full h-[280px] sm:h-[440px] bg-[#070b18] select-none">
         <div ref={mountRef} className="w-full h-full" />
 
-        {/* 좌측 상단 현재 카메라 시점 표시 (정면이 아닐 때 클릭 시 정면 복귀) */}
+        {/* 좌측 상단 현재 카메라 시점 표시 (클릭 시 기본 정면뷰 0° 복귀) */}
         <button
           type="button"
-          onClick={() => setCameraView('front')}
+          onClick={() => {
+            setCameraView('front');
+            setFrontTiptoeDeg(0);
+          }}
           className={`absolute top-2.5 left-2.5 z-20 inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[10px] sm:text-[11px] font-bold backdrop-blur-sm transition-all cursor-pointer ${
-            cameraView === 'front'
+            cameraView === 'front' && frontTiptoeDeg === 0
               ? 'bg-slate-900/75 border-slate-700/80 text-slate-300'
               : 'bg-cyan-950/85 border-cyan-400/60 text-cyan-200 hover:bg-cyan-900/85'
           }`}
-          title="정면 뷰로 복귀"
+          title="기본 정면 뷰(0°)로 복귀"
         >
           <Camera className="w-3 h-3 text-cyan-400" />
           <span>
             {cameraView === 'front'
-              ? isCraneLockedToFront
+              ? frontTiptoeDeg > 0
+                ? `까치발 +${frontTiptoeDeg}°`
+                : isCraneLockedToFront
                 ? '정면뷰 (조작 고정)'
                 : '정면뷰'
               : cameraView === 'top'
@@ -1576,31 +1608,65 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           </span>
         </button>
 
-        {/* 상단 중앙 작은 위 화살표 버튼: 항공뷰 ↔ 정면뷰 전환 (크레인 조작 중 비활성) */}
-        {!isCraneLockedToFront && (
-          <button
-            type="button"
-            onClick={() => setCameraView((prev) => (prev === 'top' ? 'front' : 'top'))}
-            className={`absolute top-2 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] sm:text-xs font-black backdrop-blur-sm shadow-md transition-all active:scale-95 cursor-pointer ${
-              cameraView === 'top'
-                ? 'bg-cyan-500/90 border-cyan-300 text-slate-950'
-                : 'bg-slate-900/80 hover:bg-slate-800/90 border-slate-600/80 text-slate-200 hover:text-cyan-300'
-            }`}
-            title={cameraView === 'top' ? '정면 뷰로 돌아가기' : '항공 뷰 (위에서 보기 · 조작 불가)'}
-          >
-            {cameraView === 'top' ? (
-              <>
-                <ChevronDown className="w-3.5 h-3.5" />
-                <span>정면뷰</span>
-              </>
-            ) : (
-              <>
+        {/* 상단 중앙 컨트롤: [항공뷰] + 옆에 [까치발 업/다운 (0°~45°, 조작 중에도 사용 가능)] */}
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1.5">
+          {!isCraneLockedToFront && (
+            <button
+              type="button"
+              onClick={() => setCameraView((prev) => (prev === 'top' ? 'front' : 'top'))}
+              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] sm:text-xs font-black backdrop-blur-sm shadow-md transition-all active:scale-95 cursor-pointer ${
+                cameraView === 'top'
+                  ? 'bg-cyan-500/90 border-cyan-300 text-slate-950'
+                  : 'bg-slate-900/80 hover:bg-slate-800/90 border-slate-600/80 text-slate-200 hover:text-cyan-300'
+              }`}
+              title={cameraView === 'top' ? '정면 뷰로 돌아가기' : '항공 뷰 (위에서 보기 · 조작 불가)'}
+            >
+              {cameraView === 'top' ? (
+                <>
+                  <ChevronDown className="w-3.5 h-3.5" />
+                  <span>정면뷰</span>
+                </>
+              ) : (
+                <>
+                  <ChevronUp className="w-3.5 h-3.5" />
+                  <span>항공뷰</span>
+                </>
+              )}
+            </button>
+          )}
+
+          {/* 정면 까치발 업/다운 버튼 (최대 45°까지 상향 시점 조절 · 이 상태에서도 크레인 조작 가능!) */}
+          {cameraView === 'front' && (
+            <div
+              className="inline-flex items-center rounded-full border border-emerald-500/50 bg-slate-900/85 backdrop-blur-sm shadow-md overflow-hidden"
+              title="까치발 시점 조절 (최대 45° · 뽑기 조작 가능)"
+            >
+              <button
+                type="button"
+                disabled={frontTiptoeDeg >= 45}
+                onClick={() => setFrontTiptoeDeg((d) => Math.min(45, d + 15))}
+                className="inline-flex items-center gap-0.5 px-2 py-1 text-[10px] sm:text-xs font-black text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-35 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                title="까치발 올리기 (+15°, 최대 45°)"
+              >
                 <ChevronUp className="w-3.5 h-3.5" />
-                <span>항공뷰</span>
-              </>
-            )}
-          </button>
-        )}
+                <span>업</span>
+              </button>
+              <span className="px-1.5 text-[10px] sm:text-[11px] font-mono font-black text-white border-x border-slate-700/80 select-none">
+                {frontTiptoeDeg}°
+              </span>
+              <button
+                type="button"
+                disabled={frontTiptoeDeg <= 0}
+                onClick={() => setFrontTiptoeDeg((d) => Math.max(0, d - 15))}
+                className="inline-flex items-center gap-0.5 px-2 py-1 text-[10px] sm:text-xs font-black text-amber-300 hover:bg-amber-500/20 disabled:opacity-35 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                title="까치발 내리기 (-15°, 기본 0°)"
+              >
+                <span>다운</span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* 우측 중앙 작은 오른 화살표 버튼: 우측뷰 ↔ 정면뷰 전환 (크레인 조작 중 비활성) */}
         {!isCraneLockedToFront && (

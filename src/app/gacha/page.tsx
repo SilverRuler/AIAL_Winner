@@ -1163,7 +1163,7 @@ export default function GachaPage() {
                     <p className="flex items-start gap-2">
                       <Camera className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
                       <span>
-                        항공뷰·측면뷰(우측뷰)에서는 크레인 조작이 불가능하며, 뽑기를 시작하면 <strong className="text-sky-300">자동으로 정면뷰로 전환</strong>되어 진행됩니다.
+                        항공뷰·측면뷰(우측뷰)에서는 크레인 조작이 불가능하며, 뽑기를 시작하면 <strong className="text-sky-300">자동으로 정면뷰로 전환</strong>되어 진행됩니다. (정면에서 <strong className="text-emerald-300">까치발 업/다운 최대 45°</strong>까지는 조작 가능)
                       </span>
                     </p>
                     <p className="flex items-start gap-2">

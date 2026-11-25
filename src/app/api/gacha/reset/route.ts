@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { GachaBoxItem } from '@/types/gacha';
-import { createInitialGachaBoxes, getRestingBoxPosition } from '@/constants/gacha';
+import { createInitialGachaBoxes, getNearestSeatIndex, getRestingBoxPosition } from '@/constants/gacha';
 import { isAdminAuthorized, recordGachaLog, sanitizeMachineForClient } from '@/lib/gachaServer';
 
 export async function POST(request: NextRequest) {
@@ -34,17 +34,30 @@ export async function POST(request: NextRequest) {
       expiresAt: null,
     };
 
-    // 기존 문서가 아예 없는 경우에만 최초 4개 생성, 그 외에는 현재 남아있는 상품들만 정위치로 복귀
+    // 기존 문서가 아예 없는 경우에만 최초 4개 생성, 그 외에는 현재 남아있는 상품들만 각자의 배치 좌석 정위치로 복귀
     let resetItems: GachaBoxItem[];
     if (!existing || !Array.isArray(existing.items)) {
       resetItems = createInitialGachaBoxes();
     } else {
-      resetItems = existing.items.map((item: GachaBoxItem) => ({
-        ...item,
-        position: getRestingBoxPosition(item.slotIndex),
-        quaternion: [0, 0, 0, 1] as [number, number, number, number],
-      }));
-      resetItems.sort((a, b) => a.slotIndex - b.slotIndex);
+      const takenSeats = new Set<number>();
+      resetItems = existing.items.map((item: GachaBoxItem) => {
+        let seat =
+          typeof item.seatIndex === 'number'
+            ? item.seatIndex
+            : getNearestSeatIndex(item.position?.[0] ?? 0);
+        if (takenSeats.has(seat)) {
+          const free = [0, 1, 2, 3].find((s) => !takenSeats.has(s));
+          if (free !== undefined) seat = free;
+        }
+        takenSeats.add(seat);
+        return {
+          ...item,
+          seatIndex: seat,
+          position: getRestingBoxPosition(item.slotIndex, seat),
+          quaternion: [0, 0, 0, 1] as [number, number, number, number],
+        };
+      });
+      resetItems.sort((a, b) => (a.seatIndex ?? a.slotIndex) - (b.seatIndex ?? b.slotIndex));
     }
 
     if (resetItems.length === 0) {

@@ -80,19 +80,44 @@ export function getBoxRewardAmount(slotIndex: number): number {
 }
 
 /**
- * 슬롯 인덱스(0..3)에 대한 초기 안착 좌표 반환 (슬롯별 상자 높이 반영)
+ * 슬롯(상품 종류)과 물리 좌석(0..3, 왼쪽→오른쪽)에 대한 초기 안착 좌표 반환
  */
-export function getRestingBoxPosition(slotIndex: number): [number, number, number] {
-  const safeIdx = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, slotIndex));
-  const x = GACHA_SLOT_X[safeIdx];
-  const { h } = getBoxDimensions(safeIdx);
+export function getRestingBoxPosition(
+  slotIndex: number,
+  seatIndex: number = slotIndex
+): [number, number, number] {
+  const safeSlot = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, slotIndex));
+  const safeSeat = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, seatIndex));
+  const x = GACHA_SLOT_X[safeSeat];
+  const { h } = getBoxDimensions(safeSlot);
   const y = GACHA_PHYSICS.BAR_Y + GACHA_PHYSICS.BAR_RADIUS + h / 2 + 0.01;
   const z = 0;
   return [x, y, z];
 }
 
 /**
- * 특정 슬롯에 새 미스터리 박스 1개 생성 (서버 측 보상 포함)
+ * Fisher-Yates 무작위 셔플 유틸리티
+ */
+export function shuffleIndices(indices: number[], avoidIdentity = false): number[] {
+  const arr = [...indices];
+  const runShuffle = () => {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+  };
+  runShuffle();
+  if (avoidIdentity && arr.length > 1 && arr.every((v, i) => v === indices[i])) {
+    runShuffle();
+    if (arr.every((v, i) => v === indices[i])) {
+      [arr[0], arr[1]] = [arr[1], arr[0]];
+    }
+  }
+  return arr;
+}
+
+/**
+ * 특정 상품 종류(slotIndex)를 지정 좌석(seatIndex)에 생성 (서버 측 보상 포함)
  */
 const GACHA_SLOT_LABELS = [
   '프리렌 박스 #1',
@@ -101,28 +126,53 @@ const GACHA_SLOT_LABELS = [
   '레제 박스 #4',
 ] as const;
 
-export function createBoxForSlot(slotIndex: number, nowTs = Date.now()): GachaBoxItem {
-  const safeIdx = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, slotIndex));
-  const theme = GACHA_COLOR_THEMES[safeIdx % GACHA_COLOR_THEMES.length];
-  const charLabel = GACHA_SLOT_LABELS[safeIdx] || `미스터리 박스 #${safeIdx + 1}`;
+export function createBoxForSlot(
+  slotIndex: number,
+  nowTs = Date.now(),
+  seatIndex: number = slotIndex
+): GachaBoxItem {
+  const safeSlot = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, slotIndex));
+  const safeSeat = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, seatIndex));
+  const theme = GACHA_COLOR_THEMES[safeSlot % GACHA_COLOR_THEMES.length];
+  const charLabel = GACHA_SLOT_LABELS[safeSlot] || `미스터리 박스 #${safeSlot + 1}`;
   return {
-    id: `box_s${safeIdx}_${nowTs}_${Math.random().toString(36).substring(2, 7)}`,
-    slotIndex: safeIdx,
+    id: `box_s${safeSlot}_${nowTs}_${Math.random().toString(36).substring(2, 7)}`,
+    slotIndex: safeSlot,
+    seatIndex: safeSeat,
     label: charLabel,
     colorTheme: theme,
-    position: getRestingBoxPosition(safeIdx),
+    position: getRestingBoxPosition(safeSlot, safeSeat),
     quaternion: [0, 0, 0, 1],
     rewardType: 'SOL',
-    rewardAmount: getBoxRewardAmount(safeIdx),
+    rewardAmount: getBoxRewardAmount(safeSlot),
   };
 }
 
 /**
- * 초기 4개 박스 세팅 생성
+ * 초기 4개 박스 세팅 생성 (1번~4번 상품을 4개 좌석에 랜덤 배치)
  */
 export function createInitialGachaBoxes(): GachaBoxItem[] {
   const nowTs = Date.now();
-  return [0, 1, 2, 3].map((idx) => createBoxForSlot(idx, nowTs + idx));
+  const shuffledSlotTypes = shuffleIndices([0, 1, 2, 3], true);
+  return shuffledSlotTypes.map((slotType, seatIdx) =>
+    createBoxForSlot(slotType, nowTs + seatIdx, seatIdx)
+  );
+}
+
+/**
+ * X 좌표에서 가장 가까운 물리 좌석 인덱스(0..3) 반환
+ */
+export function getNearestSeatIndex(x: number): number {
+  let bestSeat = 0;
+  let bestDist = Infinity;
+  for (let i = 0; i < GACHA_SLOT_X.length; i++) {
+    const d = Math.abs(x - GACHA_SLOT_X[i]);
+    if (d < bestDist) {
+      bestDist = d;
+      bestSeat = i;
+    }
+  }
+  return bestSeat;
 }
 
 /**

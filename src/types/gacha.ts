@@ -4,7 +4,8 @@ export type GachaRewardType = 'SOL';
 
 export interface GachaBoxItem {
   id: string;
-  slotIndex: number; // 0..3
+  slotIndex: number; // 상품 종류 (0: 프리렌, 1: 네즈코, 2: 노엘 실바, 3: 레제)
+  seatIndex?: number; // 물리 배치 좌석 (0..3, 왼쪽→오른쪽 X 위치)
   label: string;
   colorTheme: GachaColorTheme;
   position: [number, number, number];

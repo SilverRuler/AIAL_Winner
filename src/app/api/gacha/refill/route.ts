@@ -5,7 +5,9 @@ import {
   createBoxForSlot,
   createInitialGachaBoxes,
   getBoxDimensions,
+  getNearestSeatIndex,
   getRestingBoxPosition,
+  shuffleIndices,
 } from '@/constants/gacha';
 import { isAdminAuthorized, recordGachaLog, sanitizeMachineForClient } from '@/lib/gachaServer';
 
@@ -46,15 +48,24 @@ export async function POST(request: NextRequest) {
 
     let nextItems: GachaBoxItem[];
     if (currentItems.length === 0) {
-      // 4개 모두 뽑힌 상태 -> 4개 전부 새로 정위치 리필
+      // 4개 모두 뽑힌 상태 -> 4개 전부 랜덤 순서로 새로 리필
       nextItems = createInitialGachaBoxes();
     } else {
-      // 일부(1~3개)만 뽑힌 상태 -> 남은 상품 위치는 유지하고 빈 슬롯만 리필
+      // 일부(1~3개)만 뽑힌 상태 -> 남은 상품 위치는 유지하고 빈 좌석에 빠진 상품들을 랜덤 배치로 리필
       nextItems = [...currentItems];
-      for (let i = 0; i < missingSlots.length; i++) {
-        const slotIdx = missingSlots[i];
-        const newBox = createBoxForSlot(slotIdx, now + i * 10);
-        const [rx, ry, rz] = getRestingBoxPosition(slotIdx);
+      const usedSeats = new Set<number>(
+        nextItems.map((it) =>
+          typeof it.seatIndex === 'number' ? it.seatIndex : getNearestSeatIndex(it.position[0])
+        )
+      );
+      const freeSeats = shuffleIndices([0, 1, 2, 3].filter((s) => !usedSeats.has(s)));
+      const shuffledMissing = shuffleIndices(missingSlots);
+
+      for (let i = 0; i < shuffledMissing.length; i++) {
+        const slotIdx = shuffledMissing[i];
+        const seatIdx = freeSeats[i] !== undefined ? freeSeats[i] : slotIdx;
+        const newBox = createBoxForSlot(slotIdx, now + i * 10, seatIdx);
+        const [rx, ry, rz] = getRestingBoxPosition(slotIdx, seatIdx);
         const overlapsExisting = nextItems.some(
           (item) => Math.abs(item.position[0] - rx) < 0.92 && item.position[1] > 0.35
         );
@@ -64,7 +75,7 @@ export async function POST(request: NextRequest) {
         }
         nextItems.push(newBox);
       }
-      nextItems.sort((a, b) => a.slotIndex - b.slotIndex);
+      nextItems.sort((a, b) => (a.seatIndex ?? a.slotIndex) - (b.seatIndex ?? b.slotIndex));
     }
 
     const refilledCount = missingSlots.length;

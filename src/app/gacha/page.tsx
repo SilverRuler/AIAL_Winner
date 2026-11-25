@@ -22,6 +22,10 @@ import {
   Clock,
   Info,
   Camera,
+  ChevronDown,
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { MEMBERS } from '@/constants/members';
 import { GACHA_SLOT_BOX_DIMS, GACHA_SLOT_REWARD_AMOUNTS, GACHA_TOTAL_SLOTS } from '@/constants/gacha';
@@ -51,6 +55,8 @@ export default function GachaPage() {
   const [ticketsByMember, setTicketsByMember] = useState<Record<string, GachaTicketBalance>>({});
   const [unclaimedWins, setUnclaimedWins] = useState<GachaWinRecord[]>([]);
   const [recentWins, setRecentWins] = useState<GachaWinRecord[]>([]);
+  const [showAllRecentWins, setShowAllRecentWins] = useState<boolean>(false);
+  const [recentWinsPage, setRecentWinsPage] = useState<number>(1);
   const [gachaWinStats, setGachaWinStats] = useState<MemberWinStats[]>([]);
   const [usedWinsByMember, setUsedWinsByMember] = useState<Record<string, number>>({});
   const [availableGachaSolByMember, setAvailableGachaSolByMember] = useState<Record<string, number>>({});
@@ -853,54 +859,193 @@ export default function GachaPage() {
         />
 
         {/* 3. 최근 뽑기 당첨 내역 */}
-        <section className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
-              <Trophy className="w-4 h-4 text-amber-400" />
-              <span>최근 UFO 뽑기 당첨 현황</span>
-            </h2>
-            <span className="text-[11px] text-slate-400">상자별 당첨 리워드: 0.003 ~ 0.015 SOL</span>
-          </div>
+        {(() => {
+          const RECENT_PREVIEW_COUNT = 3;
+          const RECENT_PAGE_SIZE = 10;
+          const totalRecentCount = recentWins.length;
+          const totalPages = Math.max(1, Math.ceil(totalRecentCount / RECENT_PAGE_SIZE));
+          const safePage = Math.min(Math.max(1, recentWinsPage), totalPages);
+          const startIdx = (safePage - 1) * RECENT_PAGE_SIZE;
+          const displayedRecentWins = showAllRecentWins
+            ? recentWins.slice(startIdx, startIdx + RECENT_PAGE_SIZE)
+            : recentWins.slice(0, RECENT_PREVIEW_COUNT);
 
-          {recentWins.length === 0 ? (
-            <p className="text-xs text-slate-500 py-4 text-center">
-              아직 뽑기에 성공한 멤버가 없습니다. 첫 번째 당첨의 주인공이 되어보세요!
-            </p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {recentWins.map((w) => (
-                <div
-                  key={w.id}
-                  className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-2 text-xs"
-                >
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-black text-white">{w.member}</span>
-                      <span className="text-slate-300">· {w.boxLabel}</span>
-                      {w.createdAt ? (
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          ({formatKstDateTime(w.createdAt)})
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="text-[11px] text-amber-300 font-mono font-bold flex items-center gap-1">
-                      <Coins className="w-3 h-3" />
-                      <span>{w.rewardAmount} SOL</span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleOpenGachaReward(w.member, false)}
-                    className="px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 text-purple-300 font-bold text-[10px] shrink-0 cursor-pointer transition-colors"
-                    title="명예의 전당에서 리워드 신청 및 현황 확인"
-                  >
-                    리워드 현황
-                  </button>
+          const getPageNumbers = (): Array<number | 'ellipsis'> => {
+            if (totalPages <= 7) {
+              return Array.from({ length: totalPages }, (_, i) => i + 1);
+            }
+            const pages: Array<number | 'ellipsis'> = [1];
+            const windowStart = Math.max(2, safePage - 1);
+            const windowEnd = Math.min(totalPages - 1, safePage + 1);
+            if (windowStart > 2) pages.push('ellipsis');
+            for (let p = windowStart; p <= windowEnd; p++) pages.push(p);
+            if (windowEnd < totalPages - 1) pages.push('ellipsis');
+            pages.push(totalPages);
+            return pages;
+          };
+
+          return (
+            <section className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h2 className="text-xs sm:text-sm font-black text-white flex items-center gap-1.5">
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                  <span>최근 UFO 뽑기 당첨 현황</span>
+                  {totalRecentCount > 0 && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-400/35 text-amber-300 text-[10px] font-mono font-bold">
+                      총 {totalRecentCount}건
+                    </span>
+                  )}
+                </h2>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-slate-400">
+                    상자별 당첨 리워드: 0.003 ~ 0.015 SOL
+                  </span>
+                  {showAllRecentWins && totalRecentCount > RECENT_PREVIEW_COUNT && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAllRecentWins(false);
+                        setRecentWinsPage(1);
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-bold cursor-pointer transition-colors"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                      <span>접기</span>
+                    </button>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
+              </div>
+
+              {totalRecentCount === 0 ? (
+                <p className="text-xs text-slate-500 py-4 text-center">
+                  아직 뽑기에 성공한 멤버가 없습니다. 첫 번째 당첨의 주인공이 되어보세요!
+                </p>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {displayedRecentWins.map((w) => (
+                      <div
+                        key={w.id}
+                        className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-black text-white">{w.member}</span>
+                            <span className="text-slate-300">· {w.boxLabel}</span>
+                            {w.createdAt ? (
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                ({formatKstDateTime(w.createdAt)})
+                              </span>
+                            ) : null}
+                          </div>
+                          <div className="text-[11px] text-amber-300 font-mono font-bold flex items-center gap-1">
+                            <Coins className="w-3 h-3" />
+                            <span>{w.rewardAmount} SOL</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenGachaReward(w.member, false)}
+                          className="px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/35 text-purple-300 font-bold text-[10px] shrink-0 cursor-pointer transition-colors"
+                          title="명예의 전당에서 리워드 신청 및 현황 확인"
+                        >
+                          리워드 현황
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 더 보기 버튼 (기본 최근 3건만 표시) */}
+                  {!showAllRecentWins && totalRecentCount > RECENT_PREVIEW_COUNT && (
+                    <div className="pt-1 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAllRecentWins(true);
+                          setRecentWinsPage(1);
+                        }}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-5 py-2 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 border border-slate-700 hover:border-cyan-500/50 text-slate-200 hover:text-cyan-200 text-xs font-black transition-all cursor-pointer"
+                      >
+                        <span>더 보기 (전체 {totalRecentCount}건 · 페이지당 {RECENT_PAGE_SIZE}건)</span>
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* 확장 모드 하단 페이지네이션 & 접기 컨트롤 */}
+                  {showAllRecentWins && totalRecentCount > RECENT_PREVIEW_COUNT && (
+                    <div className="pt-2 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                      <span className="text-[11px] text-slate-400 font-mono">
+                        {startIdx + 1}–{Math.min(startIdx + RECENT_PAGE_SIZE, totalRecentCount)} / 총{' '}
+                        {totalRecentCount}건 ({safePage}/{totalPages} 페이지)
+                      </span>
+
+                      {totalPages > 1 && (
+                        <div className="flex items-center gap-1 flex-wrap justify-center">
+                          <button
+                            type="button"
+                            disabled={safePage <= 1}
+                            onClick={() => setRecentWinsPage(Math.max(1, safePage - 1))}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                            aria-label="이전 페이지"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+
+                          {getPageNumbers().map((item, idx) =>
+                            item === 'ellipsis' ? (
+                              <span
+                                key={`ellipsis-${idx}`}
+                                className="px-1.5 text-xs text-slate-500 select-none"
+                              >
+                                …
+                              </span>
+                            ) : (
+                              <button
+                                key={item}
+                                type="button"
+                                onClick={() => setRecentWinsPage(item)}
+                                className={`min-w-[32px] h-8 px-2 rounded-lg border text-xs font-mono font-black transition-all cursor-pointer ${
+                                  item === safePage
+                                    ? 'bg-amber-500 text-slate-950 border-amber-300 shadow-sm'
+                                    : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-300 hover:text-white'
+                                }`}
+                              >
+                                {item}
+                              </button>
+                            )
+                          )}
+
+                          <button
+                            type="button"
+                            disabled={safePage >= totalPages}
+                            onClick={() => setRecentWinsPage(Math.min(totalPages, safePage + 1))}
+                            className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white disabled:opacity-35 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                            aria-label="다음 페이지"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAllRecentWins(false);
+                          setRecentWinsPage(1);
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-bold cursor-pointer transition-colors"
+                      >
+                        <ChevronUp className="w-3.5 h-3.5" />
+                        <span>최근 3건만 보기</span>
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          );
+        })()}
       </main>
 
       {/* 뽑기 시작 횟수 선택 & 연속 5가챠(+1 무료) 모달 */}

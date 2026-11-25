@@ -177,7 +177,7 @@ export async function GET(request: NextRequest) {
       };
     }
 
-    const recentWins = allWinsRaw.slice(0, 20).map(formatWin);
+    const recentWins = allWinsRaw.map(formatWin);
     const unclaimedWins = allWinsRaw
       .filter((d: any) => (d.claimStatus || 'unclaimed') === 'unclaimed')
       .map(formatWin);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { GachaBoxItem } from '@/types/gacha';
-import { createInitialGachaBoxes, getNearestSeatIndex, getRestingBoxPosition } from '@/constants/gacha';
+import { createInitialGachaBoxes, GACHA_ALL_SLOT_INDICES, getNearestSeatIndex, getRestingBoxPosition } from '@/constants/gacha';
 import { isAdminAuthorized, recordGachaLog, sanitizeMachineForClient } from '@/lib/gachaServer';
 
 export async function POST(request: NextRequest) {
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
             ? item.seatIndex
             : getNearestSeatIndex(item.position?.[0] ?? 0);
         if (takenSeats.has(seat)) {
-          const free = [0, 1, 2, 3].find((s) => !takenSeats.has(s));
+          const free = GACHA_ALL_SLOT_INDICES.find((s) => !takenSeats.has(s));
           if (free !== undefined) seat = free;
         }
         takenSeats.add(seat);

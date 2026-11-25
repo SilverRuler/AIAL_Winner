@@ -4,6 +4,8 @@ import { GachaBoxItem } from '@/types/gacha';
 import {
   createBoxForSlot,
   createInitialGachaBoxes,
+  GACHA_ALL_SLOT_INDICES,
+  GACHA_TOTAL_SLOTS,
   getBoxDimensions,
   getNearestSeatIndex,
   getRestingBoxPosition,
@@ -35,31 +37,31 @@ export async function POST(request: NextRequest) {
     const currentItems: GachaBoxItem[] = Array.isArray(existing?.items) ? existing.items : [];
 
     const occupiedSlots = new Set(currentItems.map((it) => it.slotIndex));
-    const missingSlots = [0, 1, 2, 3].filter((idx) => !occupiedSlots.has(idx));
+    const missingSlots = GACHA_ALL_SLOT_INDICES.filter((idx) => !occupiedSlots.has(idx));
 
     if (missingSlots.length === 0) {
       return NextResponse.json({
         success: true,
         refilledCount: 0,
-        message: '이미 4개 상품이 모두 채워져 있습니다.',
+        message: `이미 ${GACHA_TOTAL_SLOTS}개 상품이 모두 채워져 있습니다.`,
         machine: sanitizeMachineForClient(existing as any),
       });
     }
 
     let nextItems: GachaBoxItem[];
     if (currentItems.length === 0) {
-      // 4개 모두 뽑힌 상태 -> 4개 전부 랜덤 순서로 새로 리필
+      // 전체 뽑힌 상태 -> 전체 랜덤 순서로 새로 리필
       nextItems = createInitialGachaBoxes();
     } else {
-      // 일부(1~3개)만 뽑힌 상태 -> 남은 상품 위치는 유지하고 빈 좌석에 빠진 상품들을 랜덤 배치로 리필
+      // 일부만 뽑힌 상태 -> 남은 상품 위치는 유지하고 빈 좌석에 빠진 상품들을 랜덤 배치로 리필
       nextItems = [...currentItems];
       const usedSeats = new Set<number>(
         nextItems.map((it) =>
           typeof it.seatIndex === 'number' ? it.seatIndex : getNearestSeatIndex(it.position[0])
         )
       );
-      const freeSeats = shuffleIndices([0, 1, 2, 3].filter((s) => !usedSeats.has(s)));
-      const shuffledMissing = shuffleIndices(missingSlots);
+      const freeSeats = shuffleIndices(GACHA_ALL_SLOT_INDICES.filter((s) => !usedSeats.has(s)));
+      const shuffledMissing = shuffleIndices([...missingSlots]);
 
       for (let i = 0; i < shuffledMissing.length; i++) {
         const slotIdx = shuffledMissing[i];
@@ -80,9 +82,9 @@ export async function POST(request: NextRequest) {
 
     const refilledCount = missingSlots.length;
     const summary =
-      refilledCount === 4
-        ? '📦 운영자(관리자)가 4개 상품을 모두 새로 리필했습니다!'
-        : `📦 운영자(관리자)가 빈 자리 상품 ${refilledCount}개를 리필했습니다! (총 ${nextItems.length}개)`;
+      refilledCount === GACHA_TOTAL_SLOTS
+        ? `📦 운영자(관리자)가 ${GACHA_TOTAL_SLOTS}개 상품을 모두 랜덤 배치로 새로 리필했습니다!`
+        : `📦 운영자(관리자)가 빈 자리 상품 ${refilledCount}개를 랜덤 리필했습니다! (총 ${nextItems.length}개)`;
 
     const clearedLock = {
       active: false,

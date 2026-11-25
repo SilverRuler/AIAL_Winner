@@ -11,10 +11,9 @@ export const GACHA_PHYSICS = {
   BAR_HALF_Z: 0.455,      // 중앙 앞 Bar: +0.455, 뒤 Bar: -0.455 (중심 간격 0.91, 내경 틈새 0.73)
   OUTER_BAR_Y: 1.06,      // 외곽 Bar 높이 (중앙 Bar보다 Y축으로 높게 배치)
   OUTER_BAR_HALF_Z: 1.02, // 외곽 앞 Bar: +1.02, 뒤 Bar: -1.02 (중앙 Bar보다 바깥쪽에 배치)
-  BAR_LENGTH: 6.4,
+  BAR_LENGTH: 7.8,        // 5개 슬롯 여유 배치를 위해 가로 확장 (기존 6.4 -> 7.8)
 
-  // 상품 상자 크기 (가로 W 0.60 × 높이 H 0.60 정사각형 밑면 < 내경 틈새 0.82 < 세로 길이 D 1.46)
-  // 정사각형 단면(대각선 0.8485 > 틈새 0.82)은 유지하면서 길이를 살짝 줄이고 Bar 틈새를 소폭 넓혀 당첨 확률 상향
+  // 상품 상자 크기 (기본 참조 치수)
   BOX_W: 0.60,
   BOX_H: 0.60,
   BOX_D: 1.46,
@@ -23,16 +22,16 @@ export const GACHA_PHYSICS = {
   // 낙하 승리 판정 Y 임계값 (Bar 아래 WIN 슈트 영역 진입)
   DROP_Y_THRESHOLD: -0.28,
 
-  // 외곽 안전 벽 / 경사 가이드 범위 (Bar 바깥으로 탈출하지 않고 중앙 틈새로만 떨어지도록 설계)
-  CABINET_HALF_X: 3.18,
+  // 외곽 안전 벽 / 경사 가이드 범위 (5개 슬롯 가로 확장에 맞춰 조정)
+  CABINET_HALF_X: 3.88,
   CABINET_HALF_Z: 1.52,
 
-  // 크레인 이동 범위 및 속도 (길어진 집게 암에 맞춰 높이/하강 한계 최적화)
-  CLAW_HOME_X: -2.65,
+  // 크레인 이동 범위 및 속도 (5개 슬롯 전체 커버)
+  CLAW_HOME_X: -3.35,
   CLAW_HOME_Z: 0.85,
   CLAW_HOME_Y: 2.68,
-  CLAW_MIN_X: -2.65,
-  CLAW_MAX_X: 2.65,
+  CLAW_MIN_X: -3.35,
+  CLAW_MAX_X: 3.35,
   CLAW_MIN_Z: -0.85,
   CLAW_MAX_Z: 0.85,
   CLAW_DROP_Y: 1.24,      // 하강 시 집게 중심 Y (길어진 집게 끝단 y ≈ 0.57로 Bar 높이 0.72 아래까지 자연 도달)
@@ -45,18 +44,21 @@ export const GACHA_PHYSICS = {
   LOCK_TTL_MS: 25 * 1000,
 };
 
-export const GACHA_SLOT_X = [-2.05, -0.68, 0.68, 2.05] as const;
+export const GACHA_SLOT_X = [-2.76, -1.38, 0, 1.38, 2.76] as const;
+export const GACHA_TOTAL_SLOTS = GACHA_SLOT_X.length;
+export const GACHA_ALL_SLOT_INDICES = [0, 1, 2, 3, 4] as const;
 
 /**
- * 슬롯별(1번~4번) 상자 규격 및 난이도 단계 (중앙 Bar 내경 0.73 고정 기준, 평균 난이도 6.5 중상)
- * #1(난이도 5) -> #2(난이도 6) -> #3(난이도 7) -> #4(난이도 8) 순으로 단면 크기·길이·무게를 단계적으로 상향
- * 모든 4종 모두 Bar 위 안정 안착 및 cannon-es 물리 기준 정상 낙하 가능 검증 완료
+ * 슬롯별(1번~5번) 상자 규격 및 난이도 단계 (중앙 Bar 내경 0.73 고정 기준, 평균 난이도 6.5 중상)
+ * #1(5) · #2(6) · #5 바니카(6.5, 정사각형 와이드 스페셜) · #3(7) · #4(8)
+ * 모든 5종 모두 Bar 위 안정 안착 및 cannon-es 물리 기준 정상 낙하 가능 검증 완료
  */
 export const GACHA_SLOT_BOX_DIMS = [
   { w: 0.54, h: 0.52, d: 1.32, mass: 1.35 }, // #1 프리렌 (난이도 5): 가볍고 컴팩트하여 회전·기울기 공략이 수월한 박스
   { w: 0.60, h: 0.56, d: 1.44, mass: 1.55 }, // #2 네즈코 (난이도 6): 표준 규격·무게의 정석 아케이드 브릿지 박스
   { w: 0.63, h: 0.60, d: 1.50, mass: 1.68 }, // #3 노엘 실바 (난이도 7): 두툼하고 길며 묵직해 정밀 각도 조절이 필요한 박스
   { w: 0.66, h: 0.64, d: 1.58, mass: 1.80 }, // #4 레제 (난이도 8): 틈새 여유가 좁고 길고 무거운 고난도 마스터 박스
+  { w: 0.90, h: 0.58, d: 1.08, mass: 1.70 }, // #5 바니카 (난이도 6.5): 정사각형에 가까운 와이드 박스 (옆세우기·누르기 공략 특화)
 ] as const;
 
 export function getBoxDimensions(slotIndex: number) {
@@ -64,15 +66,15 @@ export function getBoxDimensions(slotIndex: number) {
   return GACHA_SLOT_BOX_DIMS[safeIdx];
 }
 
-export const GACHA_COLOR_THEMES: GachaColorTheme[] = ['gold', 'cyan', 'rose', 'purple'];
+export const GACHA_COLOR_THEMES: GachaColorTheme[] = ['gold', 'cyan', 'rose', 'purple', 'rose'];
 
 export const GACHA_DEFAULT_REWARD_AMOUNT = 0.01; // 레거시 기본값
 
 /**
- * 슬롯별(1번~4번) 상자 리워드 금액 (SOL)
- * #1 프리렌: 0.003 SOL, #2 네즈코: 0.008 SOL, #3 노엘 실바: 0.01 SOL, #4 레제: 0.015 SOL
+ * 슬롯별(1번~5번) 상자 리워드 금액 (SOL)
+ * #1 프리렌: 0.003, #2 네즈코: 0.008, #3 노엘 실바: 0.01, #4 레제: 0.015, #5 바니카: 0.009 SOL
  */
-export const GACHA_SLOT_REWARD_AMOUNTS = [0.003, 0.008, 0.01, 0.015] as const;
+export const GACHA_SLOT_REWARD_AMOUNTS = [0.003, 0.008, 0.01, 0.015, 0.009] as const;
 
 export function getBoxRewardAmount(slotIndex: number): number {
   const safeIdx = Math.max(0, Math.min(GACHA_SLOT_REWARD_AMOUNTS.length - 1, slotIndex));
@@ -124,6 +126,7 @@ const GACHA_SLOT_LABELS = [
   '네즈코 박스 #2',
   '노엘 실바 박스 #3',
   '레제 박스 #4',
+  '바니카 박스 #5',
 ] as const;
 
 export function createBoxForSlot(
@@ -149,11 +152,11 @@ export function createBoxForSlot(
 }
 
 /**
- * 초기 4개 박스 세팅 생성 (1번~4번 상품을 4개 좌석에 랜덤 배치)
+ * 초기 5개 박스 세팅 생성 (1번~5번 상품을 5개 좌석에 랜덤 배치)
  */
 export function createInitialGachaBoxes(): GachaBoxItem[] {
   const nowTs = Date.now();
-  const shuffledSlotTypes = shuffleIndices([0, 1, 2, 3], true);
+  const shuffledSlotTypes = shuffleIndices([...GACHA_ALL_SLOT_INDICES], true);
   return shuffledSlotTypes.map((slotType, seatIdx) =>
     createBoxForSlot(slotType, nowTs + seatIdx, seatIdx)
   );

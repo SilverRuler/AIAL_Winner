@@ -8,8 +8,10 @@ import {
 import {
   createBoxForSlot,
   createInitialGachaBoxes,
+  GACHA_ALL_SLOT_INDICES,
   GACHA_PHYSICS,
   GACHA_SLOT_X,
+  GACHA_TOTAL_SLOTS,
   getRestingBoxPosition,
   sanitizeBoxForClient,
 } from '@/constants/gacha';
@@ -278,7 +280,7 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
     latestCp.timestampMs > lastHandledMs
   ) {
     const freshBoxes = createInitialGachaBoxes();
-    const autoSummary = `⏰ 정기 스케줄(${latestCp.label})로 뽑기판 상품 4개가 자동 재정렬 및 리필되었습니다!`;
+    const autoSummary = `⏰ 정기 스케줄(${latestCp.label})로 뽑기판 상품 ${GACHA_TOTAL_SLOTS}개가 자동 재정렬 및 리필되었습니다!`;
 
     const clearedLock = {
       active: false,
@@ -377,7 +379,7 @@ export function refillWonSlot(remainingItems: GachaBoxItem[], wonSlotIndex: numb
 
   let chosenSlot = wonSlotIndex;
   if (!isSlotClear(chosenSlot)) {
-    const freeIdx = [0, 1, 2, 3].find((idx) => isSlotClear(idx));
+    const freeIdx = GACHA_ALL_SLOT_INDICES.find((idx) => isSlotClear(idx));
     if (freeIdx !== undefined) {
       chosenSlot = freeIdx;
     }

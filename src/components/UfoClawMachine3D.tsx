@@ -97,6 +97,7 @@ const FIGURE_SLOT_STYLES = [
     sideAccent: '#7dd3fc',
     sideBg: '#0c4a6e',
     title: 'FRIEREN',
+    isSquare: false,
   },
   {
     imgSrc: '/gacha/nezuko.png',
@@ -105,6 +106,7 @@ const FIGURE_SLOT_STYLES = [
     sideAccent: '#f9a8d4',
     sideBg: '#881337',
     title: 'NEZUKO',
+    isSquare: false,
   },
   {
     imgSrc: '/gacha/noel_silva.png',
@@ -113,6 +115,7 @@ const FIGURE_SLOT_STYLES = [
     sideAccent: '#93c5fd',
     sideBg: '#1e3a8a',
     title: 'NOEL SILVA',
+    isSquare: false,
   },
   {
     imgSrc: '/gacha/reze.png',
@@ -121,6 +124,16 @@ const FIGURE_SLOT_STYLES = [
     sideAccent: '#e879f9',
     sideBg: '#581c87',
     title: 'REZE',
+    isSquare: false,
+  },
+  {
+    imgSrc: '/gacha/vanica.png',
+    frontAccent: '#fda4af',
+    frontBg: '#9f1239',
+    sideAccent: '#fb7185',
+    sideBg: '#4c0519',
+    title: 'VANICA',
+    isSquare: true,
   },
 ] as const;
 
@@ -131,11 +144,13 @@ function getFigureSlotStyle(slotIndex: number) {
 
 function createFigureFrontTexture(slotIndex: number, label: string): THREE.CanvasTexture {
   const style = getFigureSlotStyle(slotIndex);
-  const { imgSrc, frontAccent: accent, frontBg: bg, title } = style;
+  const { imgSrc, frontAccent: accent, frontBg: bg, title, isSquare } = style;
 
+  const cw = isSquare ? 384 : 256;
+  const ch = isSquare ? 440 : 512;
   const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 512;
+  canvas.width = cw;
+  canvas.height = ch;
   const ctx = canvas.getContext('2d');
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -143,11 +158,13 @@ function createFigureFrontTexture(slotIndex: number, label: string): THREE.Canva
   const drawArtwork = (loadedImg?: HTMLImageElement) => {
     if (!ctx) return;
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, 256, 512);
+    ctx.fillRect(0, 0, cw, ch);
 
     if (loadedImg && loadedImg.width > 0 && loadedImg.height > 0) {
-      // 비율 유지 Cover 크롭으로 캐릭터 이미지 채우기
-      const targetAspect = 256 / 512;
+      // 비율 유지 Cover 크롭으로 캐릭터 이미지 채우기 (정사각형 박스는 1:1 비율에 맞춰 풀프레임 출력)
+      const drawW = cw - 16;
+      const drawH = isSquare ? ch - 84 : ch - 16;
+      const targetAspect = drawW / drawH;
       const srcAspect = loadedImg.width / loadedImg.height;
       let sx = 0, sy = 0, sw = loadedImg.width, sh = loadedImg.height;
       if (srcAspect > targetAspect) {
@@ -157,27 +174,29 @@ function createFigureFrontTexture(slotIndex: number, label: string): THREE.Canva
         sh = loadedImg.width / targetAspect;
         sy = (loadedImg.height - sh) * 0.2;
       }
-      ctx.drawImage(loadedImg, sx, sy, sw, sh, 8, 8, 240, 496);
+      ctx.drawImage(loadedImg, sx, sy, sw, sh, 8, 8, drawW, drawH);
     }
 
     // 피규어 박스 하단 타이틀 배너
-    ctx.fillStyle = 'rgba(7, 11, 24, 0.82)';
-    ctx.fillRect(8, 434, 240, 70);
+    const bannerH = 70;
+    const bannerY = ch - bannerH - 8;
+    ctx.fillStyle = 'rgba(7, 11, 24, 0.84)';
+    ctx.fillRect(8, bannerY, cw - 16, bannerH);
 
     ctx.fillStyle = accent;
-    ctx.font = '900 24px sans-serif';
+    ctx.font = `900 ${isSquare ? 28 : 24}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(title, 128, 458);
+    ctx.fillText(title, cw / 2, bannerY + 24);
 
     ctx.fillStyle = '#fde047';
-    ctx.font = 'bold 15px monospace';
-    ctx.fillText(`${label} · ${getBoxRewardAmount(slotIndex)} SOL`, 128, 486);
+    ctx.font = `bold ${isSquare ? 17 : 15}px monospace`;
+    ctx.fillText(`${label} · ${getBoxRewardAmount(slotIndex)} SOL`, cw / 2, bannerY + 52);
 
     // 피규어 박스 테두리 프레임
     ctx.strokeStyle = accent;
     ctx.lineWidth = 10;
-    ctx.strokeRect(5, 5, 246, 502);
+    ctx.strokeRect(5, 5, cw - 10, ch - 10);
 
     tex.needsUpdate = true;
   };
@@ -355,10 +374,10 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       const scale = aspect < 1.48 ? Math.min(1.95, 1.52 / aspect) : 1.0;
       const fov = aspect < 1.15 ? 48 : 42;
       if (view === 'top') {
-        // 항공뷰: 위에서 4-Bar와 상자·조준링을 수직에 가깝게 내려다봄
+        // 항공뷰: 위에서 5슬롯 4-Bar와 상자·조준링을 수직에 가깝게 내려다봄
         return {
           fov,
-          pos: new THREE.Vector3(0, 7.6 * Math.max(1, scale * 0.92), 0.72),
+          pos: new THREE.Vector3(0, 8.9 * Math.max(1, scale * 0.94), 0.78),
           look: new THREE.Vector3(0, 0.75, 0),
         };
       }
@@ -366,14 +385,14 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         // 우측뷰: 오른쪽(+X) 측면에서 4-Bar 단면과 크레인 Z축 깊이를 정밀 확인
         return {
           fov,
-          pos: new THREE.Vector3(6.25 * Math.max(1, scale * 0.85), 2.35 * (1 + (scale - 1) * 0.35), 0),
+          pos: new THREE.Vector3(7.1 * Math.max(1, scale * 0.85), 2.4 * (1 + (scale - 1) * 0.35), 0),
           look: new THREE.Vector3(0, 0.85, 0),
         };
       }
-      // 정면뷰 (기본 0° + 까치발 최대 45° 상향 시점)
+      // 정면뷰 (기본 0° + 까치발 최대 45° 상향 시점, 5슬롯 가로 확장에 맞춰 시야 확보)
       const lookY = 0.78;
-      const baseY = 4.15 * (1 + (scale - 1) * 0.72);
-      const baseZ = 6.25 * scale;
+      const baseY = 4.55 * (1 + (scale - 1) * 0.72);
+      const baseZ = 7.25 * scale;
       const clampedTiptoe = Math.max(0, Math.min(45, tiptoeDeg));
       if (clampedTiptoe <= 0) {
         return {
@@ -430,24 +449,24 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     mainSpot.shadow.mapSize.height = 1024;
     scene.add(mainSpot);
 
-    const cyanLight = new THREE.PointLight('#22d3ee', 10, 12);
-    cyanLight.position.set(-3.2, 2.6, 1.2);
+    const cyanLight = new THREE.PointLight('#22d3ee', 10, 14);
+    cyanLight.position.set(-3.8, 2.6, 1.2);
     scene.add(cyanLight);
 
-    const amberLight = new THREE.PointLight('#f59e0b', 10, 12);
-    amberLight.position.set(3.2, 2.6, 1.2);
+    const amberLight = new THREE.PointLight('#f59e0b', 10, 14);
+    amberLight.position.set(3.8, 2.6, 1.2);
     scene.add(amberLight);
 
-    const chuteLight = new THREE.PointLight('#10b981', 8, 8);
+    const chuteLight = new THREE.PointLight('#10b981', 8, 10);
     chuteLight.position.set(0, -0.7, 0);
     scene.add(chuteLight);
 
-    // 3. Arcade Cabinet Visual Geometry
+    // 3. Arcade Cabinet Visual Geometry (5슬롯 확장형 가로 7.8 캐비닛)
     const cabinetGroup = new THREE.Group();
     scene.add(cabinetGroup);
 
     // 하단 WIN CHUTE 바닥 (빛나는 배출구)
-    const chuteGeo = new THREE.BoxGeometry(6.8, 0.15, 3.2);
+    const chuteGeo = new THREE.BoxGeometry(8.2, 0.15, 3.2);
     const chuteMat = new THREE.MeshStandardMaterial({
       color: '#064e3b',
       emissive: '#059669',
@@ -461,7 +480,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     cabinetGroup.add(chuteFloor);
 
     // 바닥 WIN 그리드 라인
-    const gridHelper = new THREE.GridHelper(6.6, 14, '#10b981', '#065f46');
+    const gridHelper = new THREE.GridHelper(8.0, 16, '#10b981', '#065f46');
     gridHelper.position.set(0, -1.46, 0);
     cabinetGroup.add(gridHelper);
 
@@ -474,11 +493,12 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       metalness: 0.7,
       roughness: 0.2,
     });
+    const pillarX = GACHA_PHYSICS.CABINET_HALF_X + 0.1;
     const pillarCoords = [
-      [-3.28, 0.9, -1.48],
-      [3.28, 0.9, -1.48],
-      [-3.28, 0.9, 1.48],
-      [3.28, 0.9, 1.48],
+      [-pillarX, 0.9, -1.48],
+      [pillarX, 0.9, -1.48],
+      [-pillarX, 0.9, 1.48],
+      [pillarX, 0.9, 1.48],
     ];
     pillarCoords.forEach(([px, py, pz]) => {
       const p = new THREE.Mesh(pillarGeo, pillarMat);
@@ -489,7 +509,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     // 상단 레일 프레임
     const frameBarMat = new THREE.MeshStandardMaterial({ color: '#334155', metalness: 0.8, roughness: 0.25 });
     const railSideGeo = new THREE.BoxGeometry(0.12, 0.12, 3.1);
-    [-3.28, 3.28].forEach((rx) => {
+    [-pillarX, pillarX].forEach((rx) => {
       const r = new THREE.Mesh(railSideGeo, frameBarMat);
       r.position.set(rx, 3.25, 0);
       cabinetGroup.add(r);
@@ -497,7 +517,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
     // 이동식 Z-갠트리 빔 & X-트롤리
     const gantryBeam = new THREE.Mesh(
-      new THREE.BoxGeometry(6.6, 0.1, 0.14),
+      new THREE.BoxGeometry(GACHA_PHYSICS.BAR_LENGTH + 0.2, 0.1, 0.14),
       new THREE.MeshStandardMaterial({ color: '#64748b', metalness: 0.85, roughness: 0.2 })
     );
     gantryBeam.position.set(0, 3.25, GACHA_PHYSICS.CLAW_HOME_Z);
@@ -512,11 +532,11 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       metalness: 0.1,
       side: THREE.DoubleSide,
     });
-    const backGlass = new THREE.Mesh(new THREE.PlaneGeometry(6.56, 3.4), acrylicMat);
+    const backGlass = new THREE.Mesh(new THREE.PlaneGeometry(GACHA_PHYSICS.BAR_LENGTH + 0.16, 3.4), acrylicMat);
     backGlass.position.set(0, 0.8, -1.46);
     cabinetGroup.add(backGlass);
 
-    [-3.24, 3.24].forEach((sx) => {
+    [-(GACHA_PHYSICS.CABINET_HALF_X + 0.06), GACHA_PHYSICS.CABINET_HALF_X + 0.06].forEach((sx) => {
       const sideGlass = new THREE.Mesh(new THREE.PlaneGeometry(2.94, 3.4), acrylicMat);
       sideGlass.rotation.y = Math.PI / 2;
       sideGlass.position.set(sx, 0.8, 0);
@@ -583,8 +603,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       barMesh.receiveShadow = true;
       cabinetGroup.add(barMesh);
 
-      // 슬롯 경계마다 미끄럼방지 실리콘 링 배치 (중앙: 레드, 외곽 높은 바: 스카이블루)
-      for (let rx = -2.8; rx <= 2.81; rx += 0.7) {
+      // 슬롯 경계마다 미끄럼방지 실리콘 링 배치 (5슬롯 확장 폭 커버)
+      for (let rx = -3.5; rx <= 3.51; rx += 0.7) {
         const ring = new THREE.Mesh(ringGeo, isOuter ? outerRingMat : ringMat);
         ring.position.set(rx, by, bz);
         cabinetGroup.add(ring);
@@ -681,22 +701,24 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
     world.addContactMaterial(
       new CANNON.ContactMaterial(barPhysMat, boxPhysMat, {
-        friction: 0.4,
-        restitution: 0.06,
-        contactEquationStiffness: 1e7,
-        contactEquationRelaxation: 3,
+        friction: 0.44,
+        restitution: 0.0, // 탱탱볼 튀어오름 완전 제거 (현실 종이 피규어 박스 감각)
+        contactEquationStiffness: 2.5e6,
+        contactEquationRelaxation: 5,
       })
     );
     world.addContactMaterial(
       new CANNON.ContactMaterial(boxPhysMat, boxPhysMat, {
-        friction: 0.35,
-        restitution: 0.05,
+        friction: 0.38,
+        restitution: 0.0,
+        contactEquationStiffness: 2.5e6,
+        contactEquationRelaxation: 5,
       })
     );
     world.addContactMaterial(
       new CANNON.ContactMaterial(clawPhysMat, boxPhysMat, {
-        friction: 0.45,
-        restitution: 0.04,
+        friction: 0.48,
+        restitution: 0.0,
       })
     );
 
@@ -740,11 +762,11 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
     // 하단 WIN 슈트 바닥 콜라이더 (떨어진 상자가 안착)
     const floorBody = new CANNON.Body({ mass: 0, material: barPhysMat });
-    floorBody.addShape(new CANNON.Box(new CANNON.Vec3(3.5, 0.1, 2.0)));
+    floorBody.addShape(new CANNON.Box(new CANNON.Vec3(4.2, 0.1, 2.0)));
     floorBody.position.set(0, -1.55, 0);
     world.addBody(floorBody);
 
-    // Kinematic 크레인 물리 바디 (직접 물리 충돌로 끼인 상자 밀어내기/누르기 지원)
+    // Kinematic 크레인 물리 바디 (무한 질량 반발 튀어오름 방지: collisionResponse=false, 실제 누르기/후킹은 정밀 힘 제어로 구현)
     const clawAnchorBody = new CANNON.Body({
       type: CANNON.Body.KINEMATIC,
       mass: 0,
@@ -758,6 +780,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       type: CANNON.Body.KINEMATIC,
       mass: 0,
       material: clawPhysMat,
+      collisionResponse: false,
     });
     clawHeadCollider.addShape(new CANNON.Box(new CANNON.Vec3(0.18, 0.1, 0.14)));
     clawHeadCollider.position.set(GACHA_PHYSICS.CLAW_HOME_X, GACHA_PHYSICS.CLAW_HOME_Y, GACHA_PHYSICS.CLAW_HOME_Z);
@@ -803,8 +826,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           const body = new CANNON.Body({
             mass: dims.mass,
             material: boxPhysMat,
-            linearDamping: 0.2,
-            angularDamping: 0.3,
+            linearDamping: 0.38,
+            angularDamping: 0.52,
           });
           body.addShape(
             new CANNON.Box(
@@ -876,6 +899,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       leftBlockedBoxId: null as string | null,
       rightBlockedBoxId: null as string | null,
       bothBlockedOnTop: false,
+      pushDownTimer: 0,
       syncFromItems,
       resetClawToHome: () => {
         if (state.grabConstraint) {
@@ -899,6 +923,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         state.leftBlockedBoxId = null;
         state.rightBlockedBoxId = null;
         state.bothBlockedOnTop = false;
+        state.pushDownTimer = 0;
         state.wonSet.clear();
       },
     };
@@ -956,15 +981,15 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           playTone(440, 0.12);
         }
       } else if (curPhase === 'descending') {
+        const descendRate = state.pushDownTimer > 0 ? 0.14 : GACHA_PHYSICS.CLAW_DESCEND_SPEED;
         state.clawY = Math.max(
           GACHA_PHYSICS.CLAW_DROP_Y,
-          state.clawY - GACHA_PHYSICS.CLAW_DESCEND_SPEED * dt
+          state.clawY - descendRate * dt
         );
 
-        // 실제 집게 좌/우 끝단 & UFO 본체의 상자 충돌 검사
-        // - 양쪽 모두 상자 윗면에 막히면 즉시 정지 (관통 불가)
-        // - 한쪽 집게만 상자 윗면에 걸리면 멈추지 않고 끝까지 계속 하강!
-        //   걸린 쪽 암은 바깥으로 휘며 상자 윗면을 지그시 누르고, 안 걸린 반대쪽 암은 상자 옆/아래까지 깊숙이 진입
+        // 실제 집게 좌/우 끝단 & UFO 본체의 상자 충돌 및 현실 오락실 '누르기(오시)' 물리 적용
+        // - 양쪽 모두 상자 윗면에 닿으면 반발 튀어오름 없이 0.45초간 지그시 아래로 눌러 Bar 틈새로 밀어넣기!
+        // - 한쪽 집게만 상자 윗면에 걸리면 끝까지 계속 하강하며 걸린 쪽을 지그시 누르고 반대쪽 암은 옆구리/아래까지 진입!
         let stopDescend = false;
         let curHitLeftId: string | null = null;
         let curHitRightId: string | null = null;
@@ -989,14 +1014,14 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           const leftInBox =
             Math.abs(lLoc.x) <= dims.w / 2 - 0.01 &&
             Math.abs(lLoc.z) <= dims.d / 2 - 0.01 &&
-            lLoc.y <= dims.h / 2 + 0.04 &&
+            lLoc.y <= dims.h / 2 + 0.05 &&
             lLoc.y >= -dims.h / 2;
 
           const rLoc = ent.body.pointToLocalFrame(rightTipWorld);
           const rightInBox =
             Math.abs(rLoc.x) <= dims.w / 2 - 0.01 &&
             Math.abs(rLoc.z) <= dims.d / 2 - 0.01 &&
-            rLoc.y <= dims.h / 2 + 0.04 &&
+            rLoc.y <= dims.h / 2 + 0.05 &&
             rLoc.y >= -dims.h / 2;
 
           if (leftInBox) {
@@ -1009,27 +1034,36 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           }
 
           if (leftInBox && rightInBox) {
-            // 양쪽 집게 모두 상자 윗면에 막힘 -> 관통 불가이므로 정지 + 양발 누르기 충격
+            // 현실 오락실 누르기(오시) 기술: 폭발적 임펄스 대신 연속 하향 압력으로 튕김 없이 Bar 틈새로 지그시 밀어넣음!
             state.bothBlockedOnTop = true;
-            stopDescend = true;
-            ent.body.applyImpulse(new CANNON.Vec3(0, -1.2, 0), leftTipWorld.vsub(ent.body.position));
-            ent.body.applyImpulse(new CANNON.Vec3(0, -1.2, 0), rightTipWorld.vsub(ent.body.position));
+            state.pushDownTimer += dt;
+            // Bar 중앙 틈새(z=0) 방향으로 미세 유도 + 부드러운 하향 압력 적용
+            const gapNudgeZ = -Math.sign(ent.body.position.z) * Math.min(3.0, Math.abs(ent.body.position.z) * 5.0);
+            ent.body.applyForce(new CANNON.Vec3(0, -17, gapNudgeZ * 0.5), leftTipWorld);
+            ent.body.applyForce(new CANNON.Vec3(0, -17, gapNudgeZ * 0.5), rightTipWorld);
+            // 상자가 반발로 튀어오르지 않도록 수직 상향 속도 억제
+            if (ent.body.velocity.y > 0) ent.body.velocity.y *= 0.25;
+            if (state.pushDownTimer >= 0.45) {
+              stopDescend = true;
+            }
             break;
           } else if (leftInBox && !rightInBox) {
-            // 좌측 집게만 상자 윗면에 걸림 -> 하강 계속! 좌측 암이 바깥으로 휘며 상자 윗면을 누르고 우측 암은 깊숙이 하강
-            ent.body.applyForce(new CANNON.Vec3(0, -18, 0), leftTipWorld);
+            // 좌측 집게만 상자 윗면/모서리에 닿음 -> 튕김 없이 지그시 누르며 하강 계속!
+            ent.body.applyForce(new CANNON.Vec3(0, -24, 0), leftTipWorld);
+            if (ent.body.velocity.y > 0.15) ent.body.velocity.y = 0.15;
             state.leftProngAngle = Math.min(0.84, state.leftProngAngle + 2.2 * dt);
             state.rightProngAngle += (CLAW_OPEN_ANGLE - state.rightProngAngle) * Math.min(1, 8 * dt);
             state.clawTiltZ += (-0.16 - state.clawTiltZ) * Math.min(1, 7 * dt);
           } else if (rightInBox && !leftInBox) {
-            // 우측 집게만 상자 윗면에 걸림 -> 하강 계속! 우측 암이 바깥으로 휘며 상자 윗면을 누르고 좌측 암은 깊숙이 하강
-            ent.body.applyForce(new CANNON.Vec3(0, -18, 0), rightTipWorld);
+            // 우측 집게만 상자 윗면/모서리에 닿음 -> 튕김 없이 지그시 누르며 하강 계속!
+            ent.body.applyForce(new CANNON.Vec3(0, -24, 0), rightTipWorld);
+            if (ent.body.velocity.y > 0.15) ent.body.velocity.y = 0.15;
             state.rightProngAngle = Math.min(0.84, state.rightProngAngle + 2.2 * dt);
             state.leftProngAngle += (CLAW_OPEN_ANGLE - state.leftProngAngle) * Math.min(1, 8 * dt);
             state.clawTiltZ += (0.16 - state.clawTiltZ) * Math.min(1, 7 * dt);
           }
 
-          // UFO 본체 하단이 상자 윗면에 닿으면 정지
+          // UFO 본체 하단이 상자 윗면에 닿으면 지그시 누르며 정지
           const uLoc = ent.body.pointToLocalFrame(ufoBottomWorld);
           if (
             Math.abs(uLoc.x) <= dims.w / 2 + 0.16 &&
@@ -1037,7 +1071,12 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             uLoc.y <= dims.h / 2 + 0.12 &&
             uLoc.y >= -dims.h / 2
           ) {
-            stopDescend = true;
+            state.pushDownTimer += dt;
+            ent.body.applyForce(new CANNON.Vec3(0, -26, 0), ufoBottomWorld);
+            if (ent.body.velocity.y > 0) ent.body.velocity.y *= 0.25;
+            if (state.pushDownTimer >= 0.38) {
+              stopDescend = true;
+            }
             break;
           }
         }
@@ -1161,13 +1200,13 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             };
 
             if (bothBlocked) {
-              // 양발 모두 상자 윗면에 막힘 -> 관통 잡기 불가, 대신 윗면을 누르며 살짝 긁어 밀어내는 물리 반응 적용
-              const offsetSignX = state.clawX >= bestEnt.body.position.x ? -1 : 1;
+              // 양발 모두 상자 윗면에 닿아 부드럽게 눌러 밀어넣기 완료 (반발 임펄스 없이 안정적인 누르기)
+              const gapPushZ = -Math.sign(bestEnt.body.position.z) * Math.min(0.18, Math.abs(bestEnt.body.position.z) * 0.25);
               bestEnt.body.applyImpulse(
-                new CANNON.Vec3(offsetSignX * 0.55, -0.95, 0.35),
+                new CANNON.Vec3(0, -0.22, gapPushZ),
                 pinchWorld.vsub(bestEnt.body.position)
               );
-              setClawFeedback('👇 양쪽 집게가 상자 윗면에 닿아 살짝 누르며 밀어냈습니다!');
+              setClawFeedback('👇 양쪽 집게로 상자 윗면을 지그시 눌러 밀어넣었습니다!');
               playTone(200, 0.13, 'sawtooth', 0.045);
             } else if (oneBlocked && freeTipReachedSide) {
               // 현실 오락실 묘미! 한쪽 집게가 상자에 걸렸지만 끝까지 하강해 반대쪽 집게가 옆구리/아랫모서리를 비스듬히 후킹!
@@ -1199,13 +1238,12 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
               state.grabConstraint = constraint;
               setClawFeedback('🪝 한쪽 집게가 옆모서리에 걸려 비스듬히 들어올립니다!');
             } else if (tooWideToStraddle && freeTipReachedSide) {
-              // 상자가 가로/대각선으로 넓어 양쪽을 다 감싸진 못해도, 한쪽 집게가 상자 끝을 치고 긁으며 살짝 들어올려 각도를 바꿈!
+              // 상자가 가로/대각선으로 넓어 양쪽을 다 감싸진 못해도, 한쪽 집게가 상자 끝을 긁어 비스듬히 들어올림 (튕김 억제)
               const sideSign = state.clawX >= bestEnt.body.position.x ? 1 : -1;
               const hookLocal = computeWorldEdgeHookLocal(sideSign);
               const clawAnchorOffset = new CANNON.Vec3(sideSign * 0.28, -0.56, 0);
-              // 끝 모서리를 치고 긁는 초기 물리 충격 + 비스듬히 살짝 들어올리다 미끄러지는 후킹
               bestEnt.body.applyImpulse(
-                new CANNON.Vec3(-sideSign * 0.65, 0.35, 0.25),
+                new CANNON.Vec3(-sideSign * 0.22, 0.08, 0.10),
                 bestEnt.body.pointToWorldFrame(hookLocal).vsub(bestEnt.body.position)
               );
               const roll = Math.random();
@@ -1223,13 +1261,13 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
               state.grabConstraint = constraint;
               setClawFeedback('🪝 집게가 넓은 상자 끝을 긁어 비스듬히 들어올립니다!');
             } else if (!freeTipReachedSide) {
-              // 집게 끝단이 상자 옆면까지 내려오지 못했지만 윗면/모서리를 스치며 살짝 밀어냄
-              const pushDirX = state.clawX >= bestEnt.body.position.x ? -0.55 : 0.55;
+              // 집게 끝단이 상자 옆면까지 내려오지 못해 윗면/모서리를 지그시 눌러 밀어냄 (튕김 없음)
+              const pushDirX = state.clawX >= bestEnt.body.position.x ? -0.18 : 0.18;
               bestEnt.body.applyImpulse(
-                new CANNON.Vec3(pushDirX, -0.65, 0.28),
+                new CANNON.Vec3(pushDirX, -0.22, 0.10),
                 pinchWorld.vsub(bestEnt.body.position)
               );
-              setClawFeedback('👆 집게가 상자 모서리를 스치며 살짝 밀어냈습니다!');
+              setClawFeedback('👆 집게가 상자 모서리를 지그시 눌러 밀어냈습니다!');
               playTone(210, 0.12, 'sawtooth', 0.04);
             } else {
               // 정상 양발 잡기! 현실적인 아케이드 집게 힘 편차 + 중심 이탈 페널티 적용
@@ -1356,8 +1394,25 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         clawHeadCollider.position.set(state.clawX, state.clawY + 0.08, state.clawZ);
         world.step(1 / 60, dt, 4);
 
-        // 3D 메시 동기화 & 낙하 승리 감지
+        // 탱탱볼 튀어오름 방지 속도 제한 & 3D 메시 동기화 & 낙하 승리 감지
         for (const ent of boxEntities.values()) {
+          if (!state.wonSet.has(ent.data.id)) {
+            const maxUpVy = state.grabConstraint ? 1.55 : 0.32;
+            if (ent.body.velocity.y > maxUpVy) {
+              ent.body.velocity.y = maxUpVy;
+            }
+            const horizSpeed = Math.hypot(ent.body.velocity.x, ent.body.velocity.z);
+            if (horizSpeed > 2.2) {
+              const s = 2.2 / horizSpeed;
+              ent.body.velocity.x *= s;
+              ent.body.velocity.z *= s;
+            }
+            const angSpeed = ent.body.angularVelocity.length();
+            if (angSpeed > 4.2) {
+              ent.body.angularVelocity.scale(4.2 / angSpeed, ent.body.angularVelocity);
+            }
+          }
+
           ent.mesh.position.set(ent.body.position.x, ent.body.position.y, ent.body.position.z);
           ent.mesh.quaternion.set(
             ent.body.quaternion.x,

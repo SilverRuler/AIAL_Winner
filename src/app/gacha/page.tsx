@@ -24,7 +24,7 @@ import {
   Camera,
 } from 'lucide-react';
 import { MEMBERS } from '@/constants/members';
-import { GACHA_SLOT_BOX_DIMS, GACHA_SLOT_REWARD_AMOUNTS } from '@/constants/gacha';
+import { GACHA_SLOT_BOX_DIMS, GACHA_SLOT_REWARD_AMOUNTS, GACHA_TOTAL_SLOTS } from '@/constants/gacha';
 import { GachaMachineState, GachaTicketBalance, GachaWinRecord } from '@/types/gacha';
 import { MemberWinStats } from '@/types/meal';
 import { UfoClawMachine3D, TurnFinishPayload } from '@/components/UfoClawMachine3D';
@@ -77,6 +77,7 @@ export default function GachaPage() {
     bonusPlays: number;
   } | null>(null);
   const [isStartModalOpen, setIsStartModalOpen] = useState<boolean>(false);
+  const [pendingMultiPlayCount, setPendingMultiPlayCount] = useState<number | null>(null);
   const [startPlayInput, setStartPlayInput] = useState<string>('1');
   const [startModalError, setStartModalError] = useState<string>('');
   const [isStarting, setIsStarting] = useState<boolean>(false);
@@ -238,7 +239,7 @@ export default function GachaPage() {
     setIsStartModalOpen(true);
   };
 
-  const handleStartTurn = async (requestedPlayCount: number) => {
+  const handleStartTurn = async (requestedPlayCount: number, confirmedMultiWarning = false) => {
     if (isStarting || isFinishing || activeTurnId || lockedByOther) return;
     const maxTickets = selectedBalance.tickets;
     if (!Number.isInteger(requestedPlayCount) || requestedPlayCount < 1) {
@@ -250,6 +251,13 @@ export default function GachaPage() {
       return;
     }
 
+    // 연속 2회 이상 뽑기 시도 시 브라우저 이탈 무효/티켓 미반환 경고 팝업 노출
+    if (requestedPlayCount >= 2 && !confirmedMultiWarning) {
+      setPendingMultiPlayCount(requestedPlayCount);
+      return;
+    }
+
+    setPendingMultiPlayCount(null);
     setStartModalError('');
     setStatusMessage('');
     try {
@@ -383,9 +391,9 @@ export default function GachaPage() {
 
   const handleAdminRefill = async () => {
     const currentCount = machine?.items?.length ?? 0;
-    const missingCount = Math.max(0, 4 - currentCount);
+    const missingCount = Math.max(0, GACHA_TOTAL_SLOTS - currentCount);
     if (missingCount === 0) {
-      setStatusMessage('이미 4개 상품이 모두 채워져 있습니다.');
+      setStatusMessage(`이미 ${GACHA_TOTAL_SLOTS}개 상품이 모두 채워져 있습니다.`);
       return;
     }
     if (!confirm(`비어있는 상품 ${missingCount}개를 새로 리필하시겠습니까?`)) return;
@@ -1040,6 +1048,56 @@ export default function GachaPage() {
         );
       })()}
 
+      {/* 연속 2회 이상 뽑기 주의 안내 팝업 */}
+      {pendingMultiPlayCount !== null && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in"
+          onClick={() => !isStarting && setPendingMultiPlayCount(null)}
+        >
+          <div
+            className="bg-slate-900 border border-amber-500/60 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-2xl">
+              ⚠️
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-base font-black text-amber-300">연속 뽑기 주의 안내</h3>
+              <p className="text-xs sm:text-sm text-white font-bold leading-relaxed break-keep">
+                연속 뽑기를 시도합니다. 도중에 브라우져를 나가면 뽑기는 무효가 되고 뽑기권(티켓)은 반환받지 못 합니다.
+              </p>
+              <p className="text-[11px] text-slate-400">
+                (선택한 뽑기권 {pendingMultiPlayCount}장
+                {Math.floor(pendingMultiPlayCount / 5) > 0
+                  ? ` + 무료 보너스 ${Math.floor(pendingMultiPlayCount / 5)}회 = 총 ${
+                      pendingMultiPlayCount + Math.floor(pendingMultiPlayCount / 5)
+                    }회 연속`
+                  : ` = 총 ${pendingMultiPlayCount}회 연속`}
+                )
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                disabled={isStarting}
+                onClick={() => setPendingMultiPlayCount(null)}
+                className="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs sm:text-sm cursor-pointer disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                disabled={isStarting}
+                onClick={() => handleStartTurn(pendingMultiPlayCount, true)}
+                className="py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-orange-500/25 cursor-pointer disabled:opacity-50"
+              >
+                {isStarting ? '시작 중...' : '확인 · 시작하기'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 당첨 축하 폭죽 팝업 */}
       <GachaWinModal
         isOpen={!!activeWinModal}
@@ -1101,6 +1159,17 @@ export default function GachaPage() {
             activeBorder: 'border-purple-400 bg-purple-500/15 ring-1 ring-purple-400/50',
             note: '중앙 Bar 틈새(0.73) 여유가 좁고 가장 길고 무거운 고난도 마스터 상자',
           },
+          {
+            slot: 4,
+            shortName: '5번 바니카',
+            fullName: '바니카 박스 #5',
+            difficulty: '6.5 / 10 (중상·정사각)',
+            shortDiff: '난이도 6.5',
+            nameColor: 'text-rose-300',
+            badgeColor: 'text-rose-300',
+            activeBorder: 'border-rose-400 bg-rose-500/15 ring-1 ring-rose-400/50',
+            note: '정사각형에 가까운 와이드 스페셜 상자! 평면으로는 안 빠지며 옆으로 세우거나 지그시 눌러 넣는 공략이 유효합니다.',
+          },
         ] as const;
 
         const activeSpec =
@@ -1153,7 +1222,7 @@ export default function GachaPage() {
                       <p className="flex items-start gap-2">
                         <Sparkles className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                         <span>
-                          현재 뽑기판의 평균 난이도는 <strong className="text-rose-300">6.5(중상)</strong>이며, 3·4번 신규 이미지(노엘 실바·레제) 및 상자별 차등 난이도·SOL 리워드가 적용되었습니다.
+                          현재 뽑기판은 <strong className="text-cyan-300">5개 상품 확장판</strong>(평균 난이도 <strong className="text-rose-300">6.5 중상</strong>)으로 운영되며, 3·4·5번 신규 캐릭터(노엘 실바·레제·바니카) 및 상자별 차등 난이도·SOL 리워드가 적용되었습니다.
                         </span>
                       </p>
                       <p className="ml-6 text-[11px] sm:text-xs text-cyan-300/90 font-semibold">
@@ -1235,7 +1304,7 @@ export default function GachaPage() {
                     <p className="flex items-start gap-2">
                       <RefreshCw className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
                       <span>
-                        1~4번 상자는 초기 배치·정기 리필·관리자 리필 시 항상 <strong className="text-purple-300">무작위 랜덤 위치</strong>로 배치됩니다.
+                        1~5번 상자는 초기 배치·정기 리필·관리자 리필 시 항상 <strong className="text-purple-300">무작위 랜덤 위치</strong>로 배치되며, 반발 튀어오름을 줄여 실제 오락실처럼 <strong className="text-emerald-300">눌러서 Bar 사이에 밀어넣는 공략</strong>이 가능하도록 물리를 개선했습니다.
                       </span>
                     </p>
                     <p className="flex items-start gap-2">

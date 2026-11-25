@@ -145,7 +145,7 @@ export async function getAllMemberTicketBalances(db: Db): Promise<Record<string,
 }
 
 /**
- * KST 기준 정기 자동 재정렬 스케줄(10:30, 14:00, 23:00) 중 가장 최근에 도래한 체크포인트 계산
+ * KST 기준 정기 자동 재정렬·리필 스케줄(10:30, 14:00, 23:00) 중 가장 최근에 도래한 체크포인트 계산
  */
 function getLatestScheduledCheckpoint(nowMs: number): {
   key: string;
@@ -190,7 +190,7 @@ function getLatestScheduledCheckpoint(nowMs: number): {
 }
 
 /**
- * 공유 UFO 크레인 머신 상태 조회 (미생성 시 초기화, 만료된 락 자동 해제, 10:30/14:00/23:00 정기 자동 재정렬 - 리필 제외)
+ * 공유 UFO 크레인 머신 상태 조회 (미생성 시 초기화, 만료된 락 자동 해제, 10:30/14:00/23:00 정기 자동 재정렬+리필)
  */
 export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> {
   const col = db.collection('gacha_machine');
@@ -265,8 +265,8 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
     existing.lock = clearedLock;
   }
 
-  // 정기 자동 재정렬 체크 (매일 KST 10:30, 14:00, 23:00)
-  // 현재 플레이 중인 턴 락이 없을 때만 남아있는 상품들을 정위치로 재정렬 (리필은 관리자 수동 진행)
+  // 정기 자동 재정렬 및 리필 체크 (매일 KST 10:30, 14:00, 23:00)
+  // 현재 플레이 중인 턴 락이 없을 때만 안전하게 4개 전체 재정렬 및 리필 실행
   const isActivelyLocked = Boolean(
     existing.lock?.active && existing.lock?.expiresAt && existing.lock.expiresAt > now
   );
@@ -276,19 +276,8 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
     existing.lastAutoResetSlot !== latestCp.key &&
     latestCp.timestampMs > lastHandledMs
   ) {
-    const existingItems: GachaBoxItem[] = Array.isArray(existing.items) ? existing.items : [];
-    const realignedBoxes: GachaBoxItem[] = existingItems
-      .map((item) => ({
-        ...item,
-        position: getRestingBoxPosition(item.slotIndex),
-        quaternion: [0, 0, 0, 1] as [number, number, number, number],
-      }))
-      .sort((a, b) => a.slotIndex - b.slotIndex);
-
-    const autoSummary =
-      realignedBoxes.length > 0
-        ? `⏰ 정기 스케줄(${latestCp.label})로 남아있는 상품 ${realignedBoxes.length}개가 정위치로 자동 재정렬되었습니다!`
-        : existing.lastActionSummary || `⏰ 정기 스케줄(${latestCp.label}) 확인 완료 (리필 대기 중)`;
+    const freshBoxes = createInitialGachaBoxes();
+    const autoSummary = `⏰ 정기 스케줄(${latestCp.label})로 뽑기판 상품 4개가 자동 재정렬 및 리필되었습니다!`;
 
     const clearedLock = {
       active: false,
@@ -297,19 +286,6 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
       startedAt: null,
       expiresAt: null,
     };
-    const updateOps: any = {
-      $set: {
-        items: realignedBoxes,
-        lock: clearedLock,
-        lastActionSummary: autoSummary,
-        lastAutoResetSlot: latestCp.key,
-        lastAutoResetAt: now,
-        updatedAt: now,
-      },
-    };
-    if (realignedBoxes.length > 0) {
-      updateOps.$inc = { resetCount: 1 };
-    }
     const autoUpdated = (await col.findOneAndUpdate(
       {
         _id: 'main_ufo_bridge' as any,
@@ -320,7 +296,17 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
           { 'lock.active': { $exists: false } },
         ],
       },
-      updateOps,
+      {
+        $set: {
+          items: freshBoxes,
+          lock: clearedLock,
+          lastActionSummary: autoSummary,
+          lastAutoResetSlot: latestCp.key,
+          lastAutoResetAt: now,
+          updatedAt: now,
+        },
+        $inc: { resetCount: 1 },
+      },
       { returnDocument: 'after' }
     )) as any;
 
@@ -332,7 +318,7 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
         meta: {
           scheduleSlot: latestCp.key,
           scheduleLabel: latestCp.label,
-          remainingStock: realignedBoxes.length,
+          remainingStock: freshBoxes.length,
         },
         createdAt: now,
       });

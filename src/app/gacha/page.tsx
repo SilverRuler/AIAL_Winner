@@ -59,6 +59,9 @@ export default function GachaPage() {
   >({});
   const [isExchangingWin, setIsExchangingWin] = useState<boolean>(false);
   const [isExchangingSol, setIsExchangingSol] = useState<boolean>(false);
+  const [isSolExchangeModalOpen, setIsSolExchangeModalOpen] = useState<boolean>(false);
+  const [solExchangeInput, setSolExchangeInput] = useState<string>('1');
+  const [solExchangeError, setSolExchangeError] = useState<string>('');
   const [selectedMember, setSelectedMember] = useState<string>(MEMBERS[0].name);
 
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState<boolean>(false);
@@ -498,40 +501,54 @@ export default function GachaPage() {
     }
   };
 
-  const handleExchangeSolForTicket = async () => {
+  const maxSolExchangeTickets = useMemo(() => {
+    return Math.max(0, Math.floor(Math.round(myAvailableGachaSol * 10000) / 10));
+  }, [myAvailableGachaSol]);
+
+  const handleOpenSolExchangeModal = () => {
     if (isExchangingSol || activeTurnId) return;
-    const availSol = myAvailableGachaSol;
-    if (availSol < 0.01) {
+    if (maxSolExchangeTickets < 1) {
       setStatusMessage(
-        `${selectedMember}님의 신청 가능 뽑기 리워드(${availSol} SOL)가 부족합니다. (0.01 SOL 이상 필요)`
+        `${selectedMember}님의 신청 가능 뽑기 리워드(${myAvailableGachaSol} SOL)가 부족합니다. (0.001 SOL당 뽑기권 1장)`
       );
       return;
     }
+    setSolExchangeInput(String(Math.min(maxSolExchangeTickets, 1)));
+    setSolExchangeError('');
+    setIsSolExchangeModalOpen(true);
+  };
 
-    const solAfter = Math.max(0, Math.round((availSol - 0.01) * 10000) / 10000);
-    const ok = confirm(
-      `[${selectedMember}] 뽑기 리워드 0.01 SOL을 뽑기권 1장으로 교환하시겠습니까?\n\n` +
-        `• 신청 가능 뽑기 리워드: ${availSol} SOL → ${solAfter} SOL\n` +
-        `• 뽑기권 +1장 즉시 지급`
-    );
-    if (!ok) return;
+  const handleConfirmSolExchange = async (ticketCount: number) => {
+    if (isExchangingSol || activeTurnId) return;
+    if (!Number.isInteger(ticketCount) || ticketCount < 1) {
+      setSolExchangeError('1 이상의 숫자를 입력해주세요.');
+      return;
+    }
+    if (ticketCount > maxSolExchangeTickets) {
+      setSolExchangeError(`최대 ${maxSolExchangeTickets}장까지만 교환 가능합니다.`);
+      return;
+    }
 
     try {
       setIsExchangingSol(true);
+      setSolExchangeError('');
       const resp = await fetch('/api/gacha/exchange-sol', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member: selectedMember, ticketCount: 1 }),
+        body: JSON.stringify({ member: selectedMember, ticketCount }),
       });
       const data = await resp.json();
       if (data.success) {
         if (data.ticketsByMember) setTicketsByMember(data.ticketsByMember);
+        setIsSolExchangeModalOpen(false);
         setStatusMessage(data.message);
         await fetchState();
       } else {
+        setSolExchangeError(data.message || '뽑기 리워드 교환 실패');
         setStatusMessage(data.message || '뽑기 리워드 교환 실패');
       }
     } catch {
+      setSolExchangeError('뽑기 리워드 교환 중 오류가 발생했습니다.');
       setStatusMessage('뽑기 리워드 교환 중 오류가 발생했습니다.');
     } finally {
       setIsExchangingSol(false);
@@ -692,15 +709,15 @@ export default function GachaPage() {
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              {myAvailableGachaSol >= 0.01 && (
+              {maxSolExchangeTickets >= 1 && (
                 <button
                   type="button"
                   disabled={isExchangingSol || !!activeTurnId}
-                  onClick={handleExchangeSolForTicket}
+                  onClick={handleOpenSolExchangeModal}
                   className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/60 text-emerald-200 font-black text-xs shrink-0 cursor-pointer disabled:opacity-40"
-                  title="뽑기 리워드 0.01 SOL을 뽑기권 1장으로 즉시 교환"
+                  title="뽑기 리워드 0.001 SOL당 뽑기권 1장으로 원하는 수량만큼 교환"
                 >
-                  {isExchangingSol ? '교환 중...' : '🎟️ 0.01 SOL → 1뽑기권'}
+                  🎟️ 뽑기권 교환 (최대 {maxSolExchangeTickets}장)
                 </button>
               )}
               <button
@@ -727,10 +744,10 @@ export default function GachaPage() {
             <div className="flex items-center gap-2 flex-wrap">
               <button
                 type="button"
-                onClick={handleExchangeSolForTicket}
-                disabled={isExchangingSol || !!activeTurnId || myAvailableGachaSol < 0.01}
+                onClick={handleOpenSolExchangeModal}
+                disabled={isExchangingSol || !!activeTurnId || maxSolExchangeTickets < 1}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/50 text-emerald-200 text-[11px] font-black transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                title="뽑기 리워드 0.01 SOL을 뽑기권 1장으로 교환 (신청 가능 뽑기 리워드가 0.01 SOL 이상일 때만 가능)"
+                title="뽑기 리워드 0.001 SOL당 뽑기권 1장으로 교환 (원하는 수량 입력 가능)"
               >
                 {isExchangingSol ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -738,7 +755,7 @@ export default function GachaPage() {
                   <Coins className="w-3 h-3 text-emerald-300" />
                 )}
                 <span>
-                  리워드 0.01 SOL → 1뽑기권 교환 (보유 {myAvailableGachaSol} SOL)
+                  리워드 0.001 SOL → 1뽑기권 교환 (보유 {myAvailableGachaSol} SOL)
                 </span>
               </button>
               <button
@@ -1048,6 +1065,170 @@ export default function GachaPage() {
         );
       })()}
 
+      {/* 뽑기 리워드(0.001 SOL = 1뽑기권) 수량 지정 교환 모달 */}
+      {isSolExchangeModalOpen && (() => {
+        const parsedCount = parseInt(solExchangeInput, 10);
+        const validCount =
+          !isNaN(parsedCount) && parsedCount >= 1 && parsedCount <= maxSolExchangeTickets
+            ? parsedCount
+            : null;
+        const solCost = validCount ? Math.round(validCount * 0.001 * 10000) / 10000 : 0;
+        const solAfter = validCount
+          ? Math.max(0, Math.round((myAvailableGachaSol - solCost) * 10000) / 10000)
+          : myAvailableGachaSol;
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+            onClick={() => !isExchangingSol && setIsSolExchangeModalOpen(false)}
+          >
+            <div
+              className="bg-slate-900 border border-emerald-500/50 w-full max-w-sm rounded-3xl p-5 sm:p-6 shadow-2xl space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-xs font-black font-mono">
+                  <Coins className="w-3.5 h-3.5" />
+                  <span>
+                    {selectedMember} · 보유 {myAvailableGachaSol} SOL
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-black text-white pt-1">
+                  뽑기권을 몇 장 교환하시겠습니까?
+                </h3>
+                <p className="text-xs text-emerald-300 font-bold">
+                  0.001 SOL당 뽑기권 1장 (최대 {maxSolExchangeTickets}장 교환 가능)
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-300">교환할 뽑기권 수량</span>
+                  <span className="text-[11px] text-slate-400 font-mono">
+                    최대 {maxSolExchangeTickets}장
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={maxSolExchangeTickets}
+                    value={solExchangeInput}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === '') {
+                        setSolExchangeInput('');
+                        setSolExchangeError('');
+                        return;
+                      }
+                      const num = parseInt(raw, 10);
+                      if (isNaN(num)) return;
+                      if (num > maxSolExchangeTickets) {
+                        setSolExchangeInput(String(maxSolExchangeTickets));
+                        setSolExchangeError(
+                          `최대 교환 가능 수량(${maxSolExchangeTickets}장)을 초과할 수 없습니다.`
+                        );
+                      } else if (num < 1) {
+                        setSolExchangeInput('1');
+                        setSolExchangeError('');
+                      } else {
+                        setSolExchangeInput(String(num));
+                        setSolExchangeError('');
+                      }
+                    }}
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-400 rounded-xl px-3.5 py-2.5 text-center text-base font-black text-white font-mono outline-none"
+                  />
+                  <span className="text-xs font-bold text-slate-400 shrink-0">장</span>
+                </div>
+
+                {/* 빠른 선택 버튼 */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[1, 5, 10, 15]
+                    .filter((n) => n < maxSolExchangeTickets)
+                    .map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => {
+                          setSolExchangeInput(String(n));
+                          setSolExchangeError('');
+                        }}
+                        className={`flex-1 min-w-[44px] py-1.5 rounded-lg border text-xs font-bold cursor-pointer transition-colors ${
+                          solExchangeInput === String(n)
+                            ? 'bg-emerald-500/25 border-emerald-400 text-emerald-200'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        {n}장
+                      </button>
+                    ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSolExchangeInput(String(maxSolExchangeTickets));
+                      setSolExchangeError('');
+                    }}
+                    className={`flex-1 min-w-[60px] py-1.5 rounded-lg border text-xs font-black cursor-pointer transition-colors ${
+                      solExchangeInput === String(maxSolExchangeTickets)
+                        ? 'bg-emerald-500/30 border-emerald-400 text-emerald-200'
+                        : 'bg-slate-900 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/15'
+                    }`}
+                  >
+                    최대 ({maxSolExchangeTickets}장)
+                  </button>
+                </div>
+
+                {validCount !== null && (
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] space-y-1">
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span>차감 리워드</span>
+                      <strong className="text-amber-300 font-mono">-{solCost} SOL</strong>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span>교환 후 남은 리워드</span>
+                      <strong className="text-cyan-300 font-mono">{solAfter} SOL</strong>
+                    </div>
+                    <div className="flex items-center justify-between text-emerald-300 font-bold pt-0.5 border-t border-slate-800">
+                      <span>획득 뽑기권</span>
+                      <strong className="font-mono">+{validCount}장</strong>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {solExchangeError && (
+                <p className="text-xs text-rose-400 font-bold text-center">{solExchangeError}</p>
+              )}
+
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  disabled={isExchangingSol}
+                  onClick={() => setIsSolExchangeModalOpen(false)}
+                  className="py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs sm:text-sm cursor-pointer disabled:opacity-50"
+                >
+                  취소
+                </button>
+                <button
+                  type="button"
+                  disabled={isExchangingSol || validCount === null}
+                  onClick={() => validCount !== null && handleConfirmSolExchange(validCount)}
+                  className="py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-emerald-500/20 cursor-pointer disabled:opacity-40"
+                >
+                  {isExchangingSol
+                    ? '교환 중...'
+                    : validCount
+                    ? `${validCount}장 교환하기`
+                    : '수량 입력'}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 연속 2회 이상 뽑기 주의 안내 팝업 */}
       {pendingMultiPlayCount !== null && (
         <div
@@ -1316,7 +1497,7 @@ export default function GachaPage() {
                     <p className="flex items-start gap-2">
                       <Coins className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                       <span>
-                        뽑기 리워드 신청 시 보유 중인 신청 가능 잔고 내에서 <strong className="text-amber-300">원하는 SOL 수량을 직접 입력</strong>해 신청할 수 있으며, <strong className="text-emerald-300">0.01 SOL당 뽑기권 1회</strong>로도 즉시 교환할 수 있습니다.
+                        뽑기 리워드 신청 시 보유 중인 신청 가능 잔고 내에서 <strong className="text-amber-300">원하는 SOL 수량을 직접 입력</strong>해 신청할 수 있으며, <strong className="text-emerald-300">0.001 SOL당 뽑기권 1회</strong>로 원하는 수량만큼 즉시 교환할 수 있습니다.
                       </span>
                     </p>
                     <p className="flex items-start gap-2 text-slate-300">

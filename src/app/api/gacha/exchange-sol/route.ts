@@ -13,12 +13,12 @@ function roundSol(val: number): number {
   return Math.round(val * 10000) / 10000;
 }
 
-const SOL_PER_TICKET = 0.01;
+const SOL_PER_TICKET = 0.001;
 
 /**
  * POST /api/gacha/exchange-sol
- * 획득한 UFO 뽑기 리워드 0.01 SOL당 뽑기권 1장으로 교환
- * - 신청 가능 뽑기 리워드 잔고(누적 획득 SOL - 기신청 SOL - 기교환 SOL)가 0.01 SOL 이상일 때만 교환 허용
+ * 획득한 UFO 뽑기 리워드 0.001 SOL당 뽑기권 1장으로 교환 (한 번에 원하는 수량 교환 가능)
+ * - 신청 가능 뽑기 리워드 잔고(누적 획득 SOL - 기신청 SOL - 기교환 SOL)가 0.001 SOL 이상일 때만 교환 허용
  */
 export async function POST(request: NextRequest) {
   try {
@@ -34,9 +34,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!Number.isInteger(ticketCount) || ticketCount < 1 || ticketCount > 100) {
+    if (!Number.isInteger(ticketCount) || ticketCount < 1 || ticketCount > 1000) {
       return NextResponse.json(
-        { success: false, message: '교환할 뽑기권 수량은 1장 이상 정수로 입력해주세요.' },
+        { success: false, message: '교환할 뽑기권 수량은 1장 이상 1,000장 이하의 정수로 입력해주세요.' },
         { status: 400 }
       );
     }
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: `${member}님의 신청 가능 뽑기 리워드(${availableSolBefore} SOL)가 부족합니다. (0.01 SOL당 뽑기권 1장 교환 가능)`,
+          message: `${member}님의 신청 가능 뽑기 리워드(${availableSolBefore} SOL)가 부족합니다. (0.001 SOL당 뽑기권 1장 교환 가능)`,
         },
         { status: 400 }
       );

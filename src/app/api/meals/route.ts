@@ -91,13 +91,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { date, time, slot, member, menuName, comment, imageUrl, exifTakenAt, adminId, adminPw } = body;
+    const { date, time, slot, member, menuName, comment, imageUrl, isNoPhoto, exifTakenAt, adminId, adminPw } = body;
 
     const isAdmin =
       (adminId === ADMIN_ID && adminPw === ADMIN_PW) ||
       (request.headers.get('x-admin-id') === ADMIN_ID && request.headers.get('x-admin-pw') === ADMIN_PW);
 
-    // 필수는 멤버 선택과 사진입니다. (활동 멤버만 신규 등록 가능, 실버 등 레거시 멤버 제외)
+    // 활동 멤버만 신규 등록 가능 (실버 등 레거시 멤버 제외)
     if (!member || !MEMBERS.some((m) => m.name === member.trim())) {
       return NextResponse.json(
         { success: false, message: '유효한 활동 멤버를 선택해주세요.' },
@@ -105,15 +105,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!imageUrl) {
+    const rawImageUrl = typeof imageUrl === 'string' ? imageUrl.trim() : '';
+    const trimmedMenuName = typeof menuName === 'string' ? menuName.trim() : '';
+    const noPhotoMode = Boolean(isNoPhoto || !rawImageUrl || rawImageUrl === '/mdm.jpg');
+
+    // 사진 OR 제목(메뉴 이름) 둘 중 하나는 필수
+    if (noPhotoMode && !trimmedMenuName) {
       return NextResponse.json(
-        { success: false, message: '식사 사진을 업로드해주세요.' },
+        {
+          success: false,
+          message: '식사 사진을 업로드하거나, 사진 없이 등록할 경우 메뉴 이름(제목)을 입력해주세요.',
+        },
         { status: 400 }
       );
     }
 
-    // 제목/메뉴 이름은 필수가 아니며, 미입력 시 '오늘의 식사'로 기본 적용
-    const finalMenuName = (menuName && menuName.trim()) ? menuName.trim() : '오늘의 한 끼';
+    // 사진이 있을 때는 제목이 필수가 아니며 미입력 시 '오늘의 한 끼'로 기본 적용
+    const finalMenuName = trimmedMenuName || '오늘의 한 끼';
     const kstNow = getKSTNow();
     const mealId = body.id || `meal_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
     const mealDate = date || kstNow.date;
@@ -130,9 +138,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 카메라 원본 촬영 일시(EXIF) 및 타임대 일치 서버 레벨 이중 검증 (스크린샷 우회 차단)
-    // 관리자(isAdmin)인 경우: 메타데이터 제한 우회 허용 (적정 시간대 외 사진, 카톡 사진, 스샷 사진 등록 허용)
-    if (!isAdmin) {
+    // 카메라 원본 촬영 일시(EXIF) 및 타임대 일치 서버 레벨 이중 검증 (사진이 첨부된 일반 등록 시 적용)
+    // 사내 MDM 등으로 사진 없이 글만 올리는 경우(noPhotoMode) 및 관리자(isAdmin)는 EXIF 검증 생략
+    if (!isAdmin && !noPhotoMode) {
       if (!exifTakenAt || typeof exifTakenAt !== 'string') {
         return NextResponse.json(
           { success: false, message: '카메라 원본 촬영 정보(EXIF)가 확인되지 않는 사진(카톡 다운로드, 스크린샷 등)은 등록할 수 없습니다.' },
@@ -178,9 +186,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // oci2 이미지 스토리지 연동 (/root/winner_aial/YYYY-MM-DD/)
-    let finalImageUrl = imageUrl;
-    if (imageUrl && imageUrl.startsWith('data:image/')) {
+    // oci2 이미지 스토리지 연동 (/root/winner_aial/YYYY-MM-DD/) — 사진 미첨부(MDM) 시 /mdm.jpg 기본 적용
+    let finalImageUrl = noPhotoMode ? '/mdm.jpg' : rawImageUrl;
+    if (!noPhotoMode && rawImageUrl.startsWith('data:image/')) {
       try {
         const uploadResp = await fetch('https://oci2.silverruler.xyz/api/upload', {
           method: 'POST',
@@ -188,7 +196,7 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             date: mealDate,
             mealId,
-            imageBase64: imageUrl,
+            imageBase64: rawImageUrl,
           }),
         });
         if (uploadResp.ok) {
@@ -214,7 +222,10 @@ export async function POST(request: NextRequest) {
       menuName: finalMenuName,
       comment: (comment || '').trim(),
       imageUrl: finalImageUrl,
-      exifTakenAt: exifTakenAt || `${mealDate} ${time || kstNow.time}${isAdmin ? ' (관리자 예외 등록)' : ''}`,
+      isNoPhoto: noPhotoMode,
+      exifTakenAt: noPhotoMode
+        ? `${mealDate} ${time || kstNow.time} (사내 MDM · 사진 미첨부)`
+        : exifTakenAt || `${mealDate} ${time || kstNow.time}${isAdmin ? ' (관리자 예외 등록)' : ''}`,
       isWinner: false,
       views: 0,
       viewedIps: [],

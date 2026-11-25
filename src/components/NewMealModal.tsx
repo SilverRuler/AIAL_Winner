@@ -447,10 +447,12 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
       return;
     }
 
-    if (!imagePreview) {
-      setErrorMsg('식사 사진을 업로드해주세요.');
+    if (!imagePreview && !menuName.trim()) {
+      setErrorMsg('식사 사진을 업로드하거나, 사진 촬영이 불가한 경우 메뉴 이름(제목)을 입력해주세요.');
       return;
     }
+
+    const isNoPhotoSubmission = !imagePreview;
 
     try {
       setIsSubmitting(true);
@@ -472,7 +474,9 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
         effAdminPw = 'bbb';
       }
 
-      const finalExifTakenAt = exifInfo
+      const finalExifTakenAt = isNoPhotoSubmission
+        ? `${date} ${time || getKSTNow().time} (사내 MDM · 사진 미첨부)`
+        : exifInfo
         ? `${exifInfo.photoDate} ${exifInfo.photoTime}`
         : `${date} ${time || getKSTNow().time}`;
 
@@ -483,7 +487,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
         member: selectedMember,
         menuName: menuName.trim() || '오늘의 한 끼',
         comment: comment.trim(),
-        imageUrl: imagePreview,
+        imageUrl: isNoPhotoSubmission ? '/mdm.jpg' : imagePreview,
+        isNoPhoto: isNoPhotoSubmission,
         exifTakenAt: finalExifTakenAt,
         adminId: checkAdmin ? effAdminId : undefined,
         adminPw: checkAdmin ? effAdminPw : undefined,
@@ -567,7 +572,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
               <p className="text-[11px] text-slate-400">
                 {isUserAdmin
                   ? '관리자 모드: 적정 시간대 외 사진, 카톡 사진, 스크린샷도 자유롭게 등록할 수 있습니다.'
-                  : '멤버를 선택하고 맛있는 식사 사진을 올려보세요! (타임대별 1인 1회)'}
+                  : '사진 또는 메뉴 이름 중 하나 이상 입력해 등록하세요! (사내 MDM 촬영 불가 시 사진 생략 가능 · 타임대별 1인 1회)'}
               </p>
             </div>
           </div>
@@ -800,12 +805,15 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
             </div>
           </div>
 
-          {/* 3. 이미지 업로드 (필수) */}
+          {/* 3. 이미지 업로드 (사진 또는 메뉴 이름 둘 중 하나 필수) */}
           <div>
             <label className="block text-xs font-bold text-slate-300 mb-1.5">
-              식사 사진 <span className="text-rose-400">*</span>
+              식사 사진{' '}
+              <span className="text-amber-300 font-semibold text-[11px]">
+                (사진 또는 아래 메뉴 이름 중 1개 필수)
+              </span>
               <span className="ml-2 font-normal text-slate-400 text-[11px]">
-                (실시간 카메라 촬영, 앨범 사진 첨부 또는 <strong>Ctrl+V</strong> 붙여넣기)
+                (실시간 카메라 촬영, 앨범 첨부, Ctrl+V)
               </span>
             </label>
 
@@ -908,6 +916,9 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                         '아이폰/모바일 즉시 촬영 지원 · 카메라 원본 및 오늘 촬영된 카톡 사진 지원 (스크린샷 불가)'
                       )}
                     </p>
+                    <p className="text-[11px] text-cyan-300/90 bg-cyan-950/40 border border-cyan-500/30 rounded-lg px-3 py-1.5 max-w-md">
+                      📵 사내 보안(MDM) 등으로 사진 촬영이 불가한 경우, 사진 없이 아래 <strong>메뉴 이름과 상세 설명</strong>만 입력해도 등록됩니다. (기본 이미지 적용 · 최대 30점 한도 평가)
+                    </p>
                   </div>
                 )}
               </div>
@@ -977,36 +988,73 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
             )}
           </div>
 
-          {/* 4. 메뉴 이름 및 코멘트 (선택 사항) */}
+          {/* 4. 메뉴 이름 및 설명/코멘트 (사진 첨부 시 선택, 사진 미첨부 시 메뉴 이름 필수) */}
           <div className="space-y-3 pt-1">
             <div>
-              <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
                 <label className="text-xs font-bold text-slate-300">
-                  메뉴 이름 <span className="text-slate-500 font-normal">(선택)</span>
+                  메뉴 이름(제목){' '}
+                  {imagePreview ? (
+                    <span className="text-slate-500 font-normal">(선택)</span>
+                  ) : (
+                    <span className="text-amber-300 font-bold text-[11px]">(사진 미첨부 시 필수 *)</span>
+                  )}
                 </label>
-                <span className="text-[11px] text-slate-500">미입력 시 &apos;오늘의 한 끼&apos;로 등록됩니다</span>
+                <span className="text-[11px] text-slate-500">
+                  {imagePreview
+                    ? "미입력 시 '오늘의 한 끼'로 등록됩니다"
+                    : '사진 없이 올릴 때는 메뉴 이름을 꼭 적어주세요'}
+                </span>
               </div>
               <input
                 type="text"
                 value={menuName}
                 onChange={(e) => setMenuName(e.target.value)}
                 placeholder="예: 숯불 제육볶음 & 차돌 된장찌개"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                className={`w-full bg-slate-950 border rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 ${
+                  !imagePreview && !menuName.trim() ? 'border-amber-500/40' : 'border-slate-800'
+                }`}
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">
-                한 줄 코멘트 <span className="text-slate-500 font-normal">(선택)</span>
-              </label>
-              <input
-                type="text"
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                placeholder="예: 겉바속촉 제대로라 오늘 무조건 1등 예상합니다!"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
-              />
+              <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+                <label className="block text-xs font-bold text-slate-300">
+                  식사 설명 / 한 줄 코멘트 <span className="text-slate-500 font-normal">(선택)</span>
+                </label>
+                {!imagePreview && (
+                  <span className="text-[10px] text-cyan-300 font-semibold">
+                    자세히 적을수록 30점 한도 내 고득점 유리!
+                  </span>
+                )}
+              </div>
+              {!imagePreview ? (
+                <textarea
+                  rows={3}
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="사진 없이 등록 시 재료, 조리법, 국물/양념 맛, 반찬 구성 등을 자세히 적어주시면 AI가 최대 30점 이내에서 최대한 평가해드립니다!"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-y"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  placeholder="예: 겉바속촉 제대로라 오늘 무조건 1등 예상합니다!"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                />
+              )}
             </div>
+
+            {!imagePreview && menuName.trim() && (
+              <div className="px-3 py-2 rounded-xl bg-amber-950/40 border border-amber-500/35 text-[11px] text-amber-200 flex items-center gap-2">
+                <span>📵</span>
+                <span>
+                  사진 없이 <strong>텍스트 전용(MDM)</strong>으로 등록됩니다. 기본 이미지가 적용되며 AI 점수는 최대 <strong>30점</strong> 한도 내에서 평가됩니다.
+                </span>
+              </div>
+            )}
           </div>
 
           {/* 모달 하단 버튼 & 선택 닉네임 확인 */}

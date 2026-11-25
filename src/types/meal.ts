@@ -30,6 +30,7 @@ export interface MealEntry {
   menuName: string; // 메뉴 이름
   comment?: string; // 코멘트 / 소개
   imageUrl: string; // 이미지 Data URI 또는 URL
+  isNoPhoto?: boolean; // 사내 보안(MDM) 등으로 사진 없이 텍스트만 등록된 식사 여부
   exifTakenAt?: string; // 카메라 원본 촬영 일시 (예: 2026-11-05 07:45)
   isWinner?: boolean; // 이번 타임대 AI 승자 여부
   score?: number; // AI 맛 점수 (0~100)

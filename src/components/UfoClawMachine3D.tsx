@@ -693,7 +693,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     const world = new CANNON.World();
     world.gravity.set(0, -14, 0);
     world.broadphase = new CANNON.SAPBroadphase(world);
-    (world.solver as CANNON.GSSolver).iterations = 14;
+    (world.solver as CANNON.GSSolver).iterations = 16;
 
     const barPhysMat = new CANNON.Material('bar');
     const boxPhysMat = new CANNON.Material('box');
@@ -703,22 +703,24 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       new CANNON.ContactMaterial(barPhysMat, boxPhysMat, {
         friction: 0.44,
         restitution: 0.0, // 탱탱볼 튀어오름 완전 제거 (현실 종이 피규어 박스 감각)
-        contactEquationStiffness: 2.5e6,
-        contactEquationRelaxation: 5,
+        contactEquationStiffness: 1.2e6,
+        contactEquationRelaxation: 6,
       })
     );
     world.addContactMaterial(
       new CANNON.ContactMaterial(boxPhysMat, boxPhysMat, {
         friction: 0.38,
         restitution: 0.0,
-        contactEquationStiffness: 2.5e6,
-        contactEquationRelaxation: 5,
+        contactEquationStiffness: 1.2e6,
+        contactEquationRelaxation: 6,
       })
     );
     world.addContactMaterial(
       new CANNON.ContactMaterial(clawPhysMat, boxPhysMat, {
-        friction: 0.48,
+        friction: 0.55,
         restitution: 0.0,
+        contactEquationStiffness: 1.0e6,
+        contactEquationRelaxation: 6,
       })
     );
 
@@ -826,8 +828,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           const body = new CANNON.Body({
             mass: dims.mass,
             material: boxPhysMat,
-            linearDamping: 0.38,
-            angularDamping: 0.52,
+            linearDamping: 0.42,
+            angularDamping: 0.56,
           });
           body.addShape(
             new CANNON.Box(
@@ -981,112 +983,153 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           playTone(440, 0.12);
         }
       } else if (curPhase === 'descending') {
-        const descendRate = state.pushDownTimer > 0 ? 0.14 : GACHA_PHYSICS.CLAW_DESCEND_SPEED;
-        state.clawY = Math.max(
-          GACHA_PHYSICS.CLAW_DROP_Y,
-          state.clawY - descendRate * dt
-        );
+        // 현재 프레임 집게 끝단의 정확한 3D 월드 좌표 계산을 위해 먼저 트랜스폼 갱신
+        clawGroup.position.set(state.clawX, state.clawY, state.clawZ);
+        clawGroup.rotation.z = state.clawTiltZ;
+        leftArmPivot.rotation.z = -state.leftProngAngle;
+        rightArmPivot.rotation.z = state.rightProngAngle;
+        clawGroup.updateMatrixWorld(true);
 
-        // 실제 집게 좌/우 끝단 & UFO 본체의 상자 충돌 및 현실 오락실 '누르기(오시)' 물리 적용
-        // - 양쪽 모두 상자 윗면에 닿으면 반발 튀어오름 없이 0.45초간 지그시 아래로 눌러 Bar 틈새로 밀어넣기!
-        // - 한쪽 집게만 상자 윗면에 걸리면 끝까지 계속 하강하며 걸린 쪽을 지그시 누르고 반대쪽 암은 옆구리/아래까지 진입!
+        const leftTipVec3 = leftTip.localToWorld(new THREE.Vector3(0, -0.18, 0));
+        const rightTipVec3 = rightTip.localToWorld(new THREE.Vector3(0, -0.18, 0));
+        const leftTipWorld = new CANNON.Vec3(leftTipVec3.x, leftTipVec3.y, leftTipVec3.z);
+        const rightTipWorld = new CANNON.Vec3(rightTipVec3.x, rightTipVec3.y, rightTipVec3.z);
+        const ufoBottomWorld = new CANNON.Vec3(state.clawX, state.clawY - 0.06, state.clawZ);
+
+        // 실제 집게 좌/우 끝단 & UFO 본체의 상자 누르기(오시) 물리 적용
+        // - cannon-es applyForce의 2번째 인자는 반드시 '박스 무게중심 기준 상대 좌표(relPt)'여야 폭주 토크/튕김이 발생하지 않음!
+        // - 집게 끝이 상자 윗면/모서리에 닿으면 반발 튀어오름을 0으로 억제하면서 아래로 지그시 눌러 Bar 틈새로 밀어넣음!
         let stopDescend = false;
         let curHitLeftId: string | null = null;
         let curHitRightId: string | null = null;
+        let anyPressing = false;
+        let boxStillSinking = false;
+        let maxPenetration = 0;
 
-        const leftTipWorld = new CANNON.Vec3(
-          state.clawX - CLAW_OPEN_HALF_SPAN,
-          state.clawY - CLAW_TIP_DROP_Y,
-          state.clawZ
-        );
-        const rightTipWorld = new CANNON.Vec3(
-          state.clawX + CLAW_OPEN_HALF_SPAN,
-          state.clawY - CLAW_TIP_DROP_Y,
-          state.clawZ
-        );
-        const ufoBottomWorld = new CANNON.Vec3(state.clawX, state.clawY - 0.06, state.clawZ);
+        const applySmoothPressAtTip = (
+          ent: BoxEntity,
+          dims: { w: number; h: number; d: number },
+          tipWorld: CANNON.Vec3,
+          baseForce: number
+        ): { hit: boolean; pen: number } => {
+          const loc = ent.body.pointToLocalFrame(tipWorld);
+          const insideXZ =
+            Math.abs(loc.x) <= dims.w / 2 + 0.035 &&
+            Math.abs(loc.z) <= dims.d / 2 + 0.035;
+          const touchingTop =
+            loc.y <= dims.h / 2 + 0.045 &&
+            loc.y >= -dims.h / 2 - 0.04;
+          if (!insideXZ || !touchingTop) return { hit: false, pen: 0 };
+
+          const pen = Math.max(0, dims.h / 2 + 0.03 - loc.y);
+          // 박스 표면 내부로 클램프된 실제 접촉점을 무게중심 상대 좌표(relPt)로 변환
+          const clampedLoc = new CANNON.Vec3(
+            Math.max(-dims.w / 2, Math.min(dims.w / 2, loc.x)),
+            Math.max(-dims.h / 2, Math.min(dims.h / 2, loc.y)),
+            Math.max(-dims.d / 2, Math.min(dims.d / 2, loc.z))
+          );
+          const worldContact = ent.body.pointToWorldFrame(clampedLoc);
+          const relPt = worldContact.vsub(ent.body.position);
+
+          const fDown = baseForce + Math.min(44, pen * 240);
+          ent.body.applyForce(new CANNON.Vec3(0, -fDown, 0), relPt);
+
+          // 집게가 누르는 동안 상자가 위로 튀어오르지 않도록 상향 속도 완전 차단 & 회전 댐핑
+          if (ent.body.velocity.y > 0) ent.body.velocity.y = 0;
+          ent.body.angularVelocity.scale(0.92, ent.body.angularVelocity);
+
+          if (ent.body.velocity.y < -0.05) {
+            boxStillSinking = true;
+          }
+          if (pen > maxPenetration) maxPenetration = pen;
+          return { hit: true, pen };
+        };
 
         for (const ent of boxEntities.values()) {
           if (state.wonSet.has(ent.data.id)) continue;
           const dims = getBoxDimensions(ent.data.slotIndex);
 
-          const lLoc = ent.body.pointToLocalFrame(leftTipWorld);
-          const leftInBox =
-            Math.abs(lLoc.x) <= dims.w / 2 - 0.01 &&
-            Math.abs(lLoc.z) <= dims.d / 2 - 0.01 &&
-            lLoc.y <= dims.h / 2 + 0.05 &&
-            lLoc.y >= -dims.h / 2;
+          const leftRes = applySmoothPressAtTip(ent, dims, leftTipWorld, 42);
+          const rightRes = applySmoothPressAtTip(ent, dims, rightTipWorld, 42);
 
-          const rLoc = ent.body.pointToLocalFrame(rightTipWorld);
-          const rightInBox =
-            Math.abs(rLoc.x) <= dims.w / 2 - 0.01 &&
-            Math.abs(rLoc.z) <= dims.d / 2 - 0.01 &&
-            rLoc.y <= dims.h / 2 + 0.05 &&
-            rLoc.y >= -dims.h / 2;
-
-          if (leftInBox) {
+          if (leftRes.hit) {
             curHitLeftId = ent.data.id;
             state.leftBlockedBoxId = ent.data.id;
+            anyPressing = true;
           }
-          if (rightInBox) {
+          if (rightRes.hit) {
             curHitRightId = ent.data.id;
             state.rightBlockedBoxId = ent.data.id;
+            anyPressing = true;
           }
 
-          if (leftInBox && rightInBox) {
-            // 현실 오락실 누르기(오시) 기술: 폭발적 임펄스 대신 연속 하향 압력으로 튕김 없이 Bar 틈새로 지그시 밀어넣음!
+          if (leftRes.hit && rightRes.hit) {
             state.bothBlockedOnTop = true;
-            state.pushDownTimer += dt;
-            // Bar 중앙 틈새(z=0) 방향으로 미세 유도 + 부드러운 하향 압력 적용
-            const gapNudgeZ = -Math.sign(ent.body.position.z) * Math.min(3.0, Math.abs(ent.body.position.z) * 5.0);
-            ent.body.applyForce(new CANNON.Vec3(0, -17, gapNudgeZ * 0.5), leftTipWorld);
-            ent.body.applyForce(new CANNON.Vec3(0, -17, gapNudgeZ * 0.5), rightTipWorld);
-            // 상자가 반발로 튀어오르지 않도록 수직 상향 속도 억제
-            if (ent.body.velocity.y > 0) ent.body.velocity.y *= 0.25;
-            if (state.pushDownTimer >= 0.45) {
-              stopDescend = true;
-            }
-            break;
-          } else if (leftInBox && !rightInBox) {
-            // 좌측 집게만 상자 윗면/모서리에 닿음 -> 튕김 없이 지그시 누르며 하강 계속!
-            ent.body.applyForce(new CANNON.Vec3(0, -24, 0), leftTipWorld);
-            if (ent.body.velocity.y > 0.15) ent.body.velocity.y = 0.15;
-            state.leftProngAngle = Math.min(0.84, state.leftProngAngle + 2.2 * dt);
+            // 양발 모두 상자 윗면을 누를 때 살짝 중앙 Bar 틈새(z=0) 쪽으로 안정 유도
+            const gapNudgeZ = -Math.sign(ent.body.position.z) * Math.min(4.0, Math.abs(ent.body.position.z) * 6.0);
+            ent.body.applyForce(new CANNON.Vec3(0, 0, gapNudgeZ), new CANNON.Vec3(0, 0, 0));
+          } else if (leftRes.hit && !rightRes.hit) {
+            // 좌측 집게가 상자를 지그시 누름 -> 크게 벌어지며 미끄러지지 않고 단단히 받쳐 누르는 미세 탄성만 표현
+            state.leftProngAngle += (CLAW_OPEN_ANGLE + 0.05 - state.leftProngAngle) * Math.min(1, 8 * dt);
             state.rightProngAngle += (CLAW_OPEN_ANGLE - state.rightProngAngle) * Math.min(1, 8 * dt);
-            state.clawTiltZ += (-0.16 - state.clawTiltZ) * Math.min(1, 7 * dt);
-          } else if (rightInBox && !leftInBox) {
-            // 우측 집게만 상자 윗면/모서리에 닿음 -> 튕김 없이 지그시 누르며 하강 계속!
-            ent.body.applyForce(new CANNON.Vec3(0, -24, 0), rightTipWorld);
-            if (ent.body.velocity.y > 0.15) ent.body.velocity.y = 0.15;
-            state.rightProngAngle = Math.min(0.84, state.rightProngAngle + 2.2 * dt);
+            state.clawTiltZ += (-0.05 - state.clawTiltZ) * Math.min(1, 7 * dt);
+          } else if (rightRes.hit && !leftRes.hit) {
+            // 우측 집게가 상자를 지그시 누름
+            state.rightProngAngle += (CLAW_OPEN_ANGLE + 0.05 - state.rightProngAngle) * Math.min(1, 8 * dt);
             state.leftProngAngle += (CLAW_OPEN_ANGLE - state.leftProngAngle) * Math.min(1, 8 * dt);
-            state.clawTiltZ += (0.16 - state.clawTiltZ) * Math.min(1, 7 * dt);
+            state.clawTiltZ += (0.05 - state.clawTiltZ) * Math.min(1, 7 * dt);
           }
 
-          // UFO 본체 하단이 상자 윗면에 닿으면 지그시 누르며 정지
+          // UFO 본체 하단이 상자 윗면에 실제로 맞닿았을 때만 지그시 누르며 정지 (공중 12cm 오발동 제거)
           const uLoc = ent.body.pointToLocalFrame(ufoBottomWorld);
           if (
-            Math.abs(uLoc.x) <= dims.w / 2 + 0.16 &&
+            Math.abs(uLoc.x) <= dims.w / 2 + 0.12 &&
             Math.abs(uLoc.z) <= dims.d / 2 - 0.02 &&
-            uLoc.y <= dims.h / 2 + 0.12 &&
+            uLoc.y <= dims.h / 2 + 0.025 &&
             uLoc.y >= -dims.h / 2
           ) {
-            state.pushDownTimer += dt;
-            ent.body.applyForce(new CANNON.Vec3(0, -26, 0), ufoBottomWorld);
-            if (ent.body.velocity.y > 0) ent.body.velocity.y *= 0.25;
-            if (state.pushDownTimer >= 0.38) {
-              stopDescend = true;
-            }
-            break;
+            anyPressing = true;
+            const uPen = Math.max(0, dims.h / 2 + 0.02 - uLoc.y);
+            if (uPen > maxPenetration) maxPenetration = uPen;
+            const clampedU = new CANNON.Vec3(
+              Math.max(-dims.w / 2, Math.min(dims.w / 2, uLoc.x)),
+              Math.max(-dims.h / 2, Math.min(dims.h / 2, uLoc.y)),
+              Math.max(-dims.d / 2, Math.min(dims.d / 2, uLoc.z))
+            );
+            const relU = ent.body.pointToWorldFrame(clampedU).vsub(ent.body.position);
+            ent.body.applyForce(new CANNON.Vec3(0, -24, 0), relU);
+            if (ent.body.velocity.y > 0) ent.body.velocity.y = 0;
+            ent.body.angularVelocity.scale(0.92, ent.body.angularVelocity);
+            if (ent.body.velocity.y < -0.05) boxStillSinking = true;
           }
         }
 
-        // 양쪽 모두 안 걸려 있으면 기본 개방 각도와 수평 유지
-        if (!curHitLeftId && !curHitRightId) {
+        // 하강 속도 제어:
+        // - 상자에 닿지 않았으면 정상 하강
+        // - 상자를 누르는 중이며 상자가 아래로 밀려 내려가고 있으면 따라 내려가며 계속 누름
+        // - 상자가 바에 걸려 더 이상 안 내려가면(저항 발생) 상자를 뚫지 않고 제자리에서 0.55초간 지그시 누른 뒤 정지
+        let descendRate = GACHA_PHYSICS.CLAW_DESCEND_SPEED;
+        if (anyPressing) {
+          if (boxStillSinking || maxPenetration < 0.065) {
+            descendRate = 0.24;
+            state.pushDownTimer += dt * 0.45;
+          } else {
+            descendRate = 0.03;
+            state.pushDownTimer += dt;
+          }
+          if (state.pushDownTimer >= 0.55) {
+            stopDescend = true;
+          }
+        } else {
           state.leftProngAngle += (CLAW_OPEN_ANGLE - state.leftProngAngle) * Math.min(1, 6 * dt);
           state.rightProngAngle += (CLAW_OPEN_ANGLE - state.rightProngAngle) * Math.min(1, 6 * dt);
           state.clawTiltZ += (0 - state.clawTiltZ) * Math.min(1, 6 * dt);
         }
+
+        state.clawY = Math.max(
+          GACHA_PHYSICS.CLAW_DROP_Y,
+          state.clawY - descendRate * dt
+        );
 
         if (state.clawY <= GACHA_PHYSICS.CLAW_DROP_Y || stopDescend) {
           state.startLeftCloseAngle = state.leftProngAngle;
@@ -1106,16 +1149,16 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           }
 
           if (state.bothBlockedOnTop) {
-            state.targetLeftCloseAngle = Math.max(computedCloseAngle, CLAW_OPEN_ANGLE - 0.08);
-            state.targetRightCloseAngle = Math.max(computedCloseAngle, CLAW_OPEN_ANGLE - 0.08);
+            state.targetLeftCloseAngle = Math.max(computedCloseAngle, CLAW_OPEN_ANGLE - 0.10);
+            state.targetRightCloseAngle = Math.max(computedCloseAngle, CLAW_OPEN_ANGLE - 0.10);
           } else if (state.leftBlockedBoxId && !state.rightBlockedBoxId) {
-            // 좌측은 상자 윗면/모서리에 얹히고, 우측은 상자 옆면을 단단히 후킹
-            state.targetLeftCloseAngle = Math.max(0.28, state.leftProngAngle - 0.25);
+            // 좌측은 상자 윗면/모서리를 누른 상태, 우측은 자연스럽게 닫힘
+            state.targetLeftCloseAngle = Math.max(0.30, state.leftProngAngle - 0.14);
             state.targetRightCloseAngle = Math.min(0.14, computedCloseAngle);
           } else if (state.rightBlockedBoxId && !state.leftBlockedBoxId) {
-            // 우측은 상자 윗면/모서리에 얹히고, 좌측은 상자 옆면을 단단히 후킹
+            // 우측은 상자 윗면/모서리를 누른 상태, 좌측은 자연스럽게 닫힘
             state.targetLeftCloseAngle = Math.min(0.14, computedCloseAngle);
-            state.targetRightCloseAngle = Math.max(0.28, state.rightProngAngle - 0.25);
+            state.targetRightCloseAngle = Math.max(0.30, state.rightProngAngle - 0.14);
           } else {
             state.targetLeftCloseAngle = computedCloseAngle;
             state.targetRightCloseAngle = computedCloseAngle;
@@ -1123,7 +1166,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
           state.phaseTimer = 0;
           setCranePhase('closing');
-          playTone(state.bothBlockedOnTop ? 220 : 330, 0.1, 'square', 0.05);
+          playTone(state.bothBlockedOnTop || state.leftBlockedBoxId || state.rightBlockedBoxId ? 220 : 330, 0.1, 'square', 0.05);
         }
       } else if (curPhase === 'closing') {
         state.phaseTimer += dt;
@@ -1134,6 +1177,48 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         state.rightProngAngle =
           state.startRightCloseAngle -
           progress * (state.startRightCloseAngle - state.targetRightCloseAngle);
+
+        // 닫히는 0.44초 동안에도 상자 윗면에 닿아 있는 집게는 반발 없이 지그시 누름 유지
+        if (state.bothBlockedOnTop || state.leftBlockedBoxId || state.rightBlockedBoxId) {
+          clawGroup.position.set(state.clawX, state.clawY, state.clawZ);
+          clawGroup.rotation.z = state.clawTiltZ;
+          leftArmPivot.rotation.z = -state.leftProngAngle;
+          rightArmPivot.rotation.z = state.rightProngAngle;
+          clawGroup.updateMatrixWorld(true);
+
+          const tipWorlds: CANNON.Vec3[] = [];
+          if (state.bothBlockedOnTop || state.leftBlockedBoxId) {
+            const lv = leftTip.localToWorld(new THREE.Vector3(0, -0.18, 0));
+            tipWorlds.push(new CANNON.Vec3(lv.x, lv.y, lv.z));
+          }
+          if (state.bothBlockedOnTop || state.rightBlockedBoxId) {
+            const rv = rightTip.localToWorld(new THREE.Vector3(0, -0.18, 0));
+            tipWorlds.push(new CANNON.Vec3(rv.x, rv.y, rv.z));
+          }
+          for (const ent of boxEntities.values()) {
+            if (state.wonSet.has(ent.data.id)) continue;
+            if (ent.data.id !== state.leftBlockedBoxId && ent.data.id !== state.rightBlockedBoxId) continue;
+            const dims = getBoxDimensions(ent.data.slotIndex);
+            for (const tw of tipWorlds) {
+              const loc = ent.body.pointToLocalFrame(tw);
+              if (
+                Math.abs(loc.x) <= dims.w / 2 + 0.05 &&
+                Math.abs(loc.z) <= dims.d / 2 + 0.05 &&
+                loc.y <= dims.h / 2 + 0.06 &&
+                loc.y >= -dims.h / 2 - 0.04
+              ) {
+                const clampedLoc = new CANNON.Vec3(
+                  Math.max(-dims.w / 2, Math.min(dims.w / 2, loc.x)),
+                  Math.max(-dims.h / 2, Math.min(dims.h / 2, loc.y)),
+                  Math.max(-dims.d / 2, Math.min(dims.d / 2, loc.z))
+                );
+                const relPt = ent.body.pointToWorldFrame(clampedLoc).vsub(ent.body.position);
+                ent.body.applyForce(new CANNON.Vec3(0, -28, 0), relPt);
+                if (ent.body.velocity.y > 0) ent.body.velocity.y = 0;
+              }
+            }
+          }
+        }
 
         if (progress >= 1) {
           // 실제 물리적 잡기 판정
@@ -1199,18 +1284,30 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
               );
             };
 
+            // 반대쪽(안 막힌 쪽) 집게 끝단이 실제로 상자 옆면에 닿는 거리인지 검증 (허공 유령 리프트 차단!)
+            const freeSideSign = leftBlocked ? 1 : -1;
+            const freeTipCheckWorld = new CANNON.Vec3(
+              state.clawX + freeSideSign * 0.34,
+              Math.max(bestEnt.body.position.y - bestDims.h * 0.15, state.clawY - 0.62),
+              state.clawZ
+            );
+            const freeLoc = bestEnt.body.pointToLocalFrame(freeTipCheckWorld);
+            const freeTipActuallyNearBox =
+              Math.abs(freeLoc.x) <= bestDims.w / 2 + 0.10 &&
+              Math.abs(freeLoc.z) <= bestDims.d / 2 + 0.10;
+
             if (bothBlocked) {
-              // 양발 모두 상자 윗면에 닿아 부드럽게 눌러 밀어넣기 완료 (반발 임펄스 없이 안정적인 누르기)
-              const gapPushZ = -Math.sign(bestEnt.body.position.z) * Math.min(0.18, Math.abs(bestEnt.body.position.z) * 0.25);
-              bestEnt.body.applyImpulse(
-                new CANNON.Vec3(0, -0.22, gapPushZ),
-                pinchWorld.vsub(bestEnt.body.position)
-              );
-              setClawFeedback('👇 양쪽 집게로 상자 윗면을 지그시 눌러 밀어넣었습니다!');
+              // 양발 모두 상자 윗면에 닿아 부드럽게 누르기 완료 (반발 임펄스 없이 깔끔하게 안착)
+              if (bestEnt.body.velocity.y > 0) bestEnt.body.velocity.y = 0;
+              setClawFeedback('👇 양쪽 집게로 상자 윗면을 지그시 눌렀습니다!');
               playTone(200, 0.13, 'sawtooth', 0.045);
-            } else if (oneBlocked && freeTipReachedSide) {
-              // 현실 오락실 묘미! 한쪽 집게가 상자에 걸렸지만 끝까지 하강해 반대쪽 집게가 옆구리/아랫모서리를 비스듬히 후킹!
-              const freeSideSign = leftBlocked ? 1 : -1;
+            } else if (oneBlocked && !freeTipActuallyNearBox) {
+              // 한쪽 집게로 상자를 위에서 누른 상태(오시) — 반대쪽 집게는 허공이므로 들어올리지 않고 눌린 상태 유지!
+              if (bestEnt.body.velocity.y > 0) bestEnt.body.velocity.y = 0;
+              setClawFeedback('👇 집게로 상자를 지그시 눌러 밀어넣었습니다!');
+              playTone(210, 0.12, 'triangle', 0.045);
+            } else if (oneBlocked && freeTipReachedSide && freeTipActuallyNearBox) {
+              // 한쪽 집게는 상자 위를 누르고 반대쪽 집게가 실제로 상자 옆면에 닿았을 때만 비스듬히 후킹!
               const hookLocal = computeWorldEdgeHookLocal(freeSideSign);
               const clawAnchorOffset = new CANNON.Vec3(freeSideSign * 0.24, -0.56, 0);
               const roll = Math.random();
@@ -1238,14 +1335,10 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
               state.grabConstraint = constraint;
               setClawFeedback('🪝 한쪽 집게가 옆모서리에 걸려 비스듬히 들어올립니다!');
             } else if (tooWideToStraddle && freeTipReachedSide) {
-              // 상자가 가로/대각선으로 넓어 양쪽을 다 감싸진 못해도, 한쪽 집게가 상자 끝을 긁어 비스듬히 들어올림 (튕김 억제)
+              // 상자가 가로/대각선으로 넓어 양쪽을 다 감싸진 못해도, 한쪽 집게가 상자 끝을 긁어 비스듬히 들어올림 (상향 튕김 제거)
               const sideSign = state.clawX >= bestEnt.body.position.x ? 1 : -1;
               const hookLocal = computeWorldEdgeHookLocal(sideSign);
               const clawAnchorOffset = new CANNON.Vec3(sideSign * 0.28, -0.56, 0);
-              bestEnt.body.applyImpulse(
-                new CANNON.Vec3(-sideSign * 0.22, 0.08, 0.10),
-                bestEnt.body.pointToWorldFrame(hookLocal).vsub(bestEnt.body.position)
-              );
               const roll = Math.random();
               const scrapeForce = roll < 0.4 ? 13.0 + Math.random() * 3.0 : 16.5 + Math.random() * 3.5;
               state.grabSlipTime = roll < 0.4 ? 0.28 + Math.random() * 0.16 : 0.44 + Math.random() * 0.24;
@@ -1261,14 +1354,10 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
               state.grabConstraint = constraint;
               setClawFeedback('🪝 집게가 넓은 상자 끝을 긁어 비스듬히 들어올립니다!');
             } else if (!freeTipReachedSide) {
-              // 집게 끝단이 상자 옆면까지 내려오지 못해 윗면/모서리를 지그시 눌러 밀어냄 (튕김 없음)
-              const pushDirX = state.clawX >= bestEnt.body.position.x ? -0.18 : 0.18;
-              bestEnt.body.applyImpulse(
-                new CANNON.Vec3(pushDirX, -0.22, 0.10),
-                pinchWorld.vsub(bestEnt.body.position)
-              );
-              setClawFeedback('👆 집게가 상자 모서리를 지그시 눌러 밀어냈습니다!');
-              playTone(210, 0.12, 'sawtooth', 0.04);
+              // 집게 끝단이 상자 옆면까지 내려오지 못해 윗면/모서리를 지그시 누름 (반발 튕김 없음)
+              if (bestEnt.body.velocity.y > 0) bestEnt.body.velocity.y = 0;
+              setClawFeedback('👇 집게가 상자 모서리를 지그시 눌렀습니다!');
+              playTone(210, 0.12, 'triangle', 0.04);
             } else {
               // 정상 양발 잡기! 현실적인 아케이드 집게 힘 편차 + 중심 이탈 페널티 적용
               const centerOffsetX = Math.abs(bestEnt.body.position.x - state.clawX);
@@ -1392,24 +1481,37 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       if (isPhysicsActive) {
         clawAnchorBody.position.set(state.clawX, state.clawY, state.clawZ);
         clawHeadCollider.position.set(state.clawX, state.clawY + 0.08, state.clawZ);
-        world.step(1 / 60, dt, 4);
+        world.step(1 / 120, dt, 6);
 
-        // 탱탱볼 튀어오름 방지 속도 제한 & 3D 메시 동기화 & 낙하 승리 감지
+        // 탱탱볼 튀어오름 완전 억제 속도 제한 & 3D 메시 동기화 & 낙하 승리 감지
         for (const ent of boxEntities.values()) {
           if (!state.wonSet.has(ent.data.id)) {
-            const maxUpVy = state.grabConstraint ? 1.55 : 0.32;
-            if (ent.body.velocity.y > maxUpVy) {
-              ent.body.velocity.y = maxUpVy;
-            }
-            const horizSpeed = Math.hypot(ent.body.velocity.x, ent.body.velocity.z);
-            if (horizSpeed > 2.2) {
-              const s = 2.2 / horizSpeed;
-              ent.body.velocity.x *= s;
-              ent.body.velocity.z *= s;
-            }
-            const angSpeed = ent.body.angularVelocity.length();
-            if (angSpeed > 4.2) {
-              ent.body.angularVelocity.scale(4.2 / angSpeed, ent.body.angularVelocity);
+            if (!state.grabConstraint) {
+              // 잡혀 있지 않을 때는 바/집게 충돌로 위로 튀어오르는 속도 강제 감쇠
+              if (ent.body.velocity.y > 0.10) {
+                ent.body.velocity.y *= 0.30;
+              }
+              if (ent.body.velocity.y > 0.18) {
+                ent.body.velocity.y = 0.18;
+              }
+              const horizSpeed = Math.hypot(ent.body.velocity.x, ent.body.velocity.z);
+              if (horizSpeed > 1.8) {
+                const s = 1.8 / horizSpeed;
+                ent.body.velocity.x *= s;
+                ent.body.velocity.z *= s;
+              }
+              const angSpeed = ent.body.angularVelocity.length();
+              if (angSpeed > 3.6) {
+                ent.body.angularVelocity.scale(3.6 / angSpeed, ent.body.angularVelocity);
+              }
+            } else {
+              if (ent.body.velocity.y > 1.55) {
+                ent.body.velocity.y = 1.55;
+              }
+              const angSpeed = ent.body.angularVelocity.length();
+              if (angSpeed > 4.2) {
+                ent.body.angularVelocity.scale(4.2 / angSpeed, ent.body.angularVelocity);
+              }
             }
           }
 

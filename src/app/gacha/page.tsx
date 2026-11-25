@@ -553,9 +553,9 @@ export default function GachaPage() {
         if (Array.isArray(data.machines)) setMachines(data.machines);
         else if (data.machine) updateMachineAt(selectedMachineIndex, data.machine);
         setActiveTurnId(null);
-        setStatusMessage(data.message || '🔄 현재 뽑기판 상품을 중앙 정위치로 재세팅했습니다.');
+        setStatusMessage(data.message || '🔄 현재 뽑기판 상품을 중앙 정위치로 재정렬했습니다.');
       } else {
-        setStatusMessage(data.message || '초기화 실패');
+        setStatusMessage(data.message || '재정렬 실패');
       }
     } finally {
       setIsResetting(false);

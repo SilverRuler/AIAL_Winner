@@ -3,7 +3,6 @@ import { getDatabase } from '@/lib/mongodb';
 import { GachaBoxItem } from '@/types/gacha';
 import {
   createSingleMachineItems,
-  GACHA_ALL_SLOT_INDICES,
   GACHA_TOTAL_SLOTS,
   getMachineDocId,
   getMachineLabel,
@@ -67,17 +66,13 @@ export async function POST(request: NextRequest) {
     const normalized = rawText.replace(/^\/+/, '').replace(/\s+/g, '');
     const replyToId = typeof msg.message_id === 'number' ? msg.message_id : undefined;
 
-    // 특정 번호 지정 지원: 예) "리필 3", "정렬 6" 또는 전체 "리필", "정렬", "재정렬"
-    const numMatch = normalized.match(/^(.+?)([1-6])$/);
-    const baseCmd = numMatch ? numMatch[1] : normalized;
-    const requestedSlotNum = numMatch ? Number(numMatch[2]) : null; // 1..6
+    // 반드시 "1번 리필", "1번 재정렬", "1번 정렬" (1~6번) 형식으로 명령해야 작동
+    const exactMatch = normalized.match(/^([1-6])번(리필|재정렬|정렬)$/);
+    const requestedSlotNum = exactMatch ? Number(exactMatch[1]) : null; // 1..6
+    const actionWord = exactMatch ? exactMatch[2] : null;
 
-    const isRefillCmd = baseCmd === '리필' || baseCmd === '뽑기판리필';
-    const isResetCmd =
-      baseCmd === '정렬' ||
-      baseCmd === '재정렬' ||
-      baseCmd === '뽑기판정렬' ||
-      baseCmd === '뽑기판재정렬';
+    const isRefillCmd = actionWord === '리필';
+    const isResetCmd = actionWord === '재정렬' || actionWord === '정렬';
     const isStatusCmd = normalized === '상태' || normalized === '재고';
 
     if (!isRefillCmd && !isResetCmd && !isStatusCmd) {
@@ -112,14 +107,16 @@ export async function POST(request: NextRequest) {
         senderChatId,
         `🎰 <b>개별 UFO 뽑기판 현황 (${totalStock}/${GACHA_TOTAL_SLOTS}개)</b>\n\n` +
           `${formatMachineStatusList(machines)}\n\n` +
-          `<i>💡 팁: "리필" / "리필 3" / "재정렬" / "재정렬 3" 모두 지원</i>`,
+          `<i>💡 팁: "1번 리필", "1번 재정렬", "1번 정렬" (1~6번) 형식으로 입력하세요</i>`,
         replyToId
       );
       return NextResponse.json({ ok: true });
     }
 
-    const targetIndices =
-      requestedSlotNum !== null ? [requestedSlotNum - 1] : [...GACHA_ALL_SLOT_INDICES];
+    if (requestedSlotNum === null) {
+      return NextResponse.json({ ok: true });
+    }
+    const targetIndices = [requestedSlotNum - 1];
 
     const clearedLock = {
       active: false,
@@ -177,7 +174,7 @@ export async function POST(request: NextRequest) {
         await sendTelegramReply(
           token,
           senderChatId,
-          `📦 리필할 빈 뽑기판이 없습니다! (현재 ${totalStock}/${GACHA_TOTAL_SLOTS}개)${lockNote}`,
+          `📦 <b>${requestedSlotNum}번 뽑기판</b>(${getMachineLabel(requestedSlotNum - 1)})은 이미 상품이 채워져 있습니다! (전체 ${totalStock}/${GACHA_TOTAL_SLOTS}개)${lockNote}`,
           replyToId
         );
         return NextResponse.json({ ok: true });
@@ -259,7 +256,7 @@ export async function POST(request: NextRequest) {
         await sendTelegramReply(
           token,
           senderChatId,
-          `📦 재정렬할 남은 상품이 없습니다. <b>리필</b>이라고 입력하면 빈 뽑기판이 채워집니다!${lockNote}`,
+          `📦 <b>${requestedSlotNum}번 뽑기판</b>에 재정렬할 상품이 없습니다. <b>${requestedSlotNum}번 리필</b>이라고 입력하면 채워집니다!${lockNote}`,
           replyToId
         );
         return NextResponse.json({ ok: true });

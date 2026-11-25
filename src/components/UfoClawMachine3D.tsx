@@ -2194,14 +2194,14 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
                   onClick={onAdminReset}
                   disabled={isResetting || isRefilling || isCraneLockedToFront}
                   className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-[11px] font-black cursor-pointer disabled:opacity-45 transition-colors"
-                  title={`현재 선택된 ${machineLabel} 뽑기판 중앙 정위치 초기화`}
+                  title={`현재 선택된 ${machineLabel} 뽑기판 중앙 정위치 재정렬`}
                 >
                   {isResetting ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <RotateCcw className="w-3.5 h-3.5" />
                   )}
-                  <span>뽑기판 초기화</span>
+                  <span>뽑기판 재정렬</span>
                 </button>
               </div>
             )}

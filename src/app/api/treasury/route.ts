@@ -1,10 +1,11 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 
 export const dynamic = 'force-dynamic';
 
 const OPERATOR_SOL_ADDRESS = '8e3z8Hrqh4T5NRxJVNczqcLKFXsfWtjEuw3zsHrHDUVi';
-const BALANCE_CACHE_TTL_MS = 60 * 60 * 1000; // 1시간마다 잔고 업데이트
+const BALANCE_CACHE_TTL_MS = 60 * 60 * 1000; // 기본 1시간마다 잔고 자동 업데이트
+const FORCE_REFRESH_COOLDOWN_MS = 10 * 1000; // 수동 새로고침 시 10초 쿨다운으로 RPC 과부하 방지
 const PRICE_CACHE_TTL_MS = 60 * 1000; // 시세는 현재시점 기준 (1분 단기 보호 캐시)
 
 const SOLANA_RPC_ENDPOINTS = [
@@ -108,30 +109,32 @@ async function fetchCurrentSolPriceKrw(): Promise<{ priceKrw: number; source: st
   return null;
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const now = Date.now();
+  const forceRefresh = request.nextUrl.searchParams.get('force') === '1';
 
   try {
     const db = await getDatabase();
     const col = db ? db.collection('treasury_cache') : null;
 
-    // 1. 운영자 SOL 잔고 (1시간 캐시)
+    // 1. 운영자 SOL 잔고 (기본 1시간 캐시, 수동 새로고침 ?force=1 시 10초 쿨다운 후 즉시 온체인 재조회)
     let balanceSol: number | null = null;
     let balanceUpdatedAt = 0;
+    const effectiveBalanceTtl = forceRefresh ? FORCE_REFRESH_COOLDOWN_MS : BALANCE_CACHE_TTL_MS;
 
     if (
       g.__aialTreasuryCache &&
-      now - g.__aialTreasuryCache.balanceUpdatedAt < BALANCE_CACHE_TTL_MS
+      now - g.__aialTreasuryCache.balanceUpdatedAt < effectiveBalanceTtl
     ) {
       balanceSol = g.__aialTreasuryCache.balanceSol;
       balanceUpdatedAt = g.__aialTreasuryCache.balanceUpdatedAt;
-    } else if (col) {
+    } else if (col && !forceRefresh) {
       const dbDoc = (await col.findOne({ _id: 'operator_sol_balance' as any })) as any;
       if (
         dbDoc &&
         typeof dbDoc.balanceSol === 'number' &&
         typeof dbDoc.balanceUpdatedAt === 'number' &&
-        now - dbDoc.balanceUpdatedAt < BALANCE_CACHE_TTL_MS
+        now - dbDoc.balanceUpdatedAt < effectiveBalanceTtl
       ) {
         const cachedBal: number = dbDoc.balanceSol;
         const cachedAt: number = dbDoc.balanceUpdatedAt;

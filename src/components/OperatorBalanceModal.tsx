@@ -48,11 +48,14 @@ export const OperatorBalanceModal: React.FC<OperatorBalanceModalProps> = ({ isOp
   const [error, setError] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
 
-  const fetchTreasury = useCallback(async () => {
+  const fetchTreasury = useCallback(async (force = false) => {
     setIsLoading(true);
     setError('');
     try {
-      const resp = await fetch(`/api/treasury?_t=${Date.now()}`, { cache: 'no-store' });
+      const url = force
+        ? `/api/treasury?force=1&_t=${Date.now()}`
+        : `/api/treasury?_t=${Date.now()}`;
+      const resp = await fetch(url, { cache: 'no-store' });
       const json = await resp.json();
       if (resp.ok && json.success) {
         setData(json);
@@ -68,7 +71,7 @@ export const OperatorBalanceModal: React.FC<OperatorBalanceModalProps> = ({ isOp
 
   useEffect(() => {
     if (isOpen) {
-      fetchTreasury();
+      fetchTreasury(false);
     }
   }, [isOpen, fetchTreasury]);
 
@@ -107,10 +110,10 @@ export const OperatorBalanceModal: React.FC<OperatorBalanceModalProps> = ({ isOp
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={fetchTreasury}
+              onClick={() => fetchTreasury(true)}
               disabled={isLoading}
               className="p-2 rounded-xl text-slate-400 hover:text-emerald-300 hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
-              title="새로고침"
+              title="온체인 잔고 즉시 새로고침"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
@@ -137,7 +140,7 @@ export const OperatorBalanceModal: React.FC<OperatorBalanceModalProps> = ({ isOp
               <p className="text-xs text-rose-300 font-bold">{error}</p>
               <button
                 type="button"
-                onClick={fetchTreasury}
+                onClick={() => fetchTreasury(true)}
                 className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold cursor-pointer"
               >
                 다시 시도

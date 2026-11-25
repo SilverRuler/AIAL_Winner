@@ -9,8 +9,10 @@ import {
   getAllMemberTicketBalances,
   getOrInitMachineState,
   getTelegramConfig,
+  recordGachaLog,
   sanitizeMachineForClient,
 } from '@/lib/gachaServer';
+import { getClientIp, normalizeIp } from '@/lib/ip';
 
 function clampNumber(val: unknown, min: number, max: number, fallback: number): number {
   const n = typeof val === 'number' ? val : Number(val);
@@ -210,6 +212,25 @@ export async function POST(request: NextRequest) {
       },
       { returnDocument: 'after' }
     );
+
+    const rawIp = getClientIp(request);
+    const clientIp = normalizeIp(rawIp) || rawIp || '';
+    await recordGachaLog(db, {
+      type: wonRecords.length > 0 ? 'win' : 'move',
+      member,
+      message: actionSummary,
+      meta: {
+        turnId,
+        shotIndex: prevShotIndex,
+        totalPlays,
+        wonLabels: wonRecords.map((w) => w.boxLabel),
+        wonCount: wonRecords.length,
+        remainingStock: remainingItems.length,
+        refundedTickets,
+        ip: clientIp,
+      },
+      createdAt: now,
+    });
 
     // 누군가가 뽑기에 성공하면 관리자에게 텔레그램 즉시 알람 발송 (남은 재고 수 표기)
     if (wonRecords.length > 0) {

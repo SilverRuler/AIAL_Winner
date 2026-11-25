@@ -5,8 +5,10 @@ import { GACHA_PHYSICS } from '@/constants/gacha';
 import {
   getAllMemberTicketBalances,
   getOrInitMachineState,
+  recordGachaLog,
   sanitizeMachineForClient,
 } from '@/lib/gachaServer';
+import { getClientIp, normalizeIp } from '@/lib/ip';
 
 export async function POST(request: NextRequest) {
   try {
@@ -149,6 +151,30 @@ export async function POST(request: NextRequest) {
     }
 
     const ticketsByMember = await getAllMemberTicketBalances(db);
+
+    const rawIp = getClientIp(request);
+    const clientIp = normalizeIp(rawIp) || rawIp || '';
+    const startMsg =
+      bonusPlays > 0
+        ? `🔥 ${member}님이 연속 ${playCount}가챠를 시작했습니다! (+${bonusPlays}회 보너스 → 총 ${totalPlays}회)`
+        : totalPlays > 1
+        ? `🕹️ ${member}님이 ${totalPlays}회 연속 뽑기를 시작했습니다.`
+        : `🕹️ ${member}님이 뽑기 1회를 시작했습니다.`;
+
+    await recordGachaLog(db, {
+      type: 'start',
+      member,
+      message: startMsg,
+      meta: {
+        turnId,
+        playCount,
+        bonusPlays,
+        totalPlays,
+        remainingStock: machine.items.length,
+        ip: clientIp,
+      },
+      createdAt: now,
+    });
 
     return NextResponse.json({
       success: true,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MEMBERS } from '@/constants/members';
-import { getAllMemberTicketBalances, grantGachaTickets } from '@/lib/gachaServer';
+import { getAllMemberTicketBalances, grantGachaTickets, recordGachaLog } from '@/lib/gachaServer';
 import { getClientIp, normalizeIp } from '@/lib/ip';
 
 /**
@@ -86,10 +86,25 @@ export async function POST(request: NextRequest) {
 
     const newTicketBalance = await grantGachaTickets(db, member, 5);
     const ticketsByMember = await getAllMemberTicketBalances(db);
+    const exchangeMessage = `🎟️ ${member}님의 승점 1WIN을 뽑기권 5장으로 교환했습니다! (현재 뽑기권 ${newTicketBalance}장 · 식사배틀 남은 신청 가능 WIN: ${availableMealWinsAfter})`;
+
+    await recordGachaLog(db, {
+      type: 'exchange',
+      member,
+      message: exchangeMessage,
+      meta: {
+        winsUsed: 1,
+        ticketsGranted: 5,
+        newTicketBalance,
+        availableMealWinsAfter,
+        ip: clientIp,
+      },
+      createdAt: now,
+    });
 
     return NextResponse.json({
       success: true,
-      message: `🎟️ ${member}님의 승점 1WIN을 뽑기권 5장으로 교환했습니다! (현재 뽑기권 ${newTicketBalance}장 · 식사배틀 남은 신청 가능 WIN: ${availableMealWinsAfter})`,
+      message: exchangeMessage,
       ticketsByMember,
       exchangedWins: nextExchangedWins,
       availableMealWins: availableMealWinsAfter,

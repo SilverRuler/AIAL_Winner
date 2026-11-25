@@ -18,6 +18,51 @@ import { MEMBERS } from '@/constants/members';
 export const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
 export const ADMIN_PW = process.env.ADMIN_PW || 'bbb';
 
+export type GachaLogType =
+  | 'start'
+  | 'move'
+  | 'win'
+  | 'lock_expired'
+  | 'auto_reset'
+  | 'admin_reset'
+  | 'admin_refill'
+  | 'admin_ticket'
+  | 'exchange';
+
+export interface GachaLogInput {
+  type: GachaLogType;
+  member: string;
+  message: string;
+  meta?: Record<string, unknown>;
+  createdAt?: number;
+}
+
+/**
+ * 모든 뽑기 최근 상황 및 주요 이벤트를 MongoDB `gacha_logs` 컬렉션에 영구 누적 저장
+ */
+export async function recordGachaLog(db: Db, entry: GachaLogInput): Promise<void> {
+  try {
+    const now = typeof entry.createdAt === 'number' ? entry.createdAt : Date.now();
+    const kstTime = new Date(now + 9 * 3600 * 1000)
+      .toISOString()
+      .replace('T', ' ')
+      .substring(0, 19);
+    const id = `glog_${now}_${Math.random().toString(36).substring(2, 7)}`;
+    await db.collection('gacha_logs').insertOne({
+      _id: id as any,
+      id,
+      type: entry.type,
+      member: entry.member || 'SYSTEM',
+      message: entry.message,
+      meta: entry.meta || {},
+      kstTime,
+      createdAt: now,
+    });
+  } catch (err) {
+    console.warn('Failed to record gacha_logs entry:', err);
+  }
+}
+
 export function isAdminAuthorized(request: NextRequest, body?: any): boolean {
   const reqId = body?.adminId || request.headers.get('x-admin-id');
   const reqPw = body?.adminPw || request.headers.get('x-admin-pw');
@@ -195,18 +240,28 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
       startedAt: null,
       expiresAt: null,
     };
+    const expiredSummary = expiredMember
+      ? `${expiredMember}님의 조작 시간이 만료되어 기계 잠금이 해제되었습니다.`
+      : existing.lastActionSummary;
     await col.updateOne(
       { _id: 'main_ufo_bridge' as any },
       {
         $set: {
           lock: clearedLock,
-          lastActionSummary: expiredMember
-            ? `${expiredMember}님의 조작 시간이 만료되어 기계 잠금이 해제되었습니다.`
-            : existing.lastActionSummary,
+          lastActionSummary: expiredSummary,
           updatedAt: now,
         },
       }
     );
+    if (expiredMember) {
+      await recordGachaLog(db, {
+        type: 'lock_expired',
+        member: expiredMember,
+        message: expiredSummary,
+        meta: { turnId: existing.lock?.turnId || null },
+        createdAt: now,
+      });
+    }
     existing.lock = clearedLock;
   }
 
@@ -270,6 +325,17 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
     )) as any;
 
     if (autoUpdated) {
+      await recordGachaLog(db, {
+        type: 'auto_reset',
+        member: 'SYSTEM',
+        message: autoSummary,
+        meta: {
+          scheduleSlot: latestCp.key,
+          scheduleLabel: latestCp.label,
+          remainingStock: realignedBoxes.length,
+        },
+        createdAt: now,
+      });
       return {
         id: 'main_ufo_bridge',
         items: autoUpdated.items,

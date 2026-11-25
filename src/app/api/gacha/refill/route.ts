@@ -7,7 +7,7 @@ import {
   getBoxDimensions,
   getRestingBoxPosition,
 } from '@/constants/gacha';
-import { isAdminAuthorized, sanitizeMachineForClient } from '@/lib/gachaServer';
+import { isAdminAuthorized, recordGachaLog, sanitizeMachineForClient } from '@/lib/gachaServer';
 
 export async function POST(request: NextRequest) {
   try {
@@ -94,6 +94,14 @@ export async function POST(request: NextRequest) {
       },
       { upsert: true, returnDocument: 'after' }
     );
+
+    await recordGachaLog(db, {
+      type: 'admin_refill',
+      member: '관리자',
+      message: summary,
+      meta: { refilledCount, totalStock: nextItems.length },
+      createdAt: now,
+    });
 
     return NextResponse.json({
       success: true,

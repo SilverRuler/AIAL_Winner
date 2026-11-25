@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MEMBERS } from '@/constants/members';
-import { getAllMemberTicketBalances, grantGachaTickets, isAdminAuthorized } from '@/lib/gachaServer';
+import { getAllMemberTicketBalances, grantGachaTickets, isAdminAuthorized, recordGachaLog } from '@/lib/gachaServer';
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,10 +40,18 @@ export async function POST(request: NextRequest) {
 
     const balance = await grantGachaTickets(db, member, amount);
     const ticketsByMember = await getAllMemberTicketBalances(db);
+    const message = `${member}님에게 뽑기권 ${amount > 0 ? `+${amount}` : amount}장 반영 완료 (현재 ${balance}장)`;
+
+    await recordGachaLog(db, {
+      type: 'admin_ticket',
+      member,
+      message,
+      meta: { amount, balanceAfter: balance },
+    });
 
     return NextResponse.json({
       success: true,
-      message: `${member}님에게 뽑기권 ${amount > 0 ? `+${amount}` : amount}장 반영 완료 (현재 ${balance}장)`,
+      message,
       ticketsByMember,
     });
   } catch (error: any) {

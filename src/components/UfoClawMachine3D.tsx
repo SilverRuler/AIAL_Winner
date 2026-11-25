@@ -1106,6 +1106,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       grabConstraint: null as CANNON.Constraint | null,
       grabSlipTime: 1.15,
       didSlipThisLift: false,
+      isWeakGripThisTurn: false,
       leftBlockedBoxId: null as string | null,
       rightBlockedBoxId: null as string | null,
       bothBlockedOnTop: false,
@@ -1136,6 +1137,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         state.settleQuietTime = 0;
         state.grabSlipTime = 1.15;
         state.didSlipThisLift = false;
+        state.isWeakGripThisTurn = false;
         state.leftBlockedBoxId = null;
         state.rightBlockedBoxId = null;
         state.bothBlockedOnTop = false;
@@ -1216,14 +1218,16 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         const rightTipWorld = new CANNON.Vec3(rightTipVec3.x, rightTipVec3.y, rightTipVec3.z);
         const ufoBottomWorld = new CANNON.Vec3(state.clawX, state.clawY - 0.06, state.clawZ);
 
-        // Bar 사이 극한 통과 감지:
-        // 중앙 2개 빨간 Bar(z = ±0.455, 내경 -0.365 ~ +0.365) 사이로 집게 끝이 걸리지 않고 깊이 통과했는지 추적
+        // Bar 근처 통과 감지 (중앙 Bar ±0.455 및 외곽 Bar ±1.02 모두 포함):
+        // 어느쪽 Bar든 근처(Z 거리 0.34 이내, 바 높이 근처 이하)를 지나 내려온 뒤 들어올리면 '극한 드르륵!' 발동
         for (const tip of [leftTipWorld, rightTipWorld]) {
-          const absZ = Math.abs(tip.z);
-          const distToBarCenter = Math.abs(absZ - GACHA_PHYSICS.BAR_HALF_Z);
-          if (tip.y <= GACHA_PHYSICS.BAR_Y + 0.06 && absZ <= 0.375 && distToBarCenter >= 0.065) {
-            state.passedBarGapCleanly = true;
+          for (const bar of allBarSpecs) {
+            if (Math.abs(tip.z - bar.z) <= 0.34 && tip.y <= bar.y + 0.18) {
+              state.passedBarGapCleanly = true;
+              break;
+            }
           }
+          if (state.passedBarGapCleanly) break;
         }
 
         // 현실 아케이드 UFO 캐쳐 하강 물리:
@@ -1414,7 +1418,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           state.startRightCloseAngle -
           progress * (state.startRightCloseAngle - state.targetRightCloseAngle);
 
-        // 닫히는 0.44초 동안에도 상자 윗면에 닿아 있는 집게는 반발 없이 지그시 누름 유지
+        // 닫히는 0.44초 동안 상자 윗면에 닿아 있는 집게는 반발 없이 지그시 누르며
+        // 한쪽 집게만 걸린 경우 집게가 안쪽으로 오므라들며 상자를 밀고 끌어당기는 실물 마찰 이동 효과 적용!
         if (state.bothBlockedOnTop || state.leftBlockedBoxId || state.rightBlockedBoxId) {
           clawGroup.position.set(state.clawX, state.clawY, state.clawZ);
           clawGroup.rotation.z = state.clawTiltZ;
@@ -1422,26 +1427,29 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           rightArmPivot.rotation.z = state.rightProngAngle;
           clawGroup.updateMatrixWorld(true);
 
-          const tipWorlds: CANNON.Vec3[] = [];
+          const tipEntries: Array<{ tw: CANNON.Vec3; side: -1 | 1 }> = [];
           if (state.bothBlockedOnTop || state.leftBlockedBoxId) {
             const lv = leftTip.localToWorld(new THREE.Vector3(0, -0.18, 0));
-            tipWorlds.push(new CANNON.Vec3(lv.x, lv.y, lv.z));
+            tipEntries.push({ tw: new CANNON.Vec3(lv.x, lv.y, lv.z), side: -1 });
           }
           if (state.bothBlockedOnTop || state.rightBlockedBoxId) {
             const rv = rightTip.localToWorld(new THREE.Vector3(0, -0.18, 0));
-            tipWorlds.push(new CANNON.Vec3(rv.x, rv.y, rv.z));
+            tipEntries.push({ tw: new CANNON.Vec3(rv.x, rv.y, rv.z), side: 1 });
           }
+          const isSingleSideBlocked =
+            !state.bothBlockedOnTop && Boolean(state.leftBlockedBoxId) !== Boolean(state.rightBlockedBoxId);
+
           for (const ent of boxEntities.values()) {
             if (state.wonSet.has(ent.data.id)) continue;
             if (ent.data.id !== state.leftBlockedBoxId && ent.data.id !== state.rightBlockedBoxId) continue;
             const dims = getBoxDimensions(ent.data.slotIndex);
-            for (const tw of tipWorlds) {
+            for (const { tw, side } of tipEntries) {
               const loc = ent.body.pointToLocalFrame(tw);
               if (
-                Math.abs(loc.x) <= dims.w / 2 + 0.05 &&
-                Math.abs(loc.z) <= dims.d / 2 + 0.05 &&
-                loc.y <= dims.h / 2 + 0.06 &&
-                loc.y >= -dims.h / 2 - 0.04
+                Math.abs(loc.x) <= dims.w / 2 + 0.08 &&
+                Math.abs(loc.z) <= dims.d / 2 + 0.08 &&
+                loc.y <= dims.h / 2 + 0.08 &&
+                loc.y >= -dims.h / 2 - 0.06
               ) {
                 const clampedLoc = new CANNON.Vec3(
                   Math.max(-dims.w / 2, Math.min(dims.w / 2, loc.x)),
@@ -1449,7 +1457,12 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
                   Math.max(-dims.d / 2, Math.min(dims.d / 2, loc.z))
                 );
                 const relPt = ent.body.pointToWorldFrame(clampedLoc).vsub(ent.body.position);
-                ent.body.applyForce(new CANNON.Vec3(0, -28, 0), relPt);
+                // 한쪽 집게가 안쪽으로 오므라들며 상자를 크레인 중심 쪽(-side 방향)으로 끌어당기거나 밀어냄
+                const dragX = isSingleSideBlocked ? -side * 22 : 0;
+                const nudgeZ = isSingleSideBlocked
+                  ? -Math.sign(ent.body.position.z || 0.01) * 4.5
+                  : 0;
+                ent.body.applyForce(new CANNON.Vec3(dragX, -26, nudgeZ), relPt);
                 if (ent.body.velocity.y > 0) ent.body.velocity.y = 0;
               }
             }
@@ -1492,6 +1505,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           }
 
           state.didSlipThisLift = false;
+          state.isWeakGripThisTurn = false;
           state.grabSlipTime = 1.15;
 
           if (bestEnt) {
@@ -1520,10 +1534,11 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
               );
             };
 
-            // 반대쪽(안 막힌 쪽) 집게 끝단이 닫힘 스윕(0.22~0.48) 중 실제로 상자 옆면/아랫모서리에 닿는지 정밀 검증
+            // 반대쪽(안 막힌 쪽) 집게 끝단이 닫힘 스윕(0.18~0.54) 중 실제로 상자 옆면/아랫모서리에 닿는지 정밀 검증
             const freeSideSign = leftBlocked ? 1 : -1;
+            const blockedSideSign = leftBlocked ? -1 : 1;
             let freeTipActuallyNearBox = false;
-            for (const sweepDist of [0.22, 0.34, 0.46]) {
+            for (const sweepDist of [0.18, 0.30, 0.42, 0.54]) {
               const checkPt = new CANNON.Vec3(
                 state.clawX + freeSideSign * sweepDist,
                 Math.max(bestEnt.body.position.y - bestDims.h * 0.28, state.clawY - 0.66),
@@ -1531,8 +1546,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
               );
               const fLoc = bestEnt.body.pointToLocalFrame(checkPt);
               if (
-                Math.abs(fLoc.x) <= bestDims.w / 2 + 0.14 &&
-                Math.abs(fLoc.z) <= bestDims.d / 2 + 0.14
+                Math.abs(fLoc.x) <= bestDims.w / 2 + 0.22 &&
+                Math.abs(fLoc.z) <= bestDims.d / 2 + 0.20
               ) {
                 freeTipActuallyNearBox = true;
                 break;
@@ -1540,32 +1555,54 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             }
 
             if (bothBlocked) {
-              // 양발 모두 상자 윗면에 닿아 부드럽게 누르기 완료 (반발 임펄스 없이 깔끔하게 안착)
+              // 양발 모두 상자 윗면에 닿아 부드럽게 누르기 완료
               if (bestEnt.body.velocity.y > 0) bestEnt.body.velocity.y = 0;
               setClawFeedback('👇 양쪽 집게로 상자 윗면을 지그시 눌렀습니다!');
               playTone(200, 0.13, 'sawtooth', 0.045);
             } else if (oneBlocked && !freeTipActuallyNearBox) {
-              // 한쪽 집게로 상자를 위에서 누른 상태(오시) — 반대쪽 집게는 허공이므로 들어올리지 않고 눌린 상태 유지!
-              if (bestEnt.body.velocity.y > 0) bestEnt.body.velocity.y = 0;
-              setClawFeedback('👇 집게로 상자를 지그시 눌러 밀어넣었습니다!');
-              playTone(210, 0.12, 'triangle', 0.045);
+              // 한쪽 집게가 상자 위/가운데를 찍고 반대쪽은 끝까지 파고든 상태:
+              // 단순히 제자리에서 끝나지 않고, 걸린 집게가 상자를 안쪽(-blockedSideSign)으로 밀고 살짝 들어올렸다 놓아 실제 위치 변화·기울기 연출!
+              const tugLocal = computeWorldEdgeHookLocal(blockedSideSign);
+              const tugAnchorOffset = new CANNON.Vec3(blockedSideSign * 0.24, -0.52, 0);
+              const tugForce = 15.0 + Math.random() * 3.0;
+              state.grabSlipTime = 0.34 + Math.random() * 0.14;
+              state.isWeakGripThisTurn = false;
+
+              // 약간의 수평 밀기/끌어당김(반발 튀어오름 없이 수평 방향만 적용)
+              const nudgeWorldPt = bestEnt.body.pointToWorldFrame(tugLocal);
+              bestEnt.body.applyImpulse(
+                new CANNON.Vec3(-blockedSideSign * 0.28, 0, -Math.sign(bestEnt.body.position.z || 0.01) * 0.08),
+                nudgeWorldPt.vsub(bestEnt.body.position)
+              );
+
+              const constraint = new CANNON.PointToPointConstraint(
+                clawAnchorBody,
+                tugAnchorOffset,
+                bestEnt.body,
+                tugLocal,
+                tugForce
+              );
+              world.addConstraint(constraint);
+              state.grabConstraint = constraint;
+              setClawFeedback('🪝 한쪽 집게가 상자를 밀어내며 살짝 들어올립니다!');
+              playTone(260, 0.12, 'triangle', 0.05);
             } else if (oneBlocked && freeTipReachedSide && freeTipActuallyNearBox) {
-              // 한쪽 집게는 상자 위를 누르고 반대쪽 집게가 실제로 상자 옆면에 닿았을 때만 비스듬히 후킹!
+              // 한쪽 집게는 상자 위를 누르고 반대쪽 집게가 상자 옆면/아래까지 파고들어 비스듬히 후킹!
               const hookLocal = computeWorldEdgeHookLocal(freeSideSign);
               const clawAnchorOffset = new CANNON.Vec3(freeSideSign * 0.24, -0.56, 0);
               const roll = Math.random();
-              const hookForce =
-                roll < 0.3
-                  ? 14.5 + Math.random() * 2.5
-                  : roll < 0.8
-                  ? 18.0 + Math.random() * 3.5
-                  : 22.0 + Math.random() * 2.5;
-              state.grabSlipTime =
-                roll < 0.3
-                  ? 0.34 + Math.random() * 0.16
-                  : roll < 0.8
-                  ? 0.52 + Math.random() * 0.26
-                  : 0.78 + Math.random() * 0.22;
+              const isWeak = roll < 0.07; // 집게 힘 부족 확률 7% (10% 미만)
+              state.isWeakGripThisTurn = isWeak;
+              const hookForce = isWeak
+                ? 13.5 + Math.random() * 2.0
+                : roll < 0.70
+                ? 19.5 + Math.random() * 3.2
+                : 23.0 + Math.random() * 2.8;
+              state.grabSlipTime = isWeak
+                ? 0.34 + Math.random() * 0.14
+                : roll < 0.70
+                ? 0.66 + Math.random() * 0.24
+                : 0.92 + Math.random() * 0.20;
 
               const constraint = new CANNON.PointToPointConstraint(
                 clawAnchorBody,
@@ -1578,13 +1615,15 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
               state.grabConstraint = constraint;
               setClawFeedback('🪝 한쪽 집게가 옆모서리에 걸려 비스듬히 들어올립니다!');
             } else if (tooWideToStraddle && freeTipReachedSide) {
-              // 상자가 가로/대각선으로 넓어 양쪽을 다 감싸진 못해도, 한쪽 집게가 상자 끝을 긁어 비스듬히 들어올림 (상향 튕김 제거)
+              // 상자가 가로/대각선으로 넓어 양쪽을 다 감싸진 못해도, 한쪽 집게가 상자 끝을 긁어 비스듬히 들어올림
               const sideSign = state.clawX >= bestEnt.body.position.x ? 1 : -1;
               const hookLocal = computeWorldEdgeHookLocal(sideSign);
               const clawAnchorOffset = new CANNON.Vec3(sideSign * 0.28, -0.56, 0);
               const roll = Math.random();
-              const scrapeForce = roll < 0.4 ? 13.0 + Math.random() * 3.0 : 16.5 + Math.random() * 3.5;
-              state.grabSlipTime = roll < 0.4 ? 0.28 + Math.random() * 0.16 : 0.44 + Math.random() * 0.24;
+              const isWeak = roll < 0.07; // 7% (10% 미만)
+              state.isWeakGripThisTurn = isWeak;
+              const scrapeForce = isWeak ? 13.0 + Math.random() * 2.0 : 18.0 + Math.random() * 3.5;
+              state.grabSlipTime = isWeak ? 0.30 + Math.random() * 0.14 : 0.56 + Math.random() * 0.26;
 
               const constraint = new CANNON.PointToPointConstraint(
                 clawAnchorBody,
@@ -1597,30 +1636,37 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
               state.grabConstraint = constraint;
               setClawFeedback('🪝 집게가 넓은 상자 끝을 긁어 비스듬히 들어올립니다!');
             } else if (!freeTipReachedSide) {
-              // 집게 끝단이 상자 옆면까지 내려오지 못해 윗면/모서리를 지그시 누름 (반발 튕김 없음)
+              // 집게 끝단이 상자 옆면까지 내려오지 못한 경우에도 모서리를 밀어내며 약하게 들썩임
+              const pushSign = state.clawX >= bestEnt.body.position.x ? -1 : 1;
+              bestEnt.body.applyImpulse(
+                new CANNON.Vec3(pushSign * 0.24, 0, 0.06),
+                pinchWorld.vsub(bestEnt.body.position)
+              );
               if (bestEnt.body.velocity.y > 0) bestEnt.body.velocity.y = 0;
-              setClawFeedback('👇 집게가 상자 모서리를 지그시 눌렀습니다!');
+              setClawFeedback('👆 집게가 상자 모서리를 밀어냈습니다!');
               playTone(210, 0.12, 'triangle', 0.04);
             } else {
-              // 정상 양발 잡기! 현실적인 아케이드 집게 힘 편차 + 중심 이탈 페널티 적용
+              // 정상 양발 잡기! 집게 힘 부족(조기 미끄러짐) 확률 7% (10% 미만)로 축소
               const centerOffsetX = Math.abs(bestEnt.body.position.x - state.clawX);
-              const offCenterPenalty = Math.min(3.5, centerOffsetX * 7.0);
+              const offCenterPenalty = Math.min(3.0, centerOffsetX * 6.0);
               const roll = Math.random();
+              const isWeak = roll < 0.07; // 약 7% (< 10%)
+              state.isWeakGripThisTurn = isWeak;
               let gripForce: number;
               let slipAt: number;
 
-              if (roll < 0.26) {
-                // 약 26%: 집게 힘이 부족한 상태 (조금 들리다 일찍 미끄러짐)
-                gripForce = Math.max(12.5, 15.0 + Math.random() * 3.0 - offCenterPenalty * 0.5);
-                slipAt = 0.28 + Math.random() * 0.24;
-              } else if (roll < 0.80) {
-                // 약 54%: 표준 아케이드 집게 힘 (어느 정도 들어 기울이다 중도에 놓침)
-                gripForce = Math.max(16.5, 20.5 + Math.random() * 3.2 - offCenterPenalty);
-                slipAt = 0.56 + Math.random() * 0.30;
+              if (isWeak) {
+                // 약 7%: 집게 힘이 부족한 상태 (조금 들리다 일찍 미끄러짐)
+                gripForce = Math.max(12.5, 14.5 + Math.random() * 2.5 - offCenterPenalty * 0.5);
+                slipAt = 0.30 + Math.random() * 0.18;
+              } else if (roll < 0.72) {
+                // 약 65%: 안정적인 표준 아케이드 집게 힘 (탄탄하게 들어올린 뒤 자연 낙하)
+                gripForce = Math.max(18.5, 22.0 + Math.random() * 3.0 - offCenterPenalty);
+                slipAt = 0.74 + Math.random() * 0.24;
               } else {
-                // 약 20%: 힘 좋은 집게 (높이까지 단단히 들어올림)
-                gripForce = Math.max(22.0, 25.5 + Math.random() * 2.5 - offCenterPenalty * 0.5);
-                slipAt = 0.94 + Math.random() * 0.22;
+                // 약 28%: 힘 좋은 집게 (높이까지 단단히 들어올림)
+                gripForce = Math.max(23.5, 26.5 + Math.random() * 2.5 - offCenterPenalty * 0.5);
+                slipAt = 0.98 + Math.random() * 0.18;
               }
 
               state.grabSlipTime = slipAt;
@@ -1636,7 +1682,15 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             }
           }
 
-          // Bar 사이를 걸리지 않고 극한으로 통과해 들어올리는 순간 -> '극한 드르륵!' 팝업(1초) + drr.mp3 재생!
+          // 중앙 Bar / 외곽 Bar 어느쪽이든 Bar 근처에서 집게를 들어올릴 때 -> '극한 드르륵!' 팝업(1초) + drr.mp3 재생!
+          if (!state.passedBarGapCleanly) {
+            for (const bar of allBarSpecs) {
+              if (Math.abs(state.clawZ - bar.z) <= 0.34) {
+                state.passedBarGapCleanly = true;
+                break;
+              }
+            }
+          }
           if (state.grabConstraint && state.passedBarGapCleanly && !state.drrTriggeredThisTurn) {
             state.drrTriggeredThisTurn = true;
             triggerExtremeDrr();
@@ -1655,16 +1709,18 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           state.clawZ = Math.min(GACHA_PHYSICS.CLAW_MAX_Z, state.clawZ + 0.18 * dt);
         }
 
-        // 집게 힘 부족으로 들어올리는 도중 미끄러져 놓치는 현실 현상
+        // 들어올리는 도중 지정 시점에 그립 해제 (실제 힘 부족 메시지는 10% 미만 확률일 때만 표시!)
         if (state.grabConstraint && state.phaseTimer >= state.grabSlipTime) {
           world.removeConstraint(state.grabConstraint);
           state.grabConstraint = null;
-          if (!state.didSlipThisLift && state.grabSlipTime < 0.92) {
+          if (!state.didSlipThisLift) {
             state.didSlipThisLift = true;
-            state.leftProngAngle = Math.min(CLAW_OPEN_ANGLE, state.leftProngAngle + 0.14);
-            state.rightProngAngle = Math.min(CLAW_OPEN_ANGLE, state.rightProngAngle + 0.14);
-            setClawFeedback('💨 집게 힘이 부족해 들어올리다 미끄러졌습니다!');
-            playTone(250, 0.13, 'triangle', 0.06);
+            state.leftProngAngle = Math.min(CLAW_OPEN_ANGLE, state.leftProngAngle + 0.12);
+            state.rightProngAngle = Math.min(CLAW_OPEN_ANGLE, state.rightProngAngle + 0.12);
+            if (state.isWeakGripThisTurn) {
+              setClawFeedback('💨 집게 힘이 부족해 들어올리다 미끄러졌습니다!');
+              playTone(250, 0.13, 'triangle', 0.06);
+            }
           }
         }
 

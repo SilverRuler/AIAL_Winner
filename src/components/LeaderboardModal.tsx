@@ -12,6 +12,7 @@ interface LeaderboardModalProps {
   onSelectMemberReward?: (member: string) => void;
   mode?: 'meal' | 'gacha';
   usedWinsByMember?: Record<string, number>;
+  availableSolByMember?: Record<string, number>;
 }
 
 export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
@@ -21,6 +22,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   onSelectMemberReward,
   mode = 'meal',
   usedWinsByMember = {},
+  availableSolByMember = {},
 }) => {
   if (!isOpen) return null;
 
@@ -81,6 +83,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             const isThird = rank === 3 && stat.totalWins > 0;
             const usedCount = usedWinsByMember[stat.member] || 0;
             const availCount = Math.max(0, stat.totalWins - usedCount);
+            const availSol = availableSolByMember[stat.member] || 0;
 
             return (
               <div
@@ -124,9 +127,9 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                           {isGacha ? '뽑기 고수' : '미식가'}
                         </span>
                       )}
-                      {isGacha && availCount > 0 && (
-                        <span className="px-1.5 py-0.5 rounded-md bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold">
-                          신청가능 {availCount}개
+                      {isGacha && availSol > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-md bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-[10px] font-bold font-mono">
+                          신청가능 {availSol} SOL
                         </span>
                       )}
                     </div>

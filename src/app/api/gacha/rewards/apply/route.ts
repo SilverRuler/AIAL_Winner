@@ -4,9 +4,13 @@ import { getTelegramConfig } from '@/lib/gachaServer';
 import { GACHA_DEFAULT_REWARD_AMOUNT } from '@/constants/gacha';
 import { getClientIp, normalizeIp } from '@/lib/ip';
 
+function roundSol(val: number): number {
+  return Math.round(val * 10000) / 10000;
+}
+
 /**
  * GET /api/gacha/rewards/apply
- * UFO 뽑기 전용 리워드 신청 내역 및 멤버별 기신청 차감 개수/풀이 완료 퀴즈 조회
+ * UFO 뽑기 전용 리워드 신청 내역 및 멤버별 총 획득 SOL / 기신청 SOL / 신청 가능 SOL / 풀이 완료 퀴즈 조회
  * (식사배틀 reward_applications와 완전히 별도의 gacha_reward_applications 컬렉션 사용)
  */
 export async function GET(request: NextRequest) {
@@ -45,23 +49,29 @@ export async function GET(request: NextRequest) {
     ]);
 
     const memberActualWins: Record<string, number> = {};
-    const memberWinsAsc: Record<string, number[]> = {};
+    const memberTotalSol: Record<string, number> = {};
     for (const w of allWins as any[]) {
       if (w.member) {
         memberActualWins[w.member] = (memberActualWins[w.member] || 0) + 1;
-        if (!memberWinsAsc[w.member]) memberWinsAsc[w.member] = [];
-        memberWinsAsc[w.member].push(
-          typeof w.rewardAmount === 'number' ? w.rewardAmount : GACHA_DEFAULT_REWARD_AMOUNT
-        );
+        const amt =
+          typeof w.rewardAmount === 'number' ? w.rewardAmount : GACHA_DEFAULT_REWARD_AMOUNT;
+        memberTotalSol[w.member] = roundSol((memberTotalSol[w.member] || 0) + amt);
       }
     }
 
     const memberUsedWins: Record<string, number> = {};
+    const memberUsedSol: Record<string, number> = {};
     const memberSolvedQuizIds: Record<string, string[]> = {};
 
     for (const app of allValidApps as any[]) {
+      if (!app.member) continue;
       memberUsedWins[app.member] =
-        (memberUsedWins[app.member] || 0) + (app.requestedWins || 0);
+        (memberUsedWins[app.member] || 0) + (Number(app.requestedWins) || 0);
+      const appSol =
+        typeof app.rewardAmount === 'number'
+          ? app.rewardAmount
+          : roundSol((Number(app.requestedWins) || 0) * GACHA_DEFAULT_REWARD_AMOUNT);
+      memberUsedSol[app.member] = roundSol((memberUsedSol[app.member] || 0) + appSol);
 
       if (Array.isArray(app.solvedQuizIds)) {
         if (!memberSolvedQuizIds[app.member]) {
@@ -75,11 +85,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 멤버별 미신청(남은) 당첨 상자별 실제 SOL 금액 목록 (FIFO)
-    const memberUnclaimedWinAmounts: Record<string, number[]> = {};
-    for (const [mem, list] of Object.entries(memberWinsAsc)) {
-      const used = memberUsedWins[mem] || 0;
-      memberUnclaimedWinAmounts[mem] = list.slice(used);
+    const memberAvailableSol: Record<string, number> = {};
+    const allMembers = new Set([
+      ...Object.keys(memberTotalSol),
+      ...Object.keys(memberUsedSol),
+    ]);
+    for (const mem of allMembers) {
+      memberAvailableSol[mem] = Math.max(
+        0,
+        roundSol((memberTotalSol[mem] || 0) - (memberUsedSol[mem] || 0))
+      );
     }
 
     return NextResponse.json({
@@ -88,11 +103,11 @@ export async function GET(request: NextRequest) {
         id: app.id || app._id.toString(),
         member: app.member,
         totalWins: app.totalWins || 0,
-        requestedWins: app.requestedWins || 1,
+        requestedWins: app.requestedWins || 0,
         rewardAmount:
           typeof app.rewardAmount === 'number'
             ? app.rewardAmount
-            : Number(((app.requestedWins || 1) * GACHA_DEFAULT_REWARD_AMOUNT).toFixed(4)),
+            : roundSol((app.requestedWins || 1) * GACHA_DEFAULT_REWARD_AMOUNT),
         walletAddress: app.walletAddress || '',
         memo: app.memo || '',
         status: app.status || 'pending',
@@ -103,7 +118,9 @@ export async function GET(request: NextRequest) {
       })),
       memberActualWins,
       memberUsedWins,
-      memberUnclaimedWinAmounts,
+      memberTotalSol,
+      memberUsedSol,
+      memberAvailableSol,
       memberSolvedQuizIds,
     });
   } catch (err: any) {
@@ -117,16 +134,22 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/gacha/rewards/apply
- * UFO 뽑기 리워드 신청 (1개 단위 선택, 퀴즈 통과 후 제출, 접속 IP MongoDB 기록)
+ * UFO 뽑기 리워드 신청 (유저가 원하는 SOL 수량을 직접 입력, 퀴즈 통과 후 제출, 접속 IP MongoDB 기록)
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { member, requestedWins, walletAddress, memo, solvedQuizIds } = body || {};
+    const { member, requestedSol, requestedWins, walletAddress, memo, solvedQuizIds } = body || {};
 
     const trimmedMember = (member || '').trim();
-    const parsedCount = Math.floor(Number(requestedWins));
     const trimmedWallet = (walletAddress || '').trim();
+
+    // 신규 SOL 직접 입력 우선, 레거시 requestedWins fallback 지원
+    const rawSol =
+      requestedSol !== undefined && requestedSol !== null && requestedSol !== ''
+        ? Number(requestedSol)
+        : Number(requestedWins) * GACHA_DEFAULT_REWARD_AMOUNT;
+    const parsedSol = roundSol(rawSol);
 
     if (!trimmedMember) {
       return NextResponse.json(
@@ -142,9 +165,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!parsedCount || isNaN(parsedCount) || parsedCount < 1) {
+    if (!Number.isFinite(rawSol) || parsedSol <= 0) {
       return NextResponse.json(
-        { success: false, message: '리워드 신청은 최소 1개 이상, 1개 단위로 신청 가능합니다.' },
+        { success: false, message: '신청할 SOL 수량을 0보다 큰 숫자로 입력해주세요.' },
+        { status: 400 }
+      );
+    }
+
+    if (parsedSol < 0.001) {
+      return NextResponse.json(
+        { success: false, message: '최소 0.001 SOL 이상부터 신청 가능합니다.' },
         { status: 400 }
       );
     }
@@ -157,42 +187,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. 해당 멤버의 실제 UFO 뽑기 성공 전체 내역 (생성순 FIFO) 조회 (gacha_wins)
-    const memberWinsAsc = await db
+    // 1. 해당 멤버의 실제 UFO 뽑기 누적 획득 SOL 집계 (gacha_wins)
+    const memberWins = await db
       .collection('gacha_wins')
       .find({ member: trimmedMember })
-      .sort({ createdAt: 1 })
       .toArray();
-    const actualWins = memberWinsAsc.length;
+    const actualWins = memberWins.length;
+    const totalEarnedSol = roundSol(
+      memberWins.reduce(
+        (sum: number, w: any) =>
+          sum + (typeof w.rewardAmount === 'number' ? w.rewardAmount : GACHA_DEFAULT_REWARD_AMOUNT),
+        0
+      )
+    );
 
-    // 2. 기존 UFO 뽑기 리워드 기신청 차감 개수 집계 (gacha_reward_applications, rejected 제외)
+    // 2. 기존 UFO 뽑기 리워드 기신청 차감 SOL 집계 (gacha_reward_applications, rejected 제외)
     const existingApps = await db
       .collection('gacha_reward_applications')
       .find({ member: trimmedMember, status: { $ne: 'rejected' } })
       .toArray();
 
-    const usedWins = existingApps.reduce(
-      (sum: number, app: any) => sum + (app.requestedWins || 0),
-      0
+    const usedSol = roundSol(
+      existingApps.reduce(
+        (sum: number, app: any) =>
+          sum +
+          (typeof app.rewardAmount === 'number'
+            ? app.rewardAmount
+            : roundSol((Number(app.requestedWins) || 0) * GACHA_DEFAULT_REWARD_AMOUNT)),
+        0
+      )
     );
 
-    const availableWins = Math.max(0, actualWins - usedWins);
+    const availableSol = Math.max(0, roundSol(totalEarnedSol - usedSol));
 
-    if (availableWins < 1) {
+    if (availableSol <= 0) {
       return NextResponse.json(
         {
           success: false,
-          message: `남은 신청 가능 뽑기 개수가 없습니다. (총 ${actualWins}개 획득 중 ${usedWins}개 기신청)`,
+          message: `남은 신청 가능 SOL이 없습니다. (총 ${totalEarnedSol} SOL 획득 중 ${usedSol} SOL 기신청)`,
         },
         { status: 400 }
       );
     }
 
-    if (parsedCount > availableWins) {
+    if (parsedSol > availableSol + 1e-9) {
       return NextResponse.json(
         {
           success: false,
-          message: `신청 개수(${parsedCount}개)가 남은 신청 가능 개수(${availableWins}개)를 초과했습니다.`,
+          message: `신청 금액(${parsedSol} SOL)이 남은 신청 가능 금액(${availableSol} SOL)을 초과했습니다.`,
         },
         { status: 400 }
       );
@@ -206,27 +248,16 @@ export async function POST(request: NextRequest) {
 
     const rawIp = getClientIp(request);
     const clientIp = normalizeIp(rawIp) || rawIp || '';
-    // FIFO 순서로 이번 신청에 해당하는 당첨 상자들의 실제 SOL 합계 산출
-    const selectedWins = memberWinsAsc.slice(usedWins, usedWins + parsedCount);
-    const rewardSol = Number(
-      selectedWins
-        .reduce(
-          (sum: number, w: any) =>
-            sum + (typeof w.rewardAmount === 'number' ? w.rewardAmount : GACHA_DEFAULT_REWARD_AMOUNT),
-          0
-        )
-        .toFixed(4)
-    );
-    const selectedBoxesText = selectedWins
-      .map((w: any) => `${w.boxLabel || '박스'}(${typeof w.rewardAmount === 'number' ? w.rewardAmount : GACHA_DEFAULT_REWARD_AMOUNT} SOL)`)
-      .join(', ');
+    const remainingSolAfter = Math.max(0, roundSol(availableSol - parsedSol));
 
     const newApplication = {
       id: `gapp_${now}_${Math.random().toString(36).substring(2, 8)}`,
       member: trimmedMember,
       totalWins: actualWins,
-      requestedWins: parsedCount,
-      rewardAmount: rewardSol,
+      totalSol: totalEarnedSol,
+      requestedWins: 0,
+      requestedSol: parsedSol,
+      rewardAmount: parsedSol,
       walletAddress: trimmedWallet,
       memo: (memo || '').trim(),
       status: 'pending',
@@ -242,17 +273,15 @@ export async function POST(request: NextRequest) {
       ip: clientIp,
     } as any);
 
-    const remainingAfterThis = availableWins - parsedCount;
     const cleanMemo = newApplication.memo || '없음';
 
     const telegramText =
       `🎰 <b>[AIAL Winner] UFO 뽑기 리워드 신청 접수!</b>\n` +
       `━━━━━━━━━━━━━━━━━━\n` +
       `👤 <b>신청 멤버:</b> <b>${trimmedMember}</b>\n` +
-      `🏆 <b>총 뽑기 성공:</b> ${actualWins}개\n` +
-      `🎯 <b>이번 신청 수량:</b> <b>${parsedCount}개 (${rewardSol} SOL)</b>\n` +
-      (selectedBoxesText ? `📦 <b>신청 내역:</b> ${selectedBoxesText}\n` : '') +
-      `📉 <b>남은 신청 가능:</b> <b>${remainingAfterThis}개</b> (신청 전 ${availableWins}개)\n` +
+      `🏆 <b>총 누적 획득:</b> ${totalEarnedSol} SOL (${actualWins}개)\n` +
+      `🎯 <b>이번 신청 금액:</b> <b>${parsedSol} SOL</b>\n` +
+      `📉 <b>남은 신청 가능:</b> <b>${remainingSolAfter} SOL</b> (신청 전 ${availableSol} SOL)\n` +
       `💳 <b>지갑 주소 (SOL):</b> <code>${trimmedWallet}</code>\n` +
       `📝 <b>신청자 메모:</b> ${cleanMemo}\n` +
       `⏰ <b>신청 일시:</b> ${kstDate} (KST)\n` +
@@ -287,9 +316,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `${trimmedMember}님의 UFO 뽑기 ${parsedCount}개(${rewardSol} SOL) 리워드 신청이 접수되었습니다!`,
+      message: `${trimmedMember}님의 UFO 뽑기 ${parsedSol} SOL 리워드 신청이 접수되었습니다!`,
       application: newApplication,
-      remainingAvailableWins: remainingAfterThis,
+      remainingAvailableSol: remainingSolAfter,
     });
   } catch (err: any) {
     console.error('Failed to process gacha reward application:', err);

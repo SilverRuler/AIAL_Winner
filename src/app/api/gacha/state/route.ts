@@ -77,32 +77,37 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const roundSol = (v: number) => Math.round(v * 10000) / 10000;
     const usedWinsByMember: Record<string, number> = {};
+    const usedGachaSolByMember: Record<string, number> = {};
     for (const app of validAppsRaw as any[]) {
       if (app.member) {
         usedWinsByMember[app.member] =
-          (usedWinsByMember[app.member] || 0) + (app.requestedWins || 0);
+          (usedWinsByMember[app.member] || 0) + (Number(app.requestedWins) || 0);
+        const appSol =
+          typeof app.rewardAmount === 'number'
+            ? app.rewardAmount
+            : roundSol((Number(app.requestedWins) || 0) * 0.01);
+        usedGachaSolByMember[app.member] = roundSol(
+          (usedGachaSolByMember[app.member] || 0) + appSol
+        );
       }
     }
 
-    // 멤버별 미신청 당첨 내역의 실제 SOL 금액 큐 (오래된 순 FIFO로 기신청 수량 제외)
-    const winsAscByMember: Record<string, number[]> = {};
-    for (let i = allWinsRaw.length - 1; i >= 0; i--) {
-      const doc: any = allWinsRaw[i];
+    // 멤버별 총 획득 SOL 및 남은 신청 가능 SOL 집계
+    const totalGachaSolByMember: Record<string, number> = {};
+    for (const doc of allWinsRaw as any[]) {
       if (!doc?.member) continue;
-      if (!winsAscByMember[doc.member]) winsAscByMember[doc.member] = [];
-      winsAscByMember[doc.member].push(
-        typeof doc.rewardAmount === 'number' ? doc.rewardAmount : 0.01
+      const amt = typeof doc.rewardAmount === 'number' ? doc.rewardAmount : 0.01;
+      totalGachaSolByMember[doc.member] = roundSol(
+        (totalGachaSolByMember[doc.member] || 0) + amt
       );
     }
     const availableGachaSolByMember: Record<string, number> = {};
     for (const m of MEMBERS) {
-      const list = winsAscByMember[m.name] || [];
-      const used = usedWinsByMember[m.name] || 0;
-      const unclaimed = list.slice(used);
-      availableGachaSolByMember[m.name] = Number(
-        unclaimed.reduce((sum, amt) => sum + amt, 0).toFixed(4)
-      );
+      const earned = totalGachaSolByMember[m.name] || 0;
+      const used = usedGachaSolByMember[m.name] || 0;
+      availableGachaSolByMember[m.name] = Math.max(0, roundSol(earned - used));
     }
 
     const gachaWinStats = MEMBERS.map((m) => {

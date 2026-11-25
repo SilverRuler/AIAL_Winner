@@ -87,8 +87,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
   const [quiz2Selected, setQuiz2Selected] = useState<number | null>(null);
   const [quiz2Error, setQuiz2Error] = useState<string>('');
 
-  // 리워드 승수 신청 폼 상태
+  // 리워드 승수 / SOL 신청 폼 상태
   const [requestedWins, setRequestedWins] = useState<number>(minUnit);
+  const [requestedSolInput, setRequestedSolInput] = useState<string>('');
   const [applyWallet, setApplyWallet] = useState<string>('');
   const [applyMemo, setApplyMemo] = useState<string>('');
   const [applyError, setApplyError] = useState<string>('');
@@ -126,18 +127,36 @@ export const RewardModal: React.FC<RewardModalProps> = ({
   // 멤버별 실제 총 뽑기/승수 (gacha 모드에서는 API 응답으로도 보완)
   const [memberActualWinsMap, setMemberActualWinsMap] = useState<Record<string, number>>({});
 
-  // 멤버별 미신청 당첨 상자별 실제 SOL 금액 목록 (gacha 전용, FIFO)
-  const [memberUnclaimedWinAmounts, setMemberUnclaimedWinAmounts] = useState<Record<string, number[]>>({});
+  // 멤버별 UFO 뽑기 SOL 잔고 맵 (gacha 전용: 총 획득 / 기신청 / 신청 가능)
+  const [memberTotalSolMap, setMemberTotalSolMap] = useState<Record<string, number>>({});
+  const [memberUsedSolMap, setMemberUsedSolMap] = useState<Record<string, number>>({});
+  const [memberAvailableSolMap, setMemberAvailableSolMap] = useState<Record<string, number>>({});
 
-  const getGachaSolAmount = (count: number): number => {
-    if (count <= 0) return 0;
-    const list = selectedMember !== 'all' ? memberUnclaimedWinAmounts[selectedMember] : undefined;
-    if (Array.isArray(list) && list.length > 0) {
-      return Number(list.slice(0, count).reduce((s, a) => s + a, 0).toFixed(4));
+  const roundSol = (n: number) => Math.round(n * 10000) / 10000;
+
+  const gachaTotalSol = useMemo(() => {
+    if (!isGacha || selectedMember === 'all') return 0;
+    return memberTotalSolMap[selectedMember] || 0;
+  }, [isGacha, selectedMember, memberTotalSolMap]);
+
+  const gachaUsedSol = useMemo(() => {
+    if (!isGacha || selectedMember === 'all') return 0;
+    return memberUsedSolMap[selectedMember] || 0;
+  }, [isGacha, selectedMember, memberUsedSolMap]);
+
+  const gachaAvailableSol = useMemo(() => {
+    if (!isGacha || selectedMember === 'all') return 0;
+    if (typeof memberAvailableSolMap[selectedMember] === 'number') {
+      return memberAvailableSolMap[selectedMember];
     }
-    return Number((count * 0.01).toFixed(4));
-  };
-  const formatGachaSol = (n: number) => `${getGachaSolAmount(n)} SOL`;
+    return Math.max(0, roundSol(gachaTotalSol - gachaUsedSol));
+  }, [isGacha, selectedMember, memberAvailableSolMap, gachaTotalSol, gachaUsedSol]);
+
+  const parsedRequestedSol = useMemo(() => {
+    const n = parseFloat(requestedSolInput);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return roundSol(n);
+  }, [requestedSolInput]);
 
   // 현재 선택된 멤버의 실제 총 승수 (변하지 않음)
   const userWins = useMemo(() => {
@@ -183,14 +202,19 @@ export const RewardModal: React.FC<RewardModalProps> = ({
     return opts;
   }, [maxClaimableWins, minUnit]);
 
-  // 승수 변경 시 기본 선택값 동기화
+  // 리워드 신청 가능 여부 (뽑기: SOL 잔고 > 0, 식사: 5WIN 이상)
+  const canApplyReward = isGacha ? gachaAvailableSol > 0 : availableWins >= minUnit;
+
+  // 승수 / SOL 잔고 변경 시 기본 입력값 동기화
   useEffect(() => {
-    if (maxClaimableWins >= minUnit) {
+    if (isGacha) {
+      setRequestedSolInput(gachaAvailableSol > 0 ? String(gachaAvailableSol) : '');
+    } else if (maxClaimableWins >= minUnit) {
       setRequestedWins(maxClaimableWins);
     } else {
       setRequestedWins(minUnit);
     }
-  }, [maxClaimableWins, minUnit]);
+  }, [isGacha, gachaAvailableSol, maxClaimableWins, minUnit]);
 
   const toggleSnapshot = (id: string) => {
     setExpandedSnapshots((prev) => ({
@@ -358,8 +382,14 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         if (data.memberActualWins) {
           setMemberActualWinsMap(data.memberActualWins);
         }
-        if (data.memberUnclaimedWinAmounts) {
-          setMemberUnclaimedWinAmounts(data.memberUnclaimedWinAmounts);
+        if (data.memberTotalSol) {
+          setMemberTotalSolMap(data.memberTotalSol);
+        }
+        if (data.memberUsedSol) {
+          setMemberUsedSolMap(data.memberUsedSol);
+        }
+        if (data.memberAvailableSol) {
+          setMemberAvailableSolMap(data.memberAvailableSol);
         }
         if (data.memberUsedWins) {
           setMemberUsedWins(data.memberUsedWins);
@@ -489,7 +519,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
     }
   };
 
-  // 리워드 승수 신청 제출
+  // 리워드 승수 / SOL 신청 제출
   const handleSubmitApply = async () => {
     if (selectedMember === 'all') return;
 
@@ -498,25 +528,42 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       return;
     }
 
-    if (availableWins < minUnit) {
-      setApplyError(
-        isGacha
-          ? `남은 신청 가능 뽑기 개수가 없습니다. (현재 ${availableWins}개)`
-          : `남은 신청 가능 리워드가 5WIN 미만(현재 ${availableWins}WIN)이므로 신청할 수 없습니다.`
-      );
-      return;
-    }
-    if (!requestedWins || requestedWins < minUnit || requestedWins % minUnit !== 0) {
-      setApplyError(isGacha ? '1개 단위로만 신청 가능합니다.' : '5WIN 단위로만 신청 가능합니다.');
-      return;
-    }
-    if (requestedWins > maxClaimableWins) {
-      setApplyError(
-        isGacha
-          ? `최대 ${maxClaimableWins}개까지만 신청 가능합니다. (남은 신청 가능: ${availableWins}개)`
-          : `최대 ${maxClaimableWins}WIN까지만 신청 가능합니다. (남은 신청 가능 리워드: ${availableWins}WIN)`
-      );
-      return;
+    if (isGacha) {
+      if (gachaAvailableSol <= 0) {
+        setApplyError('남은 신청 가능 SOL 잔고가 없습니다.');
+        return;
+      }
+      if (!parsedRequestedSol || parsedRequestedSol <= 0) {
+        setApplyError('신청할 SOL 수량을 0보다 큰 숫자로 입력해주세요.');
+        return;
+      }
+      if (parsedRequestedSol < 0.001) {
+        setApplyError('최소 0.001 SOL 이상부터 신청 가능합니다.');
+        return;
+      }
+      if (parsedRequestedSol > gachaAvailableSol + 1e-9) {
+        setApplyError(
+          `최대 ${gachaAvailableSol} SOL까지만 신청 가능합니다. (현재 신청 가능 잔고: ${gachaAvailableSol} SOL)`
+        );
+        return;
+      }
+    } else {
+      if (availableWins < minUnit) {
+        setApplyError(
+          `남은 신청 가능 리워드가 5WIN 미만(현재 ${availableWins}WIN)이므로 신청할 수 없습니다.`
+        );
+        return;
+      }
+      if (!requestedWins || requestedWins < minUnit || requestedWins % minUnit !== 0) {
+        setApplyError('5WIN 단위로만 신청 가능합니다.');
+        return;
+      }
+      if (requestedWins > maxClaimableWins) {
+        setApplyError(
+          `최대 ${maxClaimableWins}WIN까지만 신청 가능합니다. (남은 신청 가능 리워드: ${availableWins}WIN)`
+        );
+        return;
+      }
     }
 
     const solvedQuizIds = activeQuizzes.map((q) => q.id);
@@ -527,13 +574,23 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       const res = await fetch(applyApiUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          member: selectedMember,
-          requestedWins,
-          walletAddress: applyWallet.trim(),
-          memo: applyMemo.trim(),
-          solvedQuizIds,
-        }),
+        body: JSON.stringify(
+          isGacha
+            ? {
+                member: selectedMember,
+                requestedSol: parsedRequestedSol,
+                walletAddress: applyWallet.trim(),
+                memo: applyMemo.trim(),
+                solvedQuizIds,
+              }
+            : {
+                member: selectedMember,
+                requestedWins,
+                walletAddress: applyWallet.trim(),
+                memo: applyMemo.trim(),
+                solvedQuizIds,
+              }
+        ),
       });
       const data = await res.json();
       if (data.success) {
@@ -543,15 +600,23 @@ export const RewardModal: React.FC<RewardModalProps> = ({
         }
         await fetchApplications();
         if (onApplySuccess) onApplySuccess();
-        const remaining =
-          typeof data.remainingAvailableWins === 'number'
-            ? data.remainingAvailableWins
-            : availableWins - requestedWins;
-        setApplySuccessMsg(
-          isGacha
-            ? `${selectedMember}님의 UFO 뽑기 ${requestedWins}개(${formatGachaSol(requestedWins)}) 리워드 신청이 접수되었습니다! (남은 신청 가능: ${remaining}개)`
-            : `${selectedMember}님의 ${requestedWins}WIN 리워드 신청이 성공적으로 접수되었습니다! (남은 신청 가능 리워드 WIN: ${remaining})`
-        );
+        if (isGacha) {
+          const remainingSol =
+            typeof data.remainingAvailableSol === 'number'
+              ? data.remainingAvailableSol
+              : Math.max(0, roundSol(gachaAvailableSol - parsedRequestedSol));
+          setApplySuccessMsg(
+            `${selectedMember}님의 UFO 뽑기 ${parsedRequestedSol} SOL 리워드 신청이 접수되었습니다! (남은 신청 가능: ${remainingSol} SOL)`
+          );
+        } else {
+          const remaining =
+            typeof data.remainingAvailableWins === 'number'
+              ? data.remainingAvailableWins
+              : availableWins - requestedWins;
+          setApplySuccessMsg(
+            `${selectedMember}님의 ${requestedWins}WIN 리워드 신청이 성공적으로 접수되었습니다! (남은 신청 가능 리워드 WIN: ${remaining})`
+          );
+        }
         setViewMode('history');
       } else {
         setApplyError(data.message || '신청 처리에 실패했습니다.');
@@ -569,7 +634,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       alert('상단 멤버 탭에서 신청할 멤버를 먼저 선택해주세요.');
       return;
     }
-    if (availableWins < minUnit) {
+    if (!canApplyReward) {
       setViewMode('intro');
       return;
     }
@@ -834,12 +899,12 @@ export const RewardModal: React.FC<RewardModalProps> = ({
           <div className="p-6 sm:p-8 flex-1 overflow-y-auto flex flex-col justify-center items-center text-center space-y-5 animate-fade-in my-auto">
             <div
               className={`w-16 h-16 sm:w-20 sm:h-20 rounded-3xl mx-auto flex items-center justify-center shadow-2xl ring-2 ${
-                availableWins >= 5
+                canApplyReward
                   ? 'bg-gradient-to-tr from-purple-600 to-indigo-500 text-white ring-purple-400/40 shadow-purple-500/20'
                   : 'bg-slate-800 text-slate-400 ring-slate-700 shadow-slate-900/40'
               }`}
             >
-              {availableWins >= 5 ? (
+              {canApplyReward ? (
                 <Gift className="w-8 h-8 sm:w-10 sm:h-10 text-white animate-bounce" />
               ) : (
                 <Trophy className="w-8 h-8 sm:w-10 sm:h-10 text-slate-400" />
@@ -848,34 +913,37 @@ export const RewardModal: React.FC<RewardModalProps> = ({
 
             <div className="space-y-2">
               <div
-                className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full border text-xs font-black shadow-sm ${selectedMemberInfo.avatarBg} ${selectedMemberInfo.borderColor}`}
+                className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full border text-xs font-black shadow-sm flex-wrap justify-center ${selectedMemberInfo.avatarBg} ${selectedMemberInfo.borderColor}`}
               >
                 <span>{selectedMember}</span>
-                <span className="text-amber-400 font-mono">(총 {formatUnit(userWins)})</span>
+                <span className="text-amber-400 font-mono">
+                  {isGacha ? `(총 ${gachaTotalSol} SOL · ${userWins}개)` : `(총 ${formatUnit(userWins)})`}
+                </span>
                 <span className="text-cyan-300 font-mono font-bold">
-                  [신청 가능: {formatUnit(availableWins)}
-                  {isGacha ? ` / ${formatGachaSol(availableWins)}` : ''}]
+                  {isGacha
+                    ? `[신청 가능: ${gachaAvailableSol} SOL]`
+                    : `[신청 가능: ${formatUnit(availableWins)}]`}
                 </span>
               </div>
 
-              {availableWins < minUnit ? (
+              {!canApplyReward ? (
                 <div className="space-y-2.5 pt-1">
                   <h3 className="text-base sm:text-lg font-black text-rose-400 leading-snug">
                     {isGacha
-                      ? '아직 신청 가능한 UFO 뽑기 당첨 내역이 없습니다.'
+                      ? '아직 신청 가능한 UFO 뽑기 리워드(SOL)가 없습니다.'
                       : '5WIN 미만은 리워드를 받기 위한 최소 승수를 채우지 못했습니다.'}
                   </h3>
                   <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
                     {isGacha ? (
                       <>
-                        UFO 뽑기 리워드는 <strong className="text-purple-300 font-bold">상자별 0.003 ~ 0.015 SOL</strong>씩 신청하실 수 있습니다.
-                        (#1: 0.003 / #2: 0.008 / #3: 0.01 / #4: 0.015 SOL)
-                        현재 {selectedMember}님의 총 뽑기 성공은 <strong className="text-amber-400">{userWins}개</strong>이며,
-                        {usedWins > 0 && (
-                          <span className="text-slate-300"> (기존에 {usedWins}개 신청 완료) </span>
+                        UFO 뽑기 리워드는 상자별 획득한 SOL(#1: 0.003 / #2: 0.008 / #3: 0.01 / #4: 0.015 SOL) 중{' '}
+                        <strong className="text-purple-300 font-bold">원하는 SOL 수량을 직접 입력</strong>해 신청하실 수 있습니다.
+                        현재 {selectedMember}님의 누적 획득액은 <strong className="text-amber-400 font-mono">{gachaTotalSol} SOL</strong>이며,
+                        {gachaUsedSol > 0 && (
+                          <span className="text-slate-300"> (기존에 {gachaUsedSol} SOL 신청 완료) </span>
                         )}
                         <span className="block mt-1">
-                          남은 신청 가능 개수는 <strong className="text-cyan-300 font-bold">{availableWins}개</strong>입니다.
+                          남은 신청 가능 잔고는 <strong className="text-cyan-300 font-bold font-mono">{gachaAvailableSol} SOL</strong>입니다.
                         </span>
                       </>
                     ) : (
@@ -906,14 +974,14 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                   <p className="text-xs text-slate-300 max-w-md mx-auto leading-relaxed">
                     {isGacha ? (
                       <>
-                        축하합니다! {selectedMember}님의 총 뽑기 성공은{' '}
-                        <strong className="text-amber-400 font-bold">{userWins}개</strong>이며,
-                        {usedWins > 0 && (
-                          <span className="text-slate-400"> (기신청 {usedWins}개 제외) </span>
+                        축하합니다! {selectedMember}님의 누적 뽑기 획득액은{' '}
+                        <strong className="text-amber-400 font-bold font-mono">{gachaTotalSol} SOL</strong> ({userWins}개)이며,
+                        {gachaUsedSol > 0 && (
+                          <span className="text-slate-400"> (기신청 {gachaUsedSol} SOL 제외) </span>
                         )}
-                        현재 <strong className="text-cyan-300 font-bold">신청 가능 수량은 {availableWins}개 ({formatGachaSol(availableWins)})</strong>입니다.
+                        현재 <strong className="text-cyan-300 font-bold font-mono">신청 가능 잔고는 {gachaAvailableSol} SOL</strong>입니다.
                         <span className="block mt-1.5 text-[11px] text-amber-300">
-                          💡 업비트 지갑은 0.01 SOL 입금 제한이 있어 0.015 ~ 0.02 SOL 이상 모아서 신청하시는 것이 안전합니다.
+                          💡 원하시는 SOL 수량을 직접 입력해 신청하실 수 있으며, 업비트 지갑은 0.01 SOL 미만 입금 시 미반영될 수 있습니다.
                         </span>
                       </>
                     ) : (
@@ -937,7 +1005,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
             </div>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-3 w-full max-w-xs sm:max-w-md">
-              {availableWins >= minUnit && (
+              {canApplyReward && (
                 <button
                   type="button"
                   onClick={handleStartQuiz}
@@ -1274,25 +1342,32 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                 <div>
                   <h3 className="text-sm sm:text-base font-black text-white">
                     {isGacha
-                      ? '몇 개 뽑은 만큼 리워드를 신청하시겠습니까?'
+                      ? '몇 SOL을 리워드로 신청하시겠습니까?'
                       : '몇 WIN에 대한 리워드를 신청 하시겠습니까?'}
                   </h3>
                   <p className="text-[11px] text-slate-400">
                     {isGacha
-                      ? '※ 상자별 리워드(#1: 0.003 / #2: 0.008 / #3: 0.01 / #4: 0.015 SOL)가 뽑은 순서대로 합산됩니다.'
+                      ? '※ 보유하신 신청 가능 SOL 잔고 내에서 원하시는 수량을 직접 입력해 신청할 수 있습니다.'
                       : '※ 5WIN 단위로 차감할 수 있습니다. (5의 배수가 아닌 숫자는 신청 불가)'}
                   </p>
                 </div>
                 <div className="text-right">
                   <span className="text-[10px] text-slate-400 block">
-                    총 {formatUnit(userWins)} 보유
+                    {isGacha
+                      ? `누적 획득: ${gachaTotalSol} SOL (${userWins}개)`
+                      : `총 ${formatUnit(userWins)} 보유`}
                   </span>
                   <span className="text-sm font-black text-cyan-300 font-mono">
                     {isGacha
-                      ? `남은 신청 가능: ${availableWins}개 (${formatGachaSol(availableWins)})`
+                      ? `신청 가능: ${gachaAvailableSol} SOL`
                       : `남은 신청 가능 리워드 WIN: ${availableWins}`}
                   </span>
-                  {(usedWins > 0 || exchangedWins > 0) && (
+                  {isGacha && gachaUsedSol > 0 && (
+                    <span className="text-[10px] text-slate-500 block">
+                      (기신청 {gachaUsedSol} SOL 차감)
+                    </span>
+                  )}
+                  {!isGacha && (usedWins > 0 || exchangedWins > 0) && (
                     <span className="text-[10px] text-slate-500 block">
                       ({usedWins > 0 ? `기신청 ${formatUnit(usedWins)} 차감` : ''}
                       {usedWins > 0 && exchangedWins > 0 ? ' · ' : ''}
@@ -1302,33 +1377,104 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                 </div>
               </div>
 
-              {/* 수량 선택 버튼 그리드 */}
-              <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-slate-300">
-                  {isGacha ? '신청 수량 선택 (1개 단위 · 상자별 SOL 합산) *' : '신청 차감 승수 선택 (5WIN 단위) *'}
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {allowedWinOptions.map((win) => (
+              {/* 수량 선택 / SOL 직접 입력 */}
+              {isGacha ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-slate-300 flex items-center justify-between">
+                    <span>신청할 SOL 수량 직접 입력 *</span>
+                    <span className="text-[11px] text-cyan-300 font-mono">
+                      최대 {gachaAvailableSol} SOL
+                    </span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="0.001"
+                        min="0.001"
+                        max={gachaAvailableSol}
+                        value={requestedSolInput}
+                        onChange={(e) => {
+                          setRequestedSolInput(e.target.value);
+                          if (applyError) setApplyError('');
+                        }}
+                        placeholder={`예: ${gachaAvailableSol}`}
+                        className="w-full bg-slate-900 border border-slate-700 focus:border-purple-400 rounded-xl px-3.5 py-2.5 pr-14 text-sm sm:text-base font-black text-white font-mono outline-none"
+                      />
+                      <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-amber-400">
+                        SOL
+                      </span>
+                    </div>
                     <button
-                      key={win}
                       type="button"
-                      onClick={() => setRequestedWins(win)}
-                      className={`py-2 px-3 rounded-xl border font-black text-xs transition-all cursor-pointer ${
-                        requestedWins === win
-                          ? 'bg-gradient-to-r from-purple-600 to-indigo-600 border-purple-400 text-white shadow-md shadow-purple-600/30 scale-102 ring-1 ring-purple-300'
-                          : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
-                      }`}
+                      onClick={() => {
+                        setRequestedSolInput(String(gachaAvailableSol));
+                        if (applyError) setApplyError('');
+                      }}
+                      className="px-3.5 py-2.5 rounded-xl bg-purple-600/25 hover:bg-purple-600/40 border border-purple-400/50 text-purple-200 font-black text-xs shrink-0 cursor-pointer transition-colors"
                     >
-                      {isGacha ? `${win}개 (${formatGachaSol(win)})` : `${win} WIN 신청`}
+                      전액 입력
                     </button>
-                  ))}
+                  </div>
+
+                  {/* 빠른 입력 프리셋 (보유 잔고 내) */}
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[0.01, 0.015, 0.02, 0.03, 0.05]
+                      .filter((preset) => preset < gachaAvailableSol - 1e-9)
+                      .map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => {
+                            setRequestedSolInput(String(preset));
+                            if (applyError) setApplyError('');
+                          }}
+                          className={`px-2.5 py-1 rounded-lg border text-[11px] font-mono font-bold cursor-pointer transition-colors ${
+                            parsedRequestedSol === preset
+                              ? 'bg-purple-600/35 border-purple-400 text-white'
+                              : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                          }`}
+                        >
+                          {preset} SOL
+                        </button>
+                      ))}
+                  </div>
+
+                  {parsedRequestedSol > gachaAvailableSol + 1e-9 && (
+                    <p className="text-[11px] text-rose-400 font-bold">
+                      ⚠️ 신청 가능 잔고({gachaAvailableSol} SOL)를 초과했습니다.
+                    </p>
+                  )}
+                  {parsedRequestedSol > 0 && parsedRequestedSol < 0.01 && (
+                    <p className="text-[11px] text-amber-300">
+                      ⚠️ 업비트 지갑은 0.01 SOL 미만 입금 시 미반영될 수 있습니다. (0.01 SOL 이상 권장)
+                    </p>
+                  )}
                 </div>
-                {isGacha && getGachaSolAmount(requestedWins) < 0.015 && (
-                  <p className="text-[11px] text-amber-300 pt-1">
-                    ⚠️ 업비트 지갑은 0.01 SOL 미만 입금 시 미반영될 수 있어 0.015 ~ 0.02 SOL 이상 모아서 신청하시는 것이 안전합니다.
-                  </p>
-                )}
-              </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-300">
+                    신청 차감 승수 선택 (5WIN 단위) *
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {allowedWinOptions.map((win) => (
+                      <button
+                        key={win}
+                        type="button"
+                        onClick={() => setRequestedWins(win)}
+                        className={`py-2 px-3 rounded-xl border font-black text-xs transition-all cursor-pointer ${
+                          requestedWins === win
+                            ? 'bg-gradient-to-r from-purple-600 to-indigo-600 border-purple-400 text-white shadow-md shadow-purple-600/30 scale-102 ring-1 ring-purple-300'
+                            : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
+                        }`}
+                      >
+                        {win} WIN 신청
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* 솔라나 지갑 주소 (필수) */}
               <div className="space-y-1">
@@ -1394,7 +1540,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                       <Gift className="w-4 h-4" />
                       <span>
                         {isGacha
-                          ? `${requestedWins}개 (${formatGachaSol(requestedWins)}) 리워드 신청 완료`
+                          ? parsedRequestedSol > 0
+                            ? `${parsedRequestedSol} SOL 리워드 신청 완료`
+                            : 'SOL 수량을 입력해주세요'
                           : `${requestedWins} WIN 리워드 신청 완료`}
                       </span>
                     </>
@@ -1441,11 +1589,11 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                     {selectedMember !== 'all' && (
                       <>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono">
-                          총 {formatUnit(userWins)}
+                          {isGacha ? `총 ${gachaTotalSol} SOL (${userWins}개)` : `총 ${formatUnit(userWins)}`}
                         </span>
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold font-mono">
                           {isGacha
-                            ? `신청 가능: ${availableWins}개 (${formatGachaSol(availableWins)})`
+                            ? `신청 가능: ${gachaAvailableSol} SOL`
                             : `남은 신청 가능 리워드 WIN: ${availableWins}${exchangedWins > 0 ? ` (뽑기권과 승수 교환 ${exchangedWins}회 차감)` : ''}`}
                         </span>
                       </>

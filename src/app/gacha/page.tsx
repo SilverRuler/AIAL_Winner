@@ -625,18 +625,18 @@ export default function GachaPage() {
       {/* 메인 게임 영역 */}
       <main className="flex-1 max-w-6xl w-full mx-auto px-3 sm:px-6 py-4 sm:py-6 space-y-5">
         {/* 미수령 당첨 리워드 신청 가능 알림 */}
-        {myAvailableGachaCount > 0 && (
+        {myAvailableGachaSol > 0 && (
           <div className="p-3.5 rounded-2xl bg-gradient-to-r from-amber-500/20 via-orange-500/15 to-rose-500/20 border border-amber-400/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
             <div className="flex items-center gap-2.5">
               <Gift className="w-5 h-5 text-amber-300 shrink-0 animate-bounce" />
               <div className="text-xs sm:text-sm">
-                <strong className="text-white">{selectedMember}</strong>님이 리워드 신청 가능한 당첨 상자가{' '}
-                <strong className="text-amber-300">
-                  {myAvailableGachaCount}개 ({myAvailableGachaSol} SOL)
+                <strong className="text-white">{selectedMember}</strong>님이 리워드 신청 가능한 잔고가{' '}
+                <strong className="text-amber-300 font-mono">
+                  {myAvailableGachaSol} SOL
                 </strong>{' '}
                 있습니다!{' '}
                 <span className="text-[11px] text-slate-300">
-                  (업비트 입금 시 0.015 SOL 이상 모아서 신청 권장)
+                  (업비트 입금 시 0.01 SOL 이상 모아서 신청 권장)
                 </span>
               </div>
             </div>
@@ -1087,6 +1087,7 @@ export default function GachaPage() {
         stats={gachaWinStats}
         mode="gacha"
         usedWinsByMember={usedWinsByMember}
+        availableSolByMember={availableGachaSolByMember}
         onSelectMemberReward={(member) => handleOpenGachaReward(member, false)}
       />
 

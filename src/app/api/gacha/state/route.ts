@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [machine, ticketsByMember, allWinsRaw, validAppsRaw, mealWinDocs, mealRewardApps, winExchanges] =
+    const [machine, ticketsByMember, allWinsRaw, validAppsRaw, solExchangesRaw, mealWinDocs, mealRewardApps, winExchanges] =
       await Promise.all([
         getOrInitMachineState(db),
         getAllMemberTicketBalances(db),
@@ -31,6 +31,10 @@ export async function GET(request: NextRequest) {
         db
           .collection('gacha_reward_applications')
           .find({ status: { $ne: 'rejected' } })
+          .toArray(),
+        db
+          .collection('gacha_sol_exchanges')
+          .find({}, { projection: { member: 1, solUsed: 1 } })
           .toArray(),
         db
           .collection('meals')
@@ -90,6 +94,13 @@ export async function GET(request: NextRequest) {
             : roundSol((Number(app.requestedWins) || 0) * 0.01);
         usedGachaSolByMember[app.member] = roundSol(
           (usedGachaSolByMember[app.member] || 0) + appSol
+        );
+      }
+    }
+    for (const ex of solExchangesRaw as any[]) {
+      if (ex.member) {
+        usedGachaSolByMember[ex.member] = roundSol(
+          (usedGachaSolByMember[ex.member] || 0) + (Number(ex.solUsed) || 0)
         );
       }
     }

@@ -27,7 +27,8 @@ export type GachaLogType =
   | 'admin_reset'
   | 'admin_refill'
   | 'admin_ticket'
-  | 'exchange';
+  | 'exchange'
+  | 'exchange_sol';
 
 export interface GachaLogInput {
   type: GachaLogType;

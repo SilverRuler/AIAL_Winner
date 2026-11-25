@@ -58,6 +58,7 @@ export default function GachaPage() {
     Record<string, { actualWins: number; rewardUsedWins: number; exchangedWins: number; availableMealWins: number }>
   >({});
   const [isExchangingWin, setIsExchangingWin] = useState<boolean>(false);
+  const [isExchangingSol, setIsExchangingSol] = useState<boolean>(false);
   const [selectedMember, setSelectedMember] = useState<string>(MEMBERS[0].name);
 
   const [isLeaderboardOpen, setIsLeaderboardOpen] = useState<boolean>(false);
@@ -489,6 +490,46 @@ export default function GachaPage() {
     }
   };
 
+  const handleExchangeSolForTicket = async () => {
+    if (isExchangingSol || activeTurnId) return;
+    const availSol = myAvailableGachaSol;
+    if (availSol < 0.01) {
+      setStatusMessage(
+        `${selectedMember}님의 신청 가능 뽑기 리워드(${availSol} SOL)가 부족합니다. (0.01 SOL 이상 필요)`
+      );
+      return;
+    }
+
+    const solAfter = Math.max(0, Math.round((availSol - 0.01) * 10000) / 10000);
+    const ok = confirm(
+      `[${selectedMember}] 뽑기 리워드 0.01 SOL을 뽑기권 1장으로 교환하시겠습니까?\n\n` +
+        `• 신청 가능 뽑기 리워드: ${availSol} SOL → ${solAfter} SOL\n` +
+        `• 뽑기권 +1장 즉시 지급`
+    );
+    if (!ok) return;
+
+    try {
+      setIsExchangingSol(true);
+      const resp = await fetch('/api/gacha/exchange-sol', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ member: selectedMember, ticketCount: 1 }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        if (data.ticketsByMember) setTicketsByMember(data.ticketsByMember);
+        setStatusMessage(data.message);
+        await fetchState();
+      } else {
+        setStatusMessage(data.message || '뽑기 리워드 교환 실패');
+      }
+    } catch {
+      setStatusMessage('뽑기 리워드 교환 중 오류가 발생했습니다.');
+    } finally {
+      setIsExchangingSol(false);
+    }
+  };
+
   const handleAdminGrantTicket = async (amount: number) => {
     try {
       setIsGranting(true);
@@ -642,13 +683,26 @@ export default function GachaPage() {
                 </span>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => handleOpenGachaReward(selectedMember, false)}
-              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shrink-0 cursor-pointer"
-            >
-              🎁 리워드 신청하기
-            </button>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {myAvailableGachaSol >= 0.01 && (
+                <button
+                  type="button"
+                  disabled={isExchangingSol || !!activeTurnId}
+                  onClick={handleExchangeSolForTicket}
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/60 text-emerald-200 font-black text-xs shrink-0 cursor-pointer disabled:opacity-40"
+                  title="뽑기 리워드 0.01 SOL을 뽑기권 1장으로 즉시 교환"
+                >
+                  {isExchangingSol ? '교환 중...' : '🎟️ 0.01 SOL → 1뽑기권'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleOpenGachaReward(selectedMember, false)}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shrink-0 cursor-pointer"
+              >
+                🎁 리워드 신청하기
+              </button>
+            </div>
           </div>
         )}
 
@@ -663,6 +717,22 @@ export default function GachaPage() {
               </span>
             </div>
             <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleExchangeSolForTicket}
+                disabled={isExchangingSol || !!activeTurnId || myAvailableGachaSol < 0.01}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/50 text-emerald-200 text-[11px] font-black transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                title="뽑기 리워드 0.01 SOL을 뽑기권 1장으로 교환 (신청 가능 뽑기 리워드가 0.01 SOL 이상일 때만 가능)"
+              >
+                {isExchangingSol ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <Coins className="w-3 h-3 text-emerald-300" />
+                )}
+                <span>
+                  리워드 0.01 SOL → 1뽑기권 교환 (보유 {myAvailableGachaSol} SOL)
+                </span>
+              </button>
               <button
                 type="button"
                 onClick={handleExchangeWinForTickets}
@@ -1177,7 +1247,7 @@ export default function GachaPage() {
                     <p className="flex items-start gap-2">
                       <Coins className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                       <span>
-                        뽑기 리워드 신청 시 보유 중인 신청 가능 잔고 내에서 <strong className="text-amber-300">원하는 SOL 수량을 직접 입력</strong>해 신청할 수 있습니다.
+                        뽑기 리워드 신청 시 보유 중인 신청 가능 잔고 내에서 <strong className="text-amber-300">원하는 SOL 수량을 직접 입력</strong>해 신청할 수 있으며, <strong className="text-emerald-300">0.01 SOL당 뽑기권 1회</strong>로도 즉시 교환할 수 있습니다.
                       </span>
                     </p>
                     <p className="flex items-start gap-2 text-slate-300">

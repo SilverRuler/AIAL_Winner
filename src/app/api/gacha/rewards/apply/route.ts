@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       query.member = member;
     }
 
-    const [applications, allValidApps, allWins] = await Promise.all([
+    const [applications, allValidApps, allWins, allSolExchanges] = await Promise.all([
       db
         .collection('gacha_reward_applications')
         .find(query)
@@ -45,6 +45,10 @@ export async function GET(request: NextRequest) {
         .collection('gacha_wins')
         .find({})
         .sort({ createdAt: 1 })
+        .toArray(),
+      db
+        .collection('gacha_sol_exchanges')
+        .find({}, { projection: { member: 1, solUsed: 1 } })
         .toArray(),
     ]);
 
@@ -85,6 +89,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const memberExchangedSol: Record<string, number> = {};
+    for (const ex of allSolExchanges as any[]) {
+      if (!ex.member) continue;
+      const s = Number(ex.solUsed) || 0;
+      memberExchangedSol[ex.member] = roundSol((memberExchangedSol[ex.member] || 0) + s);
+      memberUsedSol[ex.member] = roundSol((memberUsedSol[ex.member] || 0) + s);
+    }
+
     const memberAvailableSol: Record<string, number> = {};
     const allMembers = new Set([
       ...Object.keys(memberTotalSol),
@@ -120,6 +132,7 @@ export async function GET(request: NextRequest) {
       memberUsedWins,
       memberTotalSol,
       memberUsedSol,
+      memberExchangedSol,
       memberAvailableSol,
       memberSolvedQuizIds,
     });
@@ -201,13 +214,19 @@ export async function POST(request: NextRequest) {
       )
     );
 
-    // 2. 기존 UFO 뽑기 리워드 기신청 차감 SOL 집계 (gacha_reward_applications, rejected 제외)
-    const existingApps = await db
-      .collection('gacha_reward_applications')
-      .find({ member: trimmedMember, status: { $ne: 'rejected' } })
-      .toArray();
+    // 2. 기존 UFO 뽑기 리워드 기신청 + 뽑기권 교환 차감 SOL 집계 (rejected 제외)
+    const [existingApps, existingSolExchanges] = await Promise.all([
+      db
+        .collection('gacha_reward_applications')
+        .find({ member: trimmedMember, status: { $ne: 'rejected' } })
+        .toArray(),
+      db
+        .collection('gacha_sol_exchanges')
+        .find({ member: trimmedMember })
+        .toArray(),
+    ]);
 
-    const usedSol = roundSol(
+    const usedAppliedSol = roundSol(
       existingApps.reduce(
         (sum: number, app: any) =>
           sum +
@@ -217,6 +236,13 @@ export async function POST(request: NextRequest) {
         0
       )
     );
+    const usedExchangedSol = roundSol(
+      existingSolExchanges.reduce(
+        (sum: number, ex: any) => sum + (Number(ex.solUsed) || 0),
+        0
+      )
+    );
+    const usedSol = roundSol(usedAppliedSol + usedExchangedSol);
 
     const availableSol = Math.max(0, roundSol(totalEarnedSol - usedSol));
 

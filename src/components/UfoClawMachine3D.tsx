@@ -1218,11 +1218,11 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         const rightTipWorld = new CANNON.Vec3(rightTipVec3.x, rightTipVec3.y, rightTipVec3.z);
         const ufoBottomWorld = new CANNON.Vec3(state.clawX, state.clawY - 0.06, state.clawZ);
 
-        // Bar 근처 통과 감지 (중앙 Bar ±0.455 및 외곽 Bar ±1.02 모두 포함):
-        // 어느쪽 Bar든 근처(Z 거리 0.34 이내, 바 높이 근처 이하)를 지나 내려온 뒤 들어올리면 '극한 드르륵!' 발동
+        // 중앙 빨간 Bar(z = ±0.455) 근처 통과 감지 (외곽 파란 Bar 제외, 위/아래 모두 포함):
         for (const tip of [leftTipWorld, rightTipWorld]) {
           for (const bar of allBarSpecs) {
-            if (Math.abs(tip.z - bar.z) <= 0.34 && tip.y <= bar.y + 0.18) {
+            if (bar.isOuter) continue;
+            if (Math.abs(tip.z - bar.z) <= 0.28) {
               state.passedBarGapCleanly = true;
               break;
             }
@@ -1682,10 +1682,11 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             }
           }
 
-          // 중앙 Bar / 외곽 Bar 어느쪽이든 Bar 근처에서 집게를 들어올릴 때 -> '극한 드르륵!' 팝업(1초) + drr.mp3 재생!
+          // 중앙 빨간 Bar(z = ±0.455) 근처(위/아래 포함, 외곽 Bar 제외)에서 집게를 들어올릴 때 -> '극한 드르륵!' 팝업(1초) + drr.mp3 재생!
           if (!state.passedBarGapCleanly) {
             for (const bar of allBarSpecs) {
-              if (Math.abs(state.clawZ - bar.z) <= 0.34) {
+              if (bar.isOuter) continue;
+              if (Math.abs(state.clawZ - bar.z) <= 0.28) {
                 state.passedBarGapCleanly = true;
                 break;
               }

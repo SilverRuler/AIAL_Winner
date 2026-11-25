@@ -9,12 +9,14 @@ interface GachaWinModalProps {
   isOpen: boolean;
   onClose: () => void;
   winRecord: GachaWinRecord | null;
+  refundedTickets?: number;
 }
 
 export const GachaWinModal: React.FC<GachaWinModalProps> = ({
   isOpen,
   onClose,
   winRecord,
+  refundedTickets = 0,
 }) => {
   // 당첨 팝업이 열리자마자 폭죽 효과 발사
   useEffect(() => {
@@ -96,6 +98,12 @@ export const GachaWinModal: React.FC<GachaWinModalProps> = ({
                 {winRecord.member}님 · +{winRecord.rewardAmount} SOL 적립
               </span>
             </div>
+
+            {refundedTickets > 0 && (
+              <div className="px-3 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-400/40 text-xs font-bold text-emerald-300">
+                🎟️ 연속 뽑기 조기 당첨으로 남은 뽑기권 {refundedTickets}장이 정상 반환되었습니다!
+              </div>
+            )}
 
             <p className="text-[11px] text-slate-400 pt-1">
               리워드는 상단 <strong className="text-amber-300">[명예의 전당]</strong>에서 원하실 때 신청할 수 있습니다.

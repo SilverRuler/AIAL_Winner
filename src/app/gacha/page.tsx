@@ -119,6 +119,7 @@ export default function GachaPage() {
   const [isGranting, setIsGranting] = useState<boolean>(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [activeWinModal, setActiveWinModal] = useState<GachaWinRecord | null>(null);
+  const [activeWinRefundedTickets, setActiveWinRefundedTickets] = useState<number>(0);
 
   // 관리자 세션 확인
   useEffect(() => {
@@ -423,9 +424,10 @@ export default function GachaPage() {
           const hasWon = Array.isArray(data.wonRecords) && data.wonRecords.length > 0;
           if (hasWon) {
             setActiveWinModal(data.wonRecords[0]);
+            setActiveWinRefundedTickets(Number(data.refundedTickets) || 0);
             const refundText =
               data.refundedTickets > 0
-                ? ` (상품 완판으로 미사용 뽑기권 ${data.refundedTickets}장 자동 환불)`
+                ? ` (조기 당첨으로 미사용 뽑기권 ${data.refundedTickets}장 자동 반환)`
                 : '';
             setStatusMessage(
               `🎉 축하합니다! ${selectedMember}님이 ${data.wonRecords.map((w: GachaWinRecord) => w.boxLabel).join(', ')}을 뽑았습니다!${refundText}`
@@ -949,7 +951,7 @@ export default function GachaPage() {
 
         {/* 3. 최근 뽑기 당첨 내역 */}
         {(() => {
-          const RECENT_PREVIEW_COUNT = 3;
+          const RECENT_PREVIEW_COUNT = 4;
           const RECENT_PAGE_SIZE = 10;
           const totalRecentCount = recentWins.length;
           const totalPages = Math.max(1, Math.ceil(totalRecentCount / RECENT_PAGE_SIZE));
@@ -1044,7 +1046,7 @@ export default function GachaPage() {
                     ))}
                   </div>
 
-                  {/* 더 보기 버튼 (기본 최근 3건만 표시) */}
+                  {/* 더 보기 버튼 (기본 최근 4건만 표시) */}
                   {!showAllRecentWins && totalRecentCount > RECENT_PREVIEW_COUNT && (
                     <div className="pt-1 flex justify-center">
                       <button
@@ -1126,7 +1128,7 @@ export default function GachaPage() {
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 hover:text-white text-[11px] font-bold cursor-pointer transition-colors"
                       >
                         <ChevronUp className="w-3.5 h-3.5" />
-                        <span>최근 3건만 보기</span>
+                        <span>최근 4건만 보기</span>
                       </button>
                     </div>
                   )}
@@ -1481,6 +1483,9 @@ export default function GachaPage() {
               <p className="text-xs sm:text-sm text-white font-bold leading-relaxed break-keep">
                 연속 뽑기를 시도합니다. 도중에 브라우져를 나가면 뽑기는 무효가 되고 뽑기권(티켓)은 반환받지 못 합니다.
               </p>
+              <p className="text-[11px] text-emerald-300 font-bold">
+                ※ 연속 뽑기 도중 조기 당첨 시 남은 미사용 뽑기권은 자동으로 정상 반환됩니다.
+              </p>
               <p className="text-[11px] text-slate-400">
                 (선택한 뽑기권 {pendingMultiPlayCount}장
                 {Math.floor(pendingMultiPlayCount / 5) > 0
@@ -1518,6 +1523,7 @@ export default function GachaPage() {
         isOpen={!!activeWinModal}
         onClose={() => {
           setActiveWinModal(null);
+          setActiveWinRefundedTickets(0);
           if (pendingNextTurnKey) {
             const nextKey = pendingNextTurnKey;
             setPendingNextTurnKey(null);
@@ -1525,6 +1531,7 @@ export default function GachaPage() {
           }
         }}
         winRecord={activeWinModal}
+        refundedTickets={activeWinRefundedTickets}
       />
 
       {/* UFO 뽑기 공지사항 모달 */}

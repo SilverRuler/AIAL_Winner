@@ -1496,6 +1496,17 @@ export default function GachaPage() {
             activeBorder: 'border-rose-400 bg-rose-500/15 ring-1 ring-rose-400/50',
             note: '정사각형에 가까운 와이드 스페셜 상자! 평면으로는 안 빠지며 옆으로 세우거나 지그시 눌러 넣는 공략이 유효합니다.',
           },
+          {
+            slot: 5,
+            shortName: '6번 산드로네(인형)',
+            fullName: '산드로네 쿠션 인형 #6',
+            difficulty: '6.5 / 10 (중상·입체 쿠션)',
+            shortDiff: '난이도 6.5',
+            nameColor: 'text-amber-300',
+            badgeColor: 'text-amber-300',
+            activeBorder: 'border-amber-400 bg-amber-500/15 ring-1 ring-amber-400/50',
+            note: '최초의 3D 입체 다이컷 쿠션 인형! 푹신하고 얇은 두께(0.44)와 실루엣 복합 물리를 활용해 옆으로 기울이거나 눌러 넣으면 틈새로 쏙 빠집니다.',
+          },
         ] as const;
 
         const activeSpec =
@@ -1548,7 +1559,7 @@ export default function GachaPage() {
                       <p className="flex items-start gap-2">
                         <Sparkles className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                         <span>
-                          현재 뽑기판은 <strong className="text-cyan-300">5개 상품 확장판</strong>(평균 난이도 <strong className="text-rose-300">6.5 중상</strong>)으로 운영되며, 3·4·5번 신규 캐릭터(노엘 실바·레제·바니카) 및 상자별 차등 난이도·SOL 리워드가 적용되었습니다.
+                          현재 뽑기판은 <strong className="text-cyan-300">6개 상품 확장판 (박스 5종 + 입체 쿠션 인형 1종)</strong>(평균 난이도 <strong className="text-rose-300">6.5 중상</strong>)으로 운영되며, 신규 캐릭터(노엘 실바·레제·바니카·<strong className="text-amber-300">산드로네 쿠션 인형</strong>) 및 상품별 차등 난이도·SOL 리워드가 적용되었습니다.
                         </span>
                       </p>
                       <p className="ml-6 text-[11px] sm:text-xs text-cyan-300/90 font-semibold">

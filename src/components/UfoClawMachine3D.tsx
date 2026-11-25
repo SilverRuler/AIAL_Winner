@@ -16,7 +16,7 @@ import {
   Camera,
 } from 'lucide-react';
 import { GachaBoxItem } from '@/types/gacha';
-import { GACHA_PHYSICS, getBoxDimensions, getBoxRewardAmount } from '@/constants/gacha';
+import { GACHA_PHYSICS, getBoxDimensions, getBoxRewardAmount, isPlushSlot } from '@/constants/gacha';
 
 type CameraView = 'front' | 'top' | 'right';
 
@@ -134,8 +134,71 @@ const FIGURE_SLOT_STYLES = [
     sideBg: '#4c0519',
     title: 'VANICA',
     isSquare: true,
+    isPlush: false,
+  },
+  {
+    imgSrc: '/gacha/sandrone_plush.png',
+    frontAccent: '#fde68a',
+    frontBg: '#7f1d1d',
+    sideAccent: '#f59e0b',
+    sideBg: '#450a0a',
+    title: 'SANDRONE',
+    isSquare: false,
+    isPlush: true,
   },
 ] as const;
+
+interface PlushGeoJson {
+  w: number;
+  h: number;
+  d: number;
+  positions: number[];
+  uvs: number[];
+  indices: number[];
+}
+
+let cachedSandroneGeoData: PlushGeoJson | null = null;
+let sandroneGeoPromise: Promise<PlushGeoJson | null> | null = null;
+
+function loadSandronePlushGeoData(): Promise<PlushGeoJson | null> {
+  if (cachedSandroneGeoData) return Promise.resolve(cachedSandroneGeoData);
+  if (!sandroneGeoPromise) {
+    sandroneGeoPromise = fetch('/gacha/sandrone_plush_geo.json')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: PlushGeoJson | null) => {
+        if (data && Array.isArray(data.positions) && Array.isArray(data.indices)) {
+          cachedSandroneGeoData = data;
+          return data;
+        }
+        return null;
+      })
+      .catch(() => null);
+  }
+  return sandroneGeoPromise;
+}
+
+function buildBufferGeometryFromPlushData(data: PlushGeoJson): THREE.BufferGeometry {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(data.positions, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(data.uvs, 2));
+  geo.setIndex(data.indices);
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+function createPlushMaterial(imgSrc: string): THREE.MeshStandardMaterial {
+  const loader = new THREE.TextureLoader();
+  const tex = loader.load(imgSrc);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return new THREE.MeshStandardMaterial({
+    map: tex,
+    roughness: 0.72,
+    metalness: 0.04,
+    alphaTest: 0.08,
+  });
+}
 
 function getFigureSlotStyle(slotIndex: number) {
   const safeIdx = ((slotIndex % FIGURE_SLOT_STYLES.length) + FIGURE_SLOT_STYLES.length) % FIGURE_SLOT_STYLES.length;
@@ -374,10 +437,10 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       const scale = aspect < 1.48 ? Math.min(1.95, 1.52 / aspect) : 1.0;
       const fov = aspect < 1.15 ? 48 : 42;
       if (view === 'top') {
-        // 항공뷰: 위에서 5슬롯 4-Bar와 상자·조준링을 수직에 가깝게 내려다봄
+        // 항공뷰: 위에서 6슬롯 4-Bar와 상품·조준링을 수직에 가깝게 내려다봄
         return {
           fov,
-          pos: new THREE.Vector3(0, 8.9 * Math.max(1, scale * 0.94), 0.78),
+          pos: new THREE.Vector3(0, 9.65 * Math.max(1, scale * 0.96), 0.82),
           look: new THREE.Vector3(0, 0.75, 0),
         };
       }
@@ -385,14 +448,14 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         // 우측뷰: 오른쪽(+X) 측면에서 4-Bar 단면과 크레인 Z축 깊이를 정밀 확인
         return {
           fov,
-          pos: new THREE.Vector3(7.1 * Math.max(1, scale * 0.85), 2.4 * (1 + (scale - 1) * 0.35), 0),
+          pos: new THREE.Vector3(7.6 * Math.max(1, scale * 0.85), 2.4 * (1 + (scale - 1) * 0.35), 0),
           look: new THREE.Vector3(0, 0.85, 0),
         };
       }
-      // 정면뷰 (기본 0° + 까치발 최대 45° 상향 시점, 5슬롯 가로 확장에 맞춰 시야 확보)
+      // 정면뷰 (기본 0° + 까치발 최대 45° 상향 시점, 6슬롯 가로 확장에 맞춰 시야 확보)
       const lookY = 0.78;
-      const baseY = 4.55 * (1 + (scale - 1) * 0.72);
-      const baseZ = 7.25 * scale;
+      const baseY = 4.80 * (1 + (scale - 1) * 0.72);
+      const baseZ = 7.90 * scale;
       const clampedTiptoe = Math.max(0, Math.min(45, tiptoeDeg));
       if (clampedTiptoe <= 0) {
         return {
@@ -449,24 +512,24 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     mainSpot.shadow.mapSize.height = 1024;
     scene.add(mainSpot);
 
-    const cyanLight = new THREE.PointLight('#22d3ee', 10, 14);
-    cyanLight.position.set(-3.8, 2.6, 1.2);
+    const cyanLight = new THREE.PointLight('#22d3ee', 10, 15);
+    cyanLight.position.set(-4.2, 2.6, 1.2);
     scene.add(cyanLight);
 
-    const amberLight = new THREE.PointLight('#f59e0b', 10, 14);
-    amberLight.position.set(3.8, 2.6, 1.2);
+    const amberLight = new THREE.PointLight('#f59e0b', 10, 15);
+    amberLight.position.set(4.2, 2.6, 1.2);
     scene.add(amberLight);
 
-    const chuteLight = new THREE.PointLight('#10b981', 8, 10);
+    const chuteLight = new THREE.PointLight('#10b981', 8, 11);
     chuteLight.position.set(0, -0.7, 0);
     scene.add(chuteLight);
 
-    // 3. Arcade Cabinet Visual Geometry (5슬롯 확장형 가로 7.8 캐비닛)
+    // 3. Arcade Cabinet Visual Geometry (6슬롯 확장형 가로 8.6 캐비닛)
     const cabinetGroup = new THREE.Group();
     scene.add(cabinetGroup);
 
     // 하단 WIN CHUTE 바닥 (빛나는 배출구)
-    const chuteGeo = new THREE.BoxGeometry(8.2, 0.15, 3.2);
+    const chuteGeo = new THREE.BoxGeometry(9.0, 0.15, 3.2);
     const chuteMat = new THREE.MeshStandardMaterial({
       color: '#064e3b',
       emissive: '#059669',
@@ -480,7 +543,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     cabinetGroup.add(chuteFloor);
 
     // 바닥 WIN 그리드 라인
-    const gridHelper = new THREE.GridHelper(8.0, 16, '#10b981', '#065f46');
+    const gridHelper = new THREE.GridHelper(8.8, 18, '#10b981', '#065f46');
     gridHelper.position.set(0, -1.46, 0);
     cabinetGroup.add(gridHelper);
 
@@ -603,8 +666,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       barMesh.receiveShadow = true;
       cabinetGroup.add(barMesh);
 
-      // 슬롯 경계마다 미끄럼방지 실리콘 링 배치 (5슬롯 확장 폭 커버)
-      for (let rx = -3.5; rx <= 3.51; rx += 0.7) {
+      // 슬롯 경계마다 미끄럼방지 실리콘 링 배치 (6슬롯 확장 폭 커버)
+      for (let rx = -3.9; rx <= 3.91; rx += 0.65) {
         const ring = new THREE.Mesh(ringGeo, isOuter ? outerRingMat : ringMat);
         ring.position.set(rx, by, bz);
         cabinetGroup.add(ring);
@@ -697,6 +760,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
     const barPhysMat = new CANNON.Material('bar');
     const boxPhysMat = new CANNON.Material('box');
+    const plushPhysMat = new CANNON.Material('plush');
     const clawPhysMat = new CANNON.Material('claw');
 
     world.addContactMaterial(
@@ -704,6 +768,22 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         friction: 0.44,
         restitution: 0.0, // 탱탱볼 튀어오름 완전 제거 (현실 종이 피규어 박스 감각)
         contactEquationStiffness: 1.2e6,
+        contactEquationRelaxation: 6,
+      })
+    );
+    world.addContactMaterial(
+      new CANNON.ContactMaterial(barPhysMat, plushPhysMat, {
+        friction: 0.54, // 봉제 쿠션 인형 특유의 패브릭 마찰감 & 말랑한 안착
+        restitution: 0.0,
+        contactEquationStiffness: 1.0e6,
+        contactEquationRelaxation: 6,
+      })
+    );
+    world.addContactMaterial(
+      new CANNON.ContactMaterial(boxPhysMat, plushPhysMat, {
+        friction: 0.46,
+        restitution: 0.0,
+        contactEquationStiffness: 1.0e6,
         contactEquationRelaxation: 6,
       })
     );
@@ -718,6 +798,14 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     world.addContactMaterial(
       new CANNON.ContactMaterial(clawPhysMat, boxPhysMat, {
         friction: 0.55,
+        restitution: 0.0,
+        contactEquationStiffness: 1.0e6,
+        contactEquationRelaxation: 6,
+      })
+    );
+    world.addContactMaterial(
+      new CANNON.ContactMaterial(clawPhysMat, plushPhysMat, {
+        friction: 0.62,
         restitution: 0.0,
         contactEquationStiffness: 1.0e6,
         contactEquationRelaxation: 6,
@@ -764,7 +852,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
     // 하단 WIN 슈트 바닥 콜라이더 (떨어진 상자가 안착)
     const floorBody = new CANNON.Body({ mass: 0, material: barPhysMat });
-    floorBody.addShape(new CANNON.Box(new CANNON.Vec3(4.2, 0.1, 2.0)));
+    floorBody.addShape(new CANNON.Box(new CANNON.Vec3(4.6, 0.1, 2.0)));
     floorBody.position.set(0, -1.55, 0);
     world.addBody(floorBody);
 
@@ -814,29 +902,70 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         }
       }
 
-      // 추가 및 위치 동기화 (슬롯별 고유 크기·질량 반영)
+      // 추가 및 위치 동기화 (슬롯별 고유 크기·질량 및 입체 쿠션 인형 지오메트리/복합 콜라이더 반영)
       for (const it of nextItems) {
         let ent = boxEntities.get(it.id);
         if (!ent) {
           const dims = getBoxDimensions(it.slotIndex);
-          const mats = createFigureBoxMaterials(it.slotIndex, it.label);
-          const mesh = new THREE.Mesh(new THREE.BoxGeometry(dims.w, dims.h, dims.d), mats);
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-          scene.add(mesh);
+          const plushItem = isPlushSlot(it.slotIndex);
+          let mesh: THREE.Mesh;
+          let body: CANNON.Body;
 
-          const body = new CANNON.Body({
-            mass: dims.mass,
-            material: boxPhysMat,
-            linearDamping: 0.42,
-            angularDamping: 0.56,
-          });
-          body.addShape(
-            new CANNON.Box(
-              new CANNON.Vec3(dims.w / 2, dims.h / 2, dims.d / 2)
-            )
-          );
-          world.addBody(body);
+          if (plushItem) {
+            const style = getFigureSlotStyle(it.slotIndex);
+            const plushMat = createPlushMaterial(style.imgSrc);
+            const initialGeo = cachedSandroneGeoData
+              ? buildBufferGeometryFromPlushData(cachedSandroneGeoData)
+              : new THREE.BoxGeometry(dims.w * 0.7, dims.h, dims.d * 0.85);
+            mesh = new THREE.Mesh(initialGeo, plushMat);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+
+            if (!cachedSandroneGeoData) {
+              const targetId = it.id;
+              loadSandronePlushGeoData().then((geoData) => {
+                if (!geoData) return;
+                const liveEnt = boxEntities.get(targetId);
+                if (!liveEnt) return;
+                const nextGeo = buildBufferGeometryFromPlushData(geoData);
+                liveEnt.mesh.geometry.dispose();
+                liveEnt.mesh.geometry = nextGeo;
+              });
+            }
+
+            // 산드로네 다이컷 쿠션 인형 실루엣에 맞춘 4파츠 복합 물리 콜라이더
+            body = new CANNON.Body({
+              mass: dims.mass,
+              material: plushPhysMat,
+              linearDamping: 0.45,
+              angularDamping: 0.60,
+            });
+            body.addShape(new CANNON.Box(new CANNON.Vec3(0.28, 0.21, 0.50)), new CANNON.Vec3(0.05, 0, 0.02));
+            body.addShape(new CANNON.Box(new CANNON.Vec3(0.19, 0.18, 0.20)), new CANNON.Vec3(0.04, 0, -0.44));
+            body.addShape(new CANNON.Box(new CANNON.Vec3(0.15, 0.16, 0.30)), new CANNON.Vec3(-0.30, 0, 0.24));
+            body.addShape(new CANNON.Box(new CANNON.Vec3(0.14, 0.17, 0.28)), new CANNON.Vec3(0.30, 0, 0.22));
+            world.addBody(body);
+          } else {
+            const mats = createFigureBoxMaterials(it.slotIndex, it.label);
+            mesh = new THREE.Mesh(new THREE.BoxGeometry(dims.w, dims.h, dims.d), mats);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+
+            body = new CANNON.Body({
+              mass: dims.mass,
+              material: boxPhysMat,
+              linearDamping: 0.42,
+              angularDamping: 0.56,
+            });
+            body.addShape(
+              new CANNON.Box(
+                new CANNON.Vec3(dims.w / 2, dims.h / 2, dims.d / 2)
+              )
+            );
+            world.addBody(body);
+          }
 
           ent = { data: it, mesh, body };
           boxEntities.set(it.id, ent);

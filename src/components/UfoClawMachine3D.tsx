@@ -16,7 +16,7 @@ import {
   Camera,
 } from 'lucide-react';
 import { GachaBoxItem } from '@/types/gacha';
-import { GACHA_PHYSICS, getBoxDimensions } from '@/constants/gacha';
+import { GACHA_PHYSICS, getBoxDimensions, getBoxRewardAmount } from '@/constants/gacha';
 
 type CameraView = 'front' | 'top' | 'right';
 
@@ -58,7 +58,7 @@ interface UfoClawMachine3DProps {
   otherSessionProgress?: { current: number; total: number } | null;
 }
 
-function createSidePanelTexture(title: string, accent: string, bg: string): THREE.CanvasTexture {
+function createSidePanelTexture(title: string, accent: string, bg: string, rewardSol: number): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 128;
@@ -82,7 +82,7 @@ function createSidePanelTexture(title: string, accent: string, bg: string): THRE
 
     ctx.fillStyle = '#e2e8f0';
     ctx.font = 'bold 16px monospace';
-    ctx.fillText('AIAL PRIZE · 0.01 SOL', 128, 88);
+    ctx.fillText(`AIAL PRIZE · ${rewardSol} SOL`, 128, 88);
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -172,7 +172,7 @@ function createFigureFrontTexture(slotIndex: number, label: string): THREE.Canva
 
     ctx.fillStyle = '#fde047';
     ctx.font = 'bold 15px monospace';
-    ctx.fillText(`${label} · 0.01 SOL`, 128, 486);
+    ctx.fillText(`${label} · ${getBoxRewardAmount(slotIndex)} SOL`, 128, 486);
 
     // 피규어 박스 테두리 프레임
     ctx.strokeStyle = accent;
@@ -196,9 +196,10 @@ function createFigureFrontTexture(slotIndex: number, label: string): THREE.Canva
 
 function createFigureBoxMaterials(slotIndex: number, label: string): THREE.MeshStandardMaterial[] {
   const { sideAccent: accent, sideBg: bg, title } = getFigureSlotStyle(slotIndex);
+  const rewardSol = getBoxRewardAmount(slotIndex);
 
   const frontTex = createFigureFrontTexture(slotIndex, label);
-  const sideTex = createSidePanelTexture(title, accent, bg);
+  const sideTex = createSidePanelTexture(title, accent, bg, rewardSol);
 
   const frontMat = new THREE.MeshStandardMaterial({ map: frontTex, roughness: 0.24, metalness: 0.15 });
   const sideMat = new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.3, metalness: 0.25 });
@@ -1593,7 +1594,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
         {/* Bar 사이 낙하 안내 뱃지 */}
         <div className="absolute bottom-2.5 left-2.5 pointer-events-none px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-300 backdrop-blur-sm">
-          🎯 두 Bar 사이로 박스를 통과시키면 <span className="text-amber-300">0.01 SOL</span> 당첨!
+          🎯 두 Bar 사이로 박스를 통과시키면 <span className="text-amber-300">0.003 ~ 0.015 SOL</span> 당첨!
         </div>
 
         {droppedThisTurn > 0 && (

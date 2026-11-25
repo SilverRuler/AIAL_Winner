@@ -66,7 +66,18 @@ export function getBoxDimensions(slotIndex: number) {
 
 export const GACHA_COLOR_THEMES: GachaColorTheme[] = ['gold', 'cyan', 'rose', 'purple'];
 
-export const GACHA_DEFAULT_REWARD_AMOUNT = 0.01; // 기본 당첨 상품: 0.01 SOL
+export const GACHA_DEFAULT_REWARD_AMOUNT = 0.01; // 레거시 기본값
+
+/**
+ * 슬롯별(1번~4번) 상자 리워드 금액 (SOL)
+ * #1 프리렌: 0.003 SOL, #2 네즈코: 0.008 SOL, #3 노엘 실바: 0.01 SOL, #4 레제: 0.015 SOL
+ */
+export const GACHA_SLOT_REWARD_AMOUNTS = [0.003, 0.008, 0.01, 0.015] as const;
+
+export function getBoxRewardAmount(slotIndex: number): number {
+  const safeIdx = Math.max(0, Math.min(GACHA_SLOT_REWARD_AMOUNTS.length - 1, slotIndex));
+  return GACHA_SLOT_REWARD_AMOUNTS[safeIdx];
+}
 
 /**
  * 슬롯 인덱스(0..3)에 대한 초기 안착 좌표 반환 (슬롯별 상자 높이 반영)
@@ -102,7 +113,7 @@ export function createBoxForSlot(slotIndex: number, nowTs = Date.now()): GachaBo
     position: getRestingBoxPosition(safeIdx),
     quaternion: [0, 0, 0, 1],
     rewardType: 'SOL',
-    rewardAmount: GACHA_DEFAULT_REWARD_AMOUNT,
+    rewardAmount: getBoxRewardAmount(safeIdx),
   };
 }
 

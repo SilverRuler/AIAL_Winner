@@ -62,7 +62,6 @@ export const RewardModal: React.FC<RewardModalProps> = ({
   const applyApiUrl = isGacha ? '/api/gacha/rewards/apply' : '/api/rewards/apply';
   const appliedStoragePrefix = isGacha ? 'aial_gacha_reward_applied_' : 'aial_reward_applied_';
   const formatUnit = (n: number) => (isGacha ? `${n}개` : `${n} WIN`);
-  const formatGachaSol = (n: number) => `${Number((n * 0.01).toFixed(4))} SOL`;
   const [selectedMember, setSelectedMember] = useState<string>('all');
   const [rewards, setRewards] = useState<RewardItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -126,6 +125,19 @@ export const RewardModal: React.FC<RewardModalProps> = ({
 
   // 멤버별 실제 총 뽑기/승수 (gacha 모드에서는 API 응답으로도 보완)
   const [memberActualWinsMap, setMemberActualWinsMap] = useState<Record<string, number>>({});
+
+  // 멤버별 미신청 당첨 상자별 실제 SOL 금액 목록 (gacha 전용, FIFO)
+  const [memberUnclaimedWinAmounts, setMemberUnclaimedWinAmounts] = useState<Record<string, number[]>>({});
+
+  const getGachaSolAmount = (count: number): number => {
+    if (count <= 0) return 0;
+    const list = selectedMember !== 'all' ? memberUnclaimedWinAmounts[selectedMember] : undefined;
+    if (Array.isArray(list) && list.length > 0) {
+      return Number(list.slice(0, count).reduce((s, a) => s + a, 0).toFixed(4));
+    }
+    return Number((count * 0.01).toFixed(4));
+  };
+  const formatGachaSol = (n: number) => `${getGachaSolAmount(n)} SOL`;
 
   // 현재 선택된 멤버의 실제 총 승수 (변하지 않음)
   const userWins = useMemo(() => {
@@ -345,6 +357,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       if (data.success) {
         if (data.memberActualWins) {
           setMemberActualWinsMap(data.memberActualWins);
+        }
+        if (data.memberUnclaimedWinAmounts) {
+          setMemberUnclaimedWinAmounts(data.memberUnclaimedWinAmounts);
         }
         if (data.memberUsedWins) {
           setMemberUsedWins(data.memberUsedWins);
@@ -853,7 +868,8 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                   <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
                     {isGacha ? (
                       <>
-                        UFO 뽑기 리워드는 <strong className="text-purple-300 font-bold">1개당 0.01 SOL</strong>씩 신청하실 수 있습니다.
+                        UFO 뽑기 리워드는 <strong className="text-purple-300 font-bold">상자별 0.003 ~ 0.015 SOL</strong>씩 신청하실 수 있습니다.
+                        (#1: 0.003 / #2: 0.008 / #3: 0.01 / #4: 0.015 SOL)
                         현재 {selectedMember}님의 총 뽑기 성공은 <strong className="text-amber-400">{userWins}개</strong>이며,
                         {usedWins > 0 && (
                           <span className="text-slate-300"> (기존에 {usedWins}개 신청 완료) </span>
@@ -897,7 +913,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                         )}
                         현재 <strong className="text-cyan-300 font-bold">신청 가능 수량은 {availableWins}개 ({formatGachaSol(availableWins)})</strong>입니다.
                         <span className="block mt-1.5 text-[11px] text-amber-300">
-                          💡 업비트 지갑은 0.01 SOL 입금 제한이 있어 2개(0.02 SOL) 이상 모아서 신청하시는 것이 안전합니다.
+                          💡 업비트 지갑은 0.01 SOL 입금 제한이 있어 0.015 ~ 0.02 SOL 이상 모아서 신청하시는 것이 안전합니다.
                         </span>
                       </>
                     ) : (
@@ -1263,7 +1279,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                   </h3>
                   <p className="text-[11px] text-slate-400">
                     {isGacha
-                      ? '※ 1개당 0.01 SOL이며, 1개 단위로 원하는 수량을 선택해 신청할 수 있습니다.'
+                      ? '※ 상자별 리워드(#1: 0.003 / #2: 0.008 / #3: 0.01 / #4: 0.015 SOL)가 뽑은 순서대로 합산됩니다.'
                       : '※ 5WIN 단위로 차감할 수 있습니다. (5의 배수가 아닌 숫자는 신청 불가)'}
                   </p>
                 </div>
@@ -1289,7 +1305,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
               {/* 수량 선택 버튼 그리드 */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-slate-300">
-                  {isGacha ? '신청 수량 선택 (1개 = 0.01 SOL) *' : '신청 차감 승수 선택 (5WIN 단위) *'}
+                  {isGacha ? '신청 수량 선택 (1개 단위 · 상자별 SOL 합산) *' : '신청 차감 승수 선택 (5WIN 단위) *'}
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {allowedWinOptions.map((win) => (
@@ -1307,9 +1323,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                     </button>
                   ))}
                 </div>
-                {isGacha && requestedWins === 1 && (
+                {isGacha && getGachaSolAmount(requestedWins) < 0.015 && (
                   <p className="text-[11px] text-amber-300 pt-1">
-                    ⚠️ 업비트 지갑은 0.01 SOL 입금 제한이 있어 2개(0.02 SOL) 이상 모아서 신청하시는 것이 안전합니다.
+                    ⚠️ 업비트 지갑은 0.01 SOL 미만 입금 시 미반영될 수 있어 0.015 ~ 0.02 SOL 이상 모아서 신청하시는 것이 안전합니다.
                   </p>
                 )}
               </div>

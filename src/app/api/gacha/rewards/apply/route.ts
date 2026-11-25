@@ -37,13 +37,22 @@ export async function GET(request: NextRequest) {
         .collection('gacha_reward_applications')
         .find({ status: { $ne: 'rejected' } })
         .toArray(),
-      db.collection('gacha_wins').find({}).toArray(),
+      db
+        .collection('gacha_wins')
+        .find({})
+        .sort({ createdAt: 1 })
+        .toArray(),
     ]);
 
     const memberActualWins: Record<string, number> = {};
+    const memberWinsAsc: Record<string, number[]> = {};
     for (const w of allWins as any[]) {
       if (w.member) {
         memberActualWins[w.member] = (memberActualWins[w.member] || 0) + 1;
+        if (!memberWinsAsc[w.member]) memberWinsAsc[w.member] = [];
+        memberWinsAsc[w.member].push(
+          typeof w.rewardAmount === 'number' ? w.rewardAmount : GACHA_DEFAULT_REWARD_AMOUNT
+        );
       }
     }
 
@@ -64,6 +73,13 @@ export async function GET(request: NextRequest) {
           }
         }
       }
+    }
+
+    // 멤버별 미신청(남은) 당첨 상자별 실제 SOL 금액 목록 (FIFO)
+    const memberUnclaimedWinAmounts: Record<string, number[]> = {};
+    for (const [mem, list] of Object.entries(memberWinsAsc)) {
+      const used = memberUsedWins[mem] || 0;
+      memberUnclaimedWinAmounts[mem] = list.slice(used);
     }
 
     return NextResponse.json({
@@ -87,6 +103,7 @@ export async function GET(request: NextRequest) {
       })),
       memberActualWins,
       memberUsedWins,
+      memberUnclaimedWinAmounts,
       memberSolvedQuizIds,
     });
   } catch (err: any) {
@@ -140,10 +157,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. 해당 멤버의 실제 UFO 뽑기 성공 총 개수 집계 (gacha_wins)
-    const actualWins = await db
+    // 1. 해당 멤버의 실제 UFO 뽑기 성공 전체 내역 (생성순 FIFO) 조회 (gacha_wins)
+    const memberWinsAsc = await db
       .collection('gacha_wins')
-      .countDocuments({ member: trimmedMember });
+      .find({ member: trimmedMember })
+      .sort({ createdAt: 1 })
+      .toArray();
+    const actualWins = memberWinsAsc.length;
 
     // 2. 기존 UFO 뽑기 리워드 기신청 차감 개수 집계 (gacha_reward_applications, rejected 제외)
     const existingApps = await db
@@ -186,7 +206,20 @@ export async function POST(request: NextRequest) {
 
     const rawIp = getClientIp(request);
     const clientIp = normalizeIp(rawIp) || rawIp || '';
-    const rewardSol = Number((parsedCount * GACHA_DEFAULT_REWARD_AMOUNT).toFixed(4));
+    // FIFO 순서로 이번 신청에 해당하는 당첨 상자들의 실제 SOL 합계 산출
+    const selectedWins = memberWinsAsc.slice(usedWins, usedWins + parsedCount);
+    const rewardSol = Number(
+      selectedWins
+        .reduce(
+          (sum: number, w: any) =>
+            sum + (typeof w.rewardAmount === 'number' ? w.rewardAmount : GACHA_DEFAULT_REWARD_AMOUNT),
+          0
+        )
+        .toFixed(4)
+    );
+    const selectedBoxesText = selectedWins
+      .map((w: any) => `${w.boxLabel || '박스'}(${typeof w.rewardAmount === 'number' ? w.rewardAmount : GACHA_DEFAULT_REWARD_AMOUNT} SOL)`)
+      .join(', ');
 
     const newApplication = {
       id: `gapp_${now}_${Math.random().toString(36).substring(2, 8)}`,
@@ -218,6 +251,7 @@ export async function POST(request: NextRequest) {
       `👤 <b>신청 멤버:</b> <b>${trimmedMember}</b>\n` +
       `🏆 <b>총 뽑기 성공:</b> ${actualWins}개\n` +
       `🎯 <b>이번 신청 수량:</b> <b>${parsedCount}개 (${rewardSol} SOL)</b>\n` +
+      (selectedBoxesText ? `📦 <b>신청 내역:</b> ${selectedBoxesText}\n` : '') +
       `📉 <b>남은 신청 가능:</b> <b>${remainingAfterThis}개</b> (신청 전 ${availableWins}개)\n` +
       `💳 <b>지갑 주소 (SOL):</b> <code>${trimmedWallet}</code>\n` +
       `📝 <b>신청자 메모:</b> ${cleanMemo}\n` +

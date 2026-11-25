@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { GachaBoxItem, GachaWinRecord } from '@/types/gacha';
 import {
-  GACHA_DEFAULT_REWARD_AMOUNT,
   GACHA_PHYSICS,
+  getBoxRewardAmount,
 } from '@/constants/gacha';
 import {
   getAllMemberTicketBalances,
@@ -112,8 +112,7 @@ export async function POST(request: NextRequest) {
     const wonRecords: GachaWinRecord[] = [];
     for (let i = 0; i < wonBoxes.length; i++) {
       const won = wonBoxes[i];
-      const rewardAmount =
-        typeof won.rewardAmount === 'number' ? won.rewardAmount : GACHA_DEFAULT_REWARD_AMOUNT;
+      const rewardAmount = getBoxRewardAmount(won.slotIndex);
       const winRecord: GachaWinRecord = {
         id: `gwin_${now}_${i}_${Math.random().toString(36).substring(2, 7)}`,
         member,

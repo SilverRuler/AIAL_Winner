@@ -85,6 +85,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 멤버별 미신청 당첨 내역의 실제 SOL 금액 큐 (오래된 순 FIFO로 기신청 수량 제외)
+    const winsAscByMember: Record<string, number[]> = {};
+    for (let i = allWinsRaw.length - 1; i >= 0; i--) {
+      const doc: any = allWinsRaw[i];
+      if (!doc?.member) continue;
+      if (!winsAscByMember[doc.member]) winsAscByMember[doc.member] = [];
+      winsAscByMember[doc.member].push(
+        typeof doc.rewardAmount === 'number' ? doc.rewardAmount : 0.01
+      );
+    }
+    const availableGachaSolByMember: Record<string, number> = {};
+    for (const m of MEMBERS) {
+      const list = winsAscByMember[m.name] || [];
+      const used = usedWinsByMember[m.name] || 0;
+      const unclaimed = list.slice(used);
+      availableGachaSolByMember[m.name] = Number(
+        unclaimed.reduce((sum, amt) => sum + amt, 0).toFixed(4)
+      );
+    }
+
     const gachaWinStats = MEMBERS.map((m) => {
       const totalWins = actualWinsByMember[m.name] || 0;
       const totalSubmissions = ticketsByMember[m.name]?.totalPlayed || 0;
@@ -156,6 +176,7 @@ export async function GET(request: NextRequest) {
         recentWins,
         gachaWinStats,
         usedWinsByMember,
+        availableGachaSolByMember,
         mealWinSummaryByMember,
       },
       {

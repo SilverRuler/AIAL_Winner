@@ -51,6 +51,7 @@ export default function GachaPage() {
   const [recentWins, setRecentWins] = useState<GachaWinRecord[]>([]);
   const [gachaWinStats, setGachaWinStats] = useState<MemberWinStats[]>([]);
   const [usedWinsByMember, setUsedWinsByMember] = useState<Record<string, number>>({});
+  const [availableGachaSolByMember, setAvailableGachaSolByMember] = useState<Record<string, number>>({});
   const [mealWinSummaryByMember, setMealWinSummaryByMember] = useState<
     Record<string, { actualWins: number; rewardUsedWins: number; exchangedWins: number; availableMealWins: number }>
   >({});
@@ -127,6 +128,9 @@ export default function GachaPage() {
         if (data.usedWinsByMember) {
           setUsedWinsByMember(data.usedWinsByMember);
         }
+        if (data.availableGachaSolByMember) {
+          setAvailableGachaSolByMember(data.availableGachaSolByMember);
+        }
         if (data.mealWinSummaryByMember) {
           setMealWinSummaryByMember(data.mealWinSummaryByMember);
         }
@@ -160,6 +164,13 @@ export default function GachaPage() {
     const used = usedWinsByMember[selectedMember] || 0;
     return Math.max(0, stat.totalWins - used);
   }, [gachaWinStats, usedWinsByMember, selectedMember]);
+
+  const myAvailableGachaSol = useMemo(() => {
+    if (typeof availableGachaSolByMember[selectedMember] === 'number') {
+      return availableGachaSolByMember[selectedMember];
+    }
+    return Number((myAvailableGachaCount * 0.01).toFixed(4));
+  }, [availableGachaSolByMember, selectedMember, myAvailableGachaCount]);
 
   const handleOpenGachaReward = (member: string, startApply = false) => {
     setIsLeaderboardOpen(false);
@@ -527,7 +538,7 @@ export default function GachaPage() {
                 <span>UFO 브릿지 뽑기 (SOL 리워드)</span>
               </h1>
               <p className="text-[10px] sm:text-xs text-slate-400">
-                12인 공유 릴레이 크레인 · Bar 사이로 상자를 통과시키면 <strong className="text-amber-300">0.01 SOL</strong> 당첨!
+                12인 공유 릴레이 크레인 · Bar 사이로 상자를 통과시키면 <strong className="text-amber-300">0.003 ~ 0.015 SOL</strong> 당첨!
               </p>
             </div>
           </div>
@@ -620,11 +631,11 @@ export default function GachaPage() {
               <div className="text-xs sm:text-sm">
                 <strong className="text-white">{selectedMember}</strong>님이 리워드 신청 가능한 당첨 상자가{' '}
                 <strong className="text-amber-300">
-                  {myAvailableGachaCount}개 ({Number((myAvailableGachaCount * 0.01).toFixed(4))} SOL)
+                  {myAvailableGachaCount}개 ({myAvailableGachaSol} SOL)
                 </strong>{' '}
                 있습니다!{' '}
                 <span className="text-[11px] text-slate-300">
-                  (업비트 입금 시 2개 이상 모아서 신청 권장)
+                  (업비트 입금 시 0.015 SOL 이상 모아서 신청 권장)
                 </span>
               </div>
             </div>
@@ -750,7 +761,7 @@ export default function GachaPage() {
               <Trophy className="w-4 h-4 text-amber-400" />
               <span>최근 UFO 뽑기 당첨 현황</span>
             </h2>
-            <span className="text-[11px] text-slate-400">당첨 상품: 0.01 SOL</span>
+            <span className="text-[11px] text-slate-400">상자별 당첨 리워드: 0.003 ~ 0.015 SOL</span>
           </div>
 
           {recentWins.length === 0 ? (
@@ -1014,22 +1025,22 @@ export default function GachaPage() {
                         현재 뽑기판의 평균 난이도는 <strong className="text-rose-300">6.5(중상)</strong>입니다.
                       </span>
                     </p>
-                    <div className="ml-6 grid grid-cols-2 gap-1.5 text-[11px] sm:text-xs">
+                    <div className="ml-6 grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px] sm:text-xs">
                       <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-1">
                         <span className="text-sky-300 font-bold truncate">1번 프리렌</span>
-                        <span className="font-mono font-black text-emerald-300 shrink-0">난이도 5</span>
+                        <span className="font-mono font-black text-emerald-300 shrink-0">난이도 5 · 0.003 SOL</span>
                       </div>
                       <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-1">
                         <span className="text-pink-300 font-bold truncate">2번 네즈코</span>
-                        <span className="font-mono font-black text-amber-300 shrink-0">난이도 6</span>
+                        <span className="font-mono font-black text-amber-300 shrink-0">난이도 6 · 0.008 SOL</span>
                       </div>
                       <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-1">
                         <span className="text-blue-300 font-bold truncate">3번 노엘 실바</span>
-                        <span className="font-mono font-black text-orange-300 shrink-0">난이도 7</span>
+                        <span className="font-mono font-black text-orange-300 shrink-0">난이도 7 · 0.01 SOL</span>
                       </div>
                       <div className="px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-between gap-1">
                         <span className="text-purple-300 font-bold truncate">4번 레제</span>
-                        <span className="font-mono font-black text-rose-400 shrink-0">난이도 8</span>
+                        <span className="font-mono font-black text-rose-400 shrink-0">난이도 8 · 0.015 SOL</span>
                       </div>
                     </div>
                   </div>

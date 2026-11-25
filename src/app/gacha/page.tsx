@@ -1655,7 +1655,7 @@ export default function GachaPage() {
                       <p className="flex items-start gap-2">
                         <Sparkles className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                         <span>
-                          각 상품끼리 충돌 없이 집중 공략할 수 있도록 <strong className="text-cyan-300">개별 6개 뽑기판 (1판 1상품 · 박스 5종 + 입체 쿠션 인형 1종)</strong>으로 개편되었습니다! 하단 <strong className="text-amber-300">[이전 뽑기] / [다음 뽑기]</strong> 버튼으로 원하는 뽑기판을 선택해 도전하세요. (평균 난이도 <strong className="text-rose-300">6.5 중상</strong>)
+                          각 상품끼리 충돌 없이 집중 공략할 수 있도록 <strong className="text-cyan-300">개별 6개 뽑기판 (1판 1상품 · 박스 5종 + 입체 쿠션 인형 1종)</strong>으로 개편되었습니다! 상단 <strong className="text-cyan-200">1~6번 탭</strong> 또는 하단 <strong className="text-amber-300">[이전 뽑기] / [다음 뽑기]</strong> 버튼으로 원하는 뽑기판을 선택해 도전하세요. (평균 난이도 <strong className="text-rose-300">6.5 중상</strong>)
                         </span>
                       </p>
                       <p className="ml-6 text-[11px] sm:text-xs text-cyan-300/90 font-semibold">
@@ -1737,7 +1737,13 @@ export default function GachaPage() {
                     <p className="flex items-start gap-2">
                       <RefreshCw className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
                       <span>
-                        1~5번 상자는 초기 배치·정기 리필·관리자 리필 시 항상 <strong className="text-purple-300">무작위 랜덤 위치</strong>로 배치되며, 반발 튀어오름을 줄여 실제 오락실처럼 <strong className="text-emerald-300">눌러서 Bar 사이에 밀어넣는 공략</strong>이 가능하도록 물리를 개선했습니다.
+                        각 뽑기판 상품은 초기 세팅·재정렬·리필 시 <strong className="text-purple-300">중앙 정위치</strong>에 배치되며, 한쪽 집게가 상자에 걸려도 끝까지 하강해 반대쪽 집게로 파고들어 밀어내거나 비스듬히 들어올리는 등 <strong className="text-emerald-300">실제 오락실에 가까운 크레인 물리</strong>로 대폭 개선했습니다.
+                      </span>
+                    </p>
+                    <p className="flex items-start gap-2">
+                      <Sparkles className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <span>
+                        재정렬 원위치 상태에서 상품 정중앙 근처를 들어올리면 <strong className="text-emerald-300">Balance Catch!</strong>, 이후 중앙 빨간 Bar 근처에서 집게를 들어올리면 <strong className="text-orange-300">극한 드르륵!</strong> 특수 팝업 및 효과음이 재생됩니다.
                       </span>
                     </p>
                     <p className="flex items-start gap-2">
@@ -1749,13 +1755,13 @@ export default function GachaPage() {
                     <p className="flex items-start gap-2">
                       <Coins className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                       <span>
-                        뽑기 리워드 신청 시 보유 중인 신청 가능 잔고 내에서 <strong className="text-amber-300">원하는 SOL 수량을 직접 입력</strong>해 신청할 수 있으며, <strong className="text-emerald-300">0.001 SOL당 뽑기권 1회</strong>로 원하는 수량만큼 즉시 교환할 수 있습니다.
+                        뽑기 리워드는 식사배틀 리워드와 별도로 운영되며, 보유 중인 뽑기 리워드 잔고 내에서 <strong className="text-amber-300">원하는 SOL 수량을 직접 입력</strong>해 신청(업비트 입금 시 <strong className="text-amber-200">0.02 SOL 이상</strong> 권장)하거나 <strong className="text-emerald-300">0.001 SOL당 뽑기권 1회</strong>로 즉시 교환할 수 있습니다.
                       </span>
                     </p>
                     <p className="flex items-start gap-2 text-slate-300">
                       <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                       <span>
-                        승점 교환은 신청 가능 리워드 WIN(1WIN 이상)만 가능(마이너스 가불 차단)하며, 모든 뽑기 최근 상황은 DB에 로그로 기록됩니다.
+                        연속 뽑기 도중 상품을 조기 당첨하면 <strong className="text-emerald-300">남은 미사용 뽑기권은 자동 반환</strong>되며, 승점 교환은 신청 가능 리워드 WIN(1WIN 이상)만 가능합니다.
                       </span>
                     </p>
                   </div>

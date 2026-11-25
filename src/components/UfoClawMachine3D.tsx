@@ -300,10 +300,12 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     resetClawToHome: () => void;
   } | null>(null);
 
-  // 새 턴 시작 감지 -> ready_right 진입 (최신 서버 좌표 items를 즉시 반영)
+  // 새 턴 시작 감지 -> ready_right 진입 (항상 정면뷰로 자동 전환 + 최신 서버 좌표 items 즉시 반영)
   itemsRef.current = items;
   useEffect(() => {
     if (isMyTurn && turnKey) {
+      setCameraView('front');
+      cameraViewRef.current = 'front';
       setDroppedThisTurn(0);
       setClawFeedback('');
       if (simControlRef.current) {
@@ -1404,9 +1406,16 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     };
   }, [playTone, setCranePhase]);
 
-  // 조작 버튼 핸들러 (1회성 누르고 떼기)
+  const isCraneLockedToFront = isMyTurn || isFinishing || phase !== 'idle';
+
+  // 조작 버튼 핸들러 (1회성 누르고 떼기 - 정면뷰에서만 조작 가능)
   const handleRightPressStart = (e: React.SyntheticEvent) => {
     e.preventDefault();
+    if (cameraViewRef.current !== 'front') {
+      setCameraView('front');
+      cameraViewRef.current = 'front';
+      return;
+    }
     if (phaseRef.current === 'ready_right') {
       setCranePhase('moving_right');
       playTone(350, 0.06);
@@ -1423,6 +1432,11 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
   const handleUpPressStart = (e: React.SyntheticEvent) => {
     e.preventDefault();
+    if (cameraViewRef.current !== 'front') {
+      setCameraView('front');
+      cameraViewRef.current = 'front';
+      return;
+    }
     if (phaseRef.current === 'ready_up') {
       setCranePhase('moving_up');
       playTone(420, 0.06);
@@ -1440,16 +1454,26 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     }
   };
 
-  // 키보드 방향키(→, ↑) 지원
+  // 키보드 방향키(→, ↑) 지원 (정면뷰에서만 조작 가능)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat) return;
       if ((e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') && phaseRef.current === 'ready_right') {
         e.preventDefault();
+        if (cameraViewRef.current !== 'front') {
+          setCameraView('front');
+          cameraViewRef.current = 'front';
+          return;
+        }
         setCranePhase('moving_right');
         playTone(350, 0.06);
       } else if ((e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') && phaseRef.current === 'ready_up') {
         e.preventDefault();
+        if (cameraViewRef.current !== 'front') {
+          setCameraView('front');
+          cameraViewRef.current = 'front';
+          return;
+        }
         setCranePhase('moving_up');
         playTone(420, 0.06);
       }
@@ -1541,56 +1565,68 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           title="정면 뷰로 복귀"
         >
           <Camera className="w-3 h-3 text-cyan-400" />
-          <span>{cameraView === 'front' ? '정면뷰' : cameraView === 'top' ? '항공뷰 · 정면복귀' : '우측뷰 · 정면복귀'}</span>
+          <span>
+            {cameraView === 'front'
+              ? isCraneLockedToFront
+                ? '정면뷰 (조작 고정)'
+                : '정면뷰'
+              : cameraView === 'top'
+              ? '항공뷰 · 정면복귀'
+              : '우측뷰 · 정면복귀'}
+          </span>
         </button>
 
-        {/* 상단 중앙 작은 위 화살표 버튼: 항공뷰 ↔ 정면뷰 전환 */}
-        <button
-          type="button"
-          onClick={() => setCameraView((prev) => (prev === 'top' ? 'front' : 'top'))}
-          className={`absolute top-2 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] sm:text-xs font-black backdrop-blur-sm shadow-md transition-all active:scale-95 cursor-pointer ${
-            cameraView === 'top'
-              ? 'bg-cyan-500/90 border-cyan-300 text-slate-950'
-              : 'bg-slate-900/80 hover:bg-slate-800/90 border-slate-600/80 text-slate-200 hover:text-cyan-300'
-          }`}
-          title={cameraView === 'top' ? '정면 뷰로 돌아가기' : '항공 뷰 (위에서 보기)'}
-        >
-          {cameraView === 'top' ? (
-            <>
-              <ChevronDown className="w-3.5 h-3.5" />
-              <span>정면뷰</span>
-            </>
-          ) : (
-            <>
-              <ChevronUp className="w-3.5 h-3.5" />
-              <span>항공뷰</span>
-            </>
-          )}
-        </button>
+        {/* 상단 중앙 작은 위 화살표 버튼: 항공뷰 ↔ 정면뷰 전환 (크레인 조작 중 비활성) */}
+        {!isCraneLockedToFront && (
+          <button
+            type="button"
+            onClick={() => setCameraView((prev) => (prev === 'top' ? 'front' : 'top'))}
+            className={`absolute top-2 left-1/2 -translate-x-1/2 z-20 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[10px] sm:text-xs font-black backdrop-blur-sm shadow-md transition-all active:scale-95 cursor-pointer ${
+              cameraView === 'top'
+                ? 'bg-cyan-500/90 border-cyan-300 text-slate-950'
+                : 'bg-slate-900/80 hover:bg-slate-800/90 border-slate-600/80 text-slate-200 hover:text-cyan-300'
+            }`}
+            title={cameraView === 'top' ? '정면 뷰로 돌아가기' : '항공 뷰 (위에서 보기 · 조작 불가)'}
+          >
+            {cameraView === 'top' ? (
+              <>
+                <ChevronDown className="w-3.5 h-3.5" />
+                <span>정면뷰</span>
+              </>
+            ) : (
+              <>
+                <ChevronUp className="w-3.5 h-3.5" />
+                <span>항공뷰</span>
+              </>
+            )}
+          </button>
+        )}
 
-        {/* 우측 중앙 작은 오른 화살표 버튼: 우측뷰 ↔ 정면뷰 전환 */}
-        <button
-          type="button"
-          onClick={() => setCameraView((prev) => (prev === 'right' ? 'front' : 'right'))}
-          className={`absolute right-2 top-1/2 -translate-y-1/2 z-20 inline-flex flex-col items-center justify-center px-1.5 py-2 rounded-2xl border text-[10px] font-black backdrop-blur-sm shadow-md transition-all active:scale-95 cursor-pointer gap-0.5 ${
-            cameraView === 'right'
-              ? 'bg-amber-500/90 border-amber-300 text-slate-950'
-              : 'bg-slate-900/80 hover:bg-slate-800/90 border-slate-600/80 text-slate-200 hover:text-amber-300'
-          }`}
-          title={cameraView === 'right' ? '정면 뷰로 돌아가기' : '우측 뷰 (오른쪽에서 보기)'}
-        >
-          {cameraView === 'right' ? (
-            <>
-              <ChevronLeft className="w-4 h-4" />
-              <span className="leading-none">정면</span>
-            </>
-          ) : (
-            <>
-              <ChevronRight className="w-4 h-4" />
-              <span className="leading-none">우측</span>
-            </>
-          )}
-        </button>
+        {/* 우측 중앙 작은 오른 화살표 버튼: 우측뷰 ↔ 정면뷰 전환 (크레인 조작 중 비활성) */}
+        {!isCraneLockedToFront && (
+          <button
+            type="button"
+            onClick={() => setCameraView((prev) => (prev === 'right' ? 'front' : 'right'))}
+            className={`absolute right-2 top-1/2 -translate-y-1/2 z-20 inline-flex flex-col items-center justify-center px-1.5 py-2 rounded-2xl border text-[10px] font-black backdrop-blur-sm shadow-md transition-all active:scale-95 cursor-pointer gap-0.5 ${
+              cameraView === 'right'
+                ? 'bg-amber-500/90 border-amber-300 text-slate-950'
+                : 'bg-slate-900/80 hover:bg-slate-800/90 border-slate-600/80 text-slate-200 hover:text-amber-300'
+            }`}
+            title={cameraView === 'right' ? '정면 뷰로 돌아가기' : '우측 뷰 (오른쪽에서 보기 · 조작 불가)'}
+          >
+            {cameraView === 'right' ? (
+              <>
+                <ChevronLeft className="w-4 h-4" />
+                <span className="leading-none">정면</span>
+              </>
+            ) : (
+              <>
+                <ChevronRight className="w-4 h-4" />
+                <span className="leading-none">우측</span>
+              </>
+            )}
+          </button>
+        )}
 
         {/* Bar 사이 낙하 안내 뱃지 */}
         <div className="absolute bottom-2.5 left-2.5 pointer-events-none px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-300 backdrop-blur-sm">
@@ -1652,7 +1688,13 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             <button
               type="button"
               disabled={!canStartTurn || isStarting || isFinishing || !!lockedByOther || items.length === 0}
-              onClick={onStartTurnRequest}
+              onClick={() => {
+                if (cameraViewRef.current !== 'front') {
+                  setCameraView('front');
+                  cameraViewRef.current = 'front';
+                }
+                onStartTurnRequest?.();
+              }}
               className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-black text-sm shadow-lg shadow-orange-500/25 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               {isFinishing

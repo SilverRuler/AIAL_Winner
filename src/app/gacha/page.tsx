@@ -21,6 +21,7 @@ import {
   X,
   Clock,
   Info,
+  Camera,
 } from 'lucide-react';
 import { MEMBERS } from '@/constants/members';
 import { GachaMachineState, GachaTicketBalance, GachaWinRecord } from '@/types/gacha';
@@ -1044,6 +1045,12 @@ export default function GachaPage() {
                       </div>
                     </div>
                   </div>
+                  <p className="flex items-start gap-2">
+                    <Camera className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                    <span>
+                      항공뷰·측면뷰(우측뷰)에서는 크레인 조작이 불가능하며, 뽑기를 시작하면 <strong className="text-sky-300">자동으로 정면뷰로 전환</strong>되어 진행됩니다.
+                    </span>
+                  </p>
                   <p className="flex items-start gap-2">
                     <Clock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                     <span>

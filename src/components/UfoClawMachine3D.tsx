@@ -56,6 +56,20 @@ interface UfoClawMachine3DProps {
   isFinishing?: boolean;
   sessionProgress?: { current: number; total: number; bonusPlays: number } | null;
   otherSessionProgress?: { current: number; total: number } | null;
+  machineIndex: number;
+  machineCount: number;
+  machineLabel: string;
+  machineDifficulty: string;
+  machineRewardSol: number;
+  onPrevMachine: () => void;
+  onNextMachine: () => void;
+  onSelectMachine?: (idx: number) => void;
+  machineSummaries?: Array<{
+    index: number;
+    shortName: string;
+    hasStock: boolean;
+    lockedBy: string | null;
+  }>;
 }
 
 function createSidePanelTexture(title: string, accent: string, bg: string, rewardSol: number): THREE.CanvasTexture {
@@ -304,6 +318,15 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   isFinishing = false,
   sessionProgress = null,
   otherSessionProgress = null,
+  machineIndex,
+  machineCount,
+  machineLabel,
+  machineDifficulty,
+  machineRewardSol,
+  onPrevMachine,
+  onNextMachine,
+  onSelectMachine,
+  machineSummaries = [],
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<CranePhase>('idle');
@@ -408,12 +431,22 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMyTurn, turnKey, setCranePhase, playTone]);
 
-  // 대기 상태에서 서버 폴링으로 items 변경 시 3D 씬 동기화 (본인 턴/저장 중이 아닐 때)
+  // 대기 상태에서 서버 폴링 또는 뽑기판 전환으로 items 변경 시 3D 씬 동기화 (본인 턴/저장 중이 아닐 때)
   useEffect(() => {
     if (!isMyTurn && !isFinishing && phaseRef.current === 'idle' && simControlRef.current) {
       simControlRef.current.syncFromItems(items);
     }
   }, [items, isMyTurn, isFinishing]);
+
+  // 뽑기판 전환(이전/다음 뽑기) 시 대기 크레인 홈 위치 및 피드백 초기화
+  useEffect(() => {
+    if (!isMyTurn && !isFinishing && phaseRef.current === 'idle' && simControlRef.current) {
+      setClawFeedback('');
+      setDroppedThisTurn(0);
+      simControlRef.current.resetClawToHome();
+      simControlRef.current.syncFromItems(itemsRef.current);
+    }
+  }, [machineIndex, isMyTurn, isFinishing]);
 
   // Three.js + Cannon-es 씬 초기화
   useEffect(() => {
@@ -437,25 +470,25 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       const scale = aspect < 1.48 ? Math.min(1.95, 1.52 / aspect) : 1.0;
       const fov = aspect < 1.15 ? 48 : 42;
       if (view === 'top') {
-        // 항공뷰: 위에서 6슬롯 4-Bar와 상품·조준링을 수직에 가깝게 내려다봄
+        // 항공뷰: 1상품 전용 컴팩트 UFO 브릿지를 위에서 선명하게 내려다봄
         return {
           fov,
-          pos: new THREE.Vector3(0, 9.65 * Math.max(1, scale * 0.96), 0.82),
-          look: new THREE.Vector3(0, 0.75, 0),
+          pos: new THREE.Vector3(0, 5.45 * Math.max(1, scale * 0.88), 0.52),
+          look: new THREE.Vector3(0, 0.72, 0),
         };
       }
       if (view === 'right') {
         // 우측뷰: 오른쪽(+X) 측면에서 4-Bar 단면과 크레인 Z축 깊이를 정밀 확인
         return {
           fov,
-          pos: new THREE.Vector3(7.6 * Math.max(1, scale * 0.85), 2.4 * (1 + (scale - 1) * 0.35), 0),
-          look: new THREE.Vector3(0, 0.85, 0),
+          pos: new THREE.Vector3(4.55 * Math.max(1, scale * 0.85), 2.15 * (1 + (scale - 1) * 0.3), 0),
+          look: new THREE.Vector3(0, 0.82, 0),
         };
       }
-      // 정면뷰 (기본 0° + 까치발 최대 45° 상향 시점, 6슬롯 가로 확장에 맞춰 시야 확보)
-      const lookY = 0.78;
-      const baseY = 4.80 * (1 + (scale - 1) * 0.72);
-      const baseZ = 7.90 * scale;
+      // 정면뷰 (기본 0° + 까치발 최대 45° 상향 시점, 1상품 전용 확대 시야)
+      const lookY = 0.76;
+      const baseY = 3.25 * (1 + (scale - 1) * 0.62);
+      const baseZ = 4.65 * scale;
       const clampedTiptoe = Math.max(0, Math.min(45, tiptoeDeg));
       if (clampedTiptoe <= 0) {
         return {
@@ -512,24 +545,24 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     mainSpot.shadow.mapSize.height = 1024;
     scene.add(mainSpot);
 
-    const cyanLight = new THREE.PointLight('#22d3ee', 10, 15);
-    cyanLight.position.set(-4.2, 2.6, 1.2);
+    const cyanLight = new THREE.PointLight('#22d3ee', 10, 12);
+    cyanLight.position.set(-2.1, 2.5, 1.2);
     scene.add(cyanLight);
 
-    const amberLight = new THREE.PointLight('#f59e0b', 10, 15);
-    amberLight.position.set(4.2, 2.6, 1.2);
+    const amberLight = new THREE.PointLight('#f59e0b', 10, 12);
+    amberLight.position.set(2.1, 2.5, 1.2);
     scene.add(amberLight);
 
-    const chuteLight = new THREE.PointLight('#10b981', 8, 11);
+    const chuteLight = new THREE.PointLight('#10b981', 8, 9);
     chuteLight.position.set(0, -0.7, 0);
     scene.add(chuteLight);
 
-    // 3. Arcade Cabinet Visual Geometry (6슬롯 확장형 가로 8.6 캐비닛)
+    // 3. Arcade Cabinet Visual Geometry (1상품 전용 컴팩트 가로 3.6 캐비닛)
     const cabinetGroup = new THREE.Group();
     scene.add(cabinetGroup);
 
     // 하단 WIN CHUTE 바닥 (빛나는 배출구)
-    const chuteGeo = new THREE.BoxGeometry(9.0, 0.15, 3.2);
+    const chuteGeo = new THREE.BoxGeometry(4.0, 0.15, 3.2);
     const chuteMat = new THREE.MeshStandardMaterial({
       color: '#064e3b',
       emissive: '#059669',
@@ -543,7 +576,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     cabinetGroup.add(chuteFloor);
 
     // 바닥 WIN 그리드 라인
-    const gridHelper = new THREE.GridHelper(8.8, 18, '#10b981', '#065f46');
+    const gridHelper = new THREE.GridHelper(3.8, 10, '#10b981', '#065f46');
     gridHelper.position.set(0, -1.46, 0);
     cabinetGroup.add(gridHelper);
 
@@ -666,8 +699,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       barMesh.receiveShadow = true;
       cabinetGroup.add(barMesh);
 
-      // 슬롯 경계마다 미끄럼방지 실리콘 링 배치 (6슬롯 확장 폭 커버)
-      for (let rx = -3.9; rx <= 3.91; rx += 0.65) {
+      // 미끄럼방지 실리콘 링 배치 (1상품 전용 폭 커버)
+      for (let rx = -1.5; rx <= 1.51; rx += 0.5) {
         const ring = new THREE.Mesh(ringGeo, isOuter ? outerRingMat : ringMat);
         ring.position.set(rx, by, bz);
         cabinetGroup.add(ring);
@@ -852,7 +885,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
     // 하단 WIN 슈트 바닥 콜라이더 (떨어진 상자가 안착)
     const floorBody = new CANNON.Body({ mass: 0, material: barPhysMat });
-    floorBody.addShape(new CANNON.Box(new CANNON.Vec3(4.6, 0.1, 2.0)));
+    floorBody.addShape(new CANNON.Box(new CANNON.Vec3(2.2, 0.1, 2.0)));
     floorBody.position.set(0, -1.55, 0);
     world.addBody(floorBody);
 
@@ -1843,23 +1876,64 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   return (
     <div className="w-full rounded-3xl overflow-hidden border border-cyan-500/30 bg-slate-950 shadow-2xl shadow-cyan-950/30">
       {/* 상단 상태 바 */}
-      <div className="px-4 py-2.5 bg-slate-900/95 border-b border-slate-800 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-[11px] font-black shrink-0">
-            <Sparkles className="w-3 h-3" />
-            UFO BRIDGE 3D
-          </span>
-          <span className="text-xs font-bold text-slate-200 truncate">{phaseBannerText}</span>
+      <div className="px-4 py-2.5 bg-slate-900/95 border-b border-slate-800 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-[11px] font-black shrink-0">
+              <Sparkles className="w-3 h-3" />
+              {machineIndex + 1}/{machineCount}번 판
+            </span>
+            <span className="text-xs font-black text-amber-300 shrink-0 hidden sm:inline">
+              {machineLabel}
+            </span>
+            <span className="text-xs font-bold text-slate-200 truncate">{phaseBannerText}</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSoundEnabled((v) => !v)}
+            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer shrink-0"
+            title={soundEnabled ? '효과음 끄기' : '효과음 켜기'}
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4 text-cyan-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setSoundEnabled((v) => !v)}
-          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer shrink-0"
-          title={soundEnabled ? '효과음 끄기' : '효과음 켜기'}
-        >
-          {soundEnabled ? <Volume2 className="w-4 h-4 text-cyan-400" /> : <VolumeX className="w-4 h-4 text-slate-500" />}
-        </button>
+        {/* 개별 뽑기판 빠른 전환 탭 (#1 ~ #6) */}
+        {machineSummaries.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+            {machineSummaries.map((ms) => {
+              const isActive = ms.index === machineIndex;
+              return (
+                <button
+                  key={ms.index}
+                  type="button"
+                  disabled={isCraneLockedToFront}
+                  onClick={() => onSelectMachine?.(ms.index)}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-bold shrink-0 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                    isActive
+                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-sm'
+                      : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      ms.lockedBy
+                        ? 'bg-rose-400 animate-pulse'
+                        : ms.hasStock
+                        ? 'bg-emerald-400'
+                        : 'bg-slate-600'
+                    }`}
+                  />
+                  <span>{ms.shortName}</span>
+                  {!ms.hasStock && (
+                    <span className="text-[9px] text-rose-400 font-black">품절</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 3D WebGL 캔버스 뷰포트 */}
@@ -1981,8 +2055,9 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         )}
 
         {/* Bar 사이 낙하 안내 뱃지 */}
-        <div className="absolute bottom-2.5 left-2.5 pointer-events-none px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-300 backdrop-blur-sm">
-          🎯 두 Bar 사이로 박스를 통과시키면 <span className="text-amber-300">0.003 ~ 0.015 SOL</span> 당첨!
+        <div className="absolute bottom-2.5 left-2.5 pointer-events-none px-2.5 py-1 rounded-lg bg-emerald-950/85 border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-300 backdrop-blur-sm">
+          🎯 <strong className="text-white">{machineLabel}</strong> ({machineDifficulty}) · 통과 시{' '}
+          <span className="text-amber-300 font-mono">{machineRewardSol} SOL</span> 당첨!
         </div>
 
         {droppedThisTurn > 0 && (
@@ -2032,35 +2107,68 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       {/* 하단 아케이드 조작 패널 */}
       <div className="p-4 bg-gradient-to-b from-slate-900 to-slate-950 border-t border-slate-800">
         {phase === 'idle' ? (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="text-xs text-slate-300 text-center sm:text-left">
-              선택된 플레이어: <strong className="text-amber-400">{selectedMember}</strong>{' '}
-              <span className="text-slate-400">(보유 뽑기권 {selectedMemberTickets}장)</span>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3">
+            <div className="text-xs text-slate-300 text-center md:text-left space-y-0.5">
+              <div>
+                선택된 플레이어: <strong className="text-amber-400">{selectedMember}</strong>{' '}
+                <span className="text-slate-400">(보유 뽑기권 {selectedMemberTickets}장)</span>
+              </div>
+              <div className="text-[11px] text-cyan-300 font-bold">
+                현재 뽑기판 [{machineIndex + 1}/{machineCount}]:{' '}
+                <span className="text-white">{machineLabel}</span> · {machineDifficulty} ·{' '}
+                <span className="text-amber-300 font-mono">{machineRewardSol} SOL</span>
+              </div>
             </div>
-            <button
-              type="button"
-              disabled={!canStartTurn || isStarting || isFinishing || !!lockedByOther || items.length === 0}
-              onClick={() => {
-                if (cameraViewRef.current !== 'front') {
-                  setCameraView('front');
-                  cameraViewRef.current = 'front';
-                }
-                onStartTurnRequest?.();
-              }}
-              className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-black text-sm shadow-lg shadow-orange-500/25 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-            >
-              {isFinishing
-                ? '💾 상자 위치 저장 중...'
-                : isStarting
-                ? '크레인 준비 중...'
-                : lockedByOther
-                ? `🔒 ${lockedByOther}님 뽑기 완료 대기 중...`
-                : items.length === 0
-                ? '📦 모든 상품 완판 (운영자 리필 대기)'
-                : selectedMemberTickets < 1
-                ? '뽑기권이 부족합니다 (식사 등록 시 +5장)'
-                : '🕹️ 뽑기 시작!'}
-            </button>
+
+            {/* 이전 뽑기 / 뽑기 시작 / 다음 뽑기 버튼 라인 */}
+            <div className="flex items-center gap-2 w-full md:w-auto justify-center">
+              <button
+                type="button"
+                disabled={isCraneLockedToFront || isStarting}
+                onClick={onPrevMachine}
+                className="inline-flex items-center justify-center gap-1 px-3.5 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-600/80 hover:border-cyan-400/60 text-slate-200 hover:text-cyan-200 font-black text-xs sm:text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                title="이전 뽑기판으로 이동"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>이전 뽑기</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={!canStartTurn || isStarting || isFinishing || !!lockedByOther || items.length === 0}
+                onClick={() => {
+                  if (cameraViewRef.current !== 'front') {
+                    setCameraView('front');
+                    cameraViewRef.current = 'front';
+                  }
+                  onStartTurnRequest?.();
+                }}
+                className="flex-1 md:flex-none px-5 sm:px-6 py-3 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:from-amber-400 hover:to-rose-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-orange-500/25 transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer whitespace-nowrap"
+              >
+                {isFinishing
+                  ? '💾 위치 저장 중...'
+                  : isStarting
+                  ? '크레인 준비 중...'
+                  : lockedByOther
+                  ? `🔒 ${lockedByOther}님 진행 중...`
+                  : items.length === 0
+                  ? '📦 품절 (리필 대기)'
+                  : selectedMemberTickets < 1
+                  ? '뽑기권 부족'
+                  : '🕹️ 뽑기 시작!'}
+              </button>
+
+              <button
+                type="button"
+                disabled={isCraneLockedToFront || isStarting}
+                onClick={onNextMachine}
+                className="inline-flex items-center justify-center gap-1 px-3.5 py-3 rounded-2xl bg-slate-800 hover:bg-slate-700 border border-slate-600/80 hover:border-cyan-400/60 text-slate-200 hover:text-cyan-200 font-black text-xs sm:text-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                title="다음 뽑기판으로 이동"
+              >
+                <span>다음 뽑기</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 max-w-lg mx-auto">

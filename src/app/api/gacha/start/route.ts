@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MEMBERS } from '@/constants/members';
-import { GACHA_PHYSICS } from '@/constants/gacha';
+import { GACHA_PHYSICS, getMachineDocId, getMachineLabel, normalizeMachineIndex } from '@/constants/gacha';
 import {
   getAllMemberTicketBalances,
   getOrInitMachineState,
@@ -15,6 +15,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const member = (body?.member || '').trim();
     const rawPlayCount = body?.playCount !== undefined ? Number(body.playCount) : 1;
+    const machineIndex = normalizeMachineIndex(body?.machineIndex, 0);
+    const docId = getMachineDocId(machineIndex);
+    const machineLabel = getMachineLabel(machineIndex);
 
     if (!member || !MEMBERS.some((m) => m.name === member)) {
       return NextResponse.json(
@@ -44,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 1. 머신 상태 확인 및 만료된 락 정리
-    const machine = await getOrInitMachineState(db);
+    const machine = await getOrInitMachineState(db, machineIndex);
     const now = Date.now();
 
     if (machine.lock.active && machine.lock.expiresAt && machine.lock.expiresAt > now) {
@@ -53,7 +56,7 @@ export async function POST(request: NextRequest) {
           success: false,
           lockedBy: machine.lock.member,
           serverNow: now,
-          message: `현재 ${machine.lock.member}님이 크레인을 조작 중입니다. 완료될 때까지 잠시만 기다려주세요!`,
+          message: `현재 ${machine.lock.member}님이 [${machineIndex + 1}번 뽑기판] 크레인을 조작 중입니다. 다른 뽑기판을 이용하거나 잠시만 기다려주세요!`,
         },
         { status: 409 }
       );
@@ -63,7 +66,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: '현재 남은 상품이 없습니다. 운영자가 뽑기판을 리필할 때까지 기다려주세요!',
+          message: `[${machineIndex + 1}번 뽑기판] ${machineLabel}은(는) 현재 품절 상태입니다. 다른 뽑기판으로 이동하거나 리필을 기다려주세요!`,
         },
         { status: 400 }
       );
@@ -113,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     const lockRes = await db.collection('gacha_machine').findOneAndUpdate(
       {
-        _id: 'main_ufo_bridge' as any,
+        _id: docId as any,
         $or: [
           { 'lock.active': false },
           { 'lock.expiresAt': { $lt: now } },
@@ -137,14 +140,14 @@ export async function POST(request: NextRequest) {
       );
       const latestMachine = (await db
         .collection('gacha_machine')
-        .findOne({ _id: 'main_ufo_bridge' as any })) as any;
+        .findOne({ _id: docId as any })) as any;
       const currentOwner = latestMachine?.lock?.member || '다른 멤버';
       return NextResponse.json(
         {
           success: false,
           lockedBy: currentOwner,
           serverNow: Date.now(),
-          message: `현재 ${currentOwner}님이 뽑기를 진행 중입니다. 완료될 때까지 잠시만 기다려주세요!`,
+          message: `현재 ${currentOwner}님이 [${machineIndex + 1}번 뽑기판]을 진행 중입니다. 잠시만 기다려주세요!`,
         },
         { status: 409 }
       );
@@ -156,10 +159,10 @@ export async function POST(request: NextRequest) {
     const clientIp = normalizeIp(rawIp) || rawIp || '';
     const startMsg =
       bonusPlays > 0
-        ? `🔥 ${member}님이 연속 ${playCount}가챠를 시작했습니다! (+${bonusPlays}회 보너스 → 총 ${totalPlays}회)`
+        ? `🔥 [${machineIndex + 1}번 ${machineLabel}] ${member}님이 연속 ${playCount}가챠 시작! (+${bonusPlays}회 보너스 → 총 ${totalPlays}회)`
         : totalPlays > 1
-        ? `🕹️ ${member}님이 ${totalPlays}회 연속 뽑기를 시작했습니다.`
-        : `🕹️ ${member}님이 뽑기 1회를 시작했습니다.`;
+        ? `🕹️ [${machineIndex + 1}번 ${machineLabel}] ${member}님이 ${totalPlays}회 연속 뽑기를 시작했습니다.`
+        : `🕹️ [${machineIndex + 1}번 ${machineLabel}] ${member}님이 뽑기 1회를 시작했습니다.`;
 
     await recordGachaLog(db, {
       type: 'start',
@@ -167,6 +170,8 @@ export async function POST(request: NextRequest) {
       message: startMsg,
       meta: {
         turnId,
+        machineIndex,
+        machineLabel,
         playCount,
         bonusPlays,
         totalPlays,
@@ -179,6 +184,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       serverNow: Date.now(),
+      machineIndex,
       turnId,
       shotIndex: 1,
       totalPlays,

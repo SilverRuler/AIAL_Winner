@@ -28,7 +28,16 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { MEMBERS } from '@/constants/members';
-import { GACHA_SLOT_BOX_DIMS, GACHA_SLOT_REWARD_AMOUNTS, GACHA_TOTAL_SLOTS } from '@/constants/gacha';
+import {
+  GACHA_MACHINE_COUNT,
+  GACHA_SLOT_BOX_DIMS,
+  GACHA_SLOT_DIFFICULTY_TEXT,
+  GACHA_SLOT_LABELS,
+  GACHA_SLOT_REWARD_AMOUNTS,
+  GACHA_TOTAL_SLOTS,
+  getBoxRewardAmount,
+  getMachineLabel,
+} from '@/constants/gacha';
 import { GachaMachineState, GachaTicketBalance, GachaWinRecord } from '@/types/gacha';
 import { MemberWinStats } from '@/types/meal';
 import { UfoClawMachine3D, TurnFinishPayload } from '@/components/UfoClawMachine3D';
@@ -51,7 +60,20 @@ export default function GachaPage() {
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [authChecked, setAuthChecked] = useState<boolean>(false);
 
-  const [machine, setMachine] = useState<GachaMachineState | null>(null);
+  const [machines, setMachines] = useState<GachaMachineState[]>([]);
+  const [selectedMachineIndex, setSelectedMachineIndex] = useState<number>(0);
+  const machine = useMemo(
+    () => machines[selectedMachineIndex] || null,
+    [machines, selectedMachineIndex]
+  );
+  const updateMachineAt = useCallback((idx: number, nextMachine: GachaMachineState) => {
+    setMachines((prev) => {
+      if (!prev.length) return [nextMachine];
+      const copy = [...prev];
+      copy[idx] = nextMachine;
+      return copy;
+    });
+  }, []);
   const [ticketsByMember, setTicketsByMember] = useState<Record<string, GachaTicketBalance>>({});
   const [unclaimedWins, setUnclaimedWins] = useState<GachaWinRecord[]>([]);
   const [recentWins, setRecentWins] = useState<GachaWinRecord[]>([]);
@@ -112,6 +134,10 @@ export default function GachaPage() {
       if (savedMem && MEMBERS.some((m) => m.name === savedMem)) {
         setSelectedMember(savedMem);
       }
+      const savedMachineIdx = Number(localStorage.getItem('aial_gacha_machine_idx'));
+      if (Number.isInteger(savedMachineIdx) && savedMachineIdx >= 0 && savedMachineIdx < GACHA_MACHINE_COUNT) {
+        setSelectedMachineIndex(savedMachineIdx);
+      }
       setAuthChecked(true);
     }
   }, []);
@@ -132,7 +158,11 @@ export default function GachaPage() {
         if (typeof data.serverNow === 'number') {
           setServerClockOffset(data.serverNow - Date.now());
         }
-        setMachine(data.machine);
+        if (Array.isArray(data.machines) && data.machines.length > 0) {
+          setMachines(data.machines);
+        } else if (data.machine) {
+          setMachines([data.machine]);
+        }
         setTicketsByMember(data.ticketsByMember || {});
         setUnclaimedWins(data.unclaimedWins || []);
         setRecentWins(data.recentWins || []);
@@ -224,6 +254,48 @@ export default function GachaPage() {
     return () => clearInterval(timer);
   }, [activeTurnId, isStarting, isFinishing, lockedByOther, fetchState]);
 
+  const handleSelectMachine = useCallback(
+    (nextIdx: number) => {
+      if (activeTurnId || isStarting || isFinishing) return;
+      const wrapped = ((nextIdx % GACHA_MACHINE_COUNT) + GACHA_MACHINE_COUNT) % GACHA_MACHINE_COUNT;
+      setSelectedMachineIndex(wrapped);
+      setStatusMessage('');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('aial_gacha_machine_idx', String(wrapped));
+      }
+    },
+    [activeTurnId, isStarting, isFinishing]
+  );
+
+  const handlePrevMachine = useCallback(() => {
+    handleSelectMachine(selectedMachineIndex - 1);
+  }, [handleSelectMachine, selectedMachineIndex]);
+
+  const handleNextMachine = useCallback(() => {
+    handleSelectMachine(selectedMachineIndex + 1);
+  }, [handleSelectMachine, selectedMachineIndex]);
+
+  const machineSummaries = useMemo(() => {
+    const shortLabels = ['1.프리렌', '2.네즈코', '3.노엘', '4.레제', '5.바니카', '6.산드로네'];
+    const approxNow = Date.now() + serverClockOffset;
+    return Array.from({ length: GACHA_MACHINE_COUNT }, (_, idx) => {
+      const m = machines[idx];
+      const hasStock = m ? (m.items?.length ?? 0) > 0 : true;
+      const lockedBy =
+        m?.lock?.active &&
+        !(activeTurnId && m.lock.turnId === activeTurnId) &&
+        (!m.lock.expiresAt || m.lock.expiresAt >= approxNow)
+          ? m.lock.member || '다른 멤버'
+          : null;
+      return {
+        index: idx,
+        shortName: shortLabels[idx] || `${idx + 1}번`,
+        hasStock,
+        lockedBy,
+      };
+    });
+  }, [machines, serverClockOffset, activeTurnId]);
+
   // 본인 턴 진행 중 8초마다 하트비트 전송 (플레이 도중 락 만료 방지, 비정상 이탈 시 25초 내 자동 해제)
   useEffect(() => {
     if (!activeTurnId) return;
@@ -231,11 +303,15 @@ export default function GachaPage() {
       fetch('/api/gacha/heartbeat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ turnId: activeTurnId, member: selectedMember }),
+        body: JSON.stringify({
+          turnId: activeTurnId,
+          member: selectedMember,
+          machineIndex: selectedMachineIndex,
+        }),
       }).catch(() => {});
     }, 8000);
     return () => clearInterval(hb);
-  }, [activeTurnId, selectedMember]);
+  }, [activeTurnId, selectedMember, selectedMachineIndex]);
 
   const handleOpenStartModal = () => {
     if (isStarting || isFinishing || activeTurnId || lockedByOther) return;
@@ -274,7 +350,11 @@ export default function GachaPage() {
       const resp = await fetch('/api/gacha/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member: selectedMember, playCount: requestedPlayCount }),
+        body: JSON.stringify({
+          member: selectedMember,
+          playCount: requestedPlayCount,
+          machineIndex: selectedMachineIndex,
+        }),
       });
       const data = await resp.json();
       if (!resp.ok || !data.success) {
@@ -288,7 +368,7 @@ export default function GachaPage() {
         setServerClockOffset(data.serverNow - Date.now());
       }
       setIsStartModalOpen(false);
-      setMachine(data.machine);
+      if (data.machine) updateMachineAt(selectedMachineIndex, data.machine);
       if (data.ticketsByMember) setTicketsByMember(data.ticketsByMember);
       const total = Number(data.totalPlays) || requestedPlayCount;
       const bonus = Number(data.bonusPlays) || 0;
@@ -326,6 +406,7 @@ export default function GachaPage() {
           body: JSON.stringify({
             turnId,
             member: selectedMember,
+            machineIndex: selectedMachineIndex,
             updatedItems: payload.updatedItems,
             wonItemIds: payload.wonItemIds,
             actionSummary: payload.actionSummary,
@@ -336,7 +417,7 @@ export default function GachaPage() {
           if (typeof data.serverNow === 'number') {
             setServerClockOffset(data.serverNow - Date.now());
           }
-          setMachine(data.machine);
+          if (data.machine) updateMachineAt(selectedMachineIndex, data.machine);
           if (data.ticketsByMember) setTicketsByMember(data.ticketsByMember);
 
           const hasWon = Array.isArray(data.wonRecords) && data.wonRecords.length > 0;
@@ -395,17 +476,21 @@ export default function GachaPage() {
         setIsFinishing(false);
       }
     },
-    [activeTurnId, selectedMember, fetchState]
+    [activeTurnId, selectedMember, selectedMachineIndex, fetchState, updateMachineAt]
   );
 
   const handleAdminRefill = async () => {
-    const currentCount = machine?.items?.length ?? 0;
-    const missingCount = Math.max(0, GACHA_TOTAL_SLOTS - currentCount);
-    if (missingCount === 0) {
-      setStatusMessage(`이미 ${GACHA_TOTAL_SLOTS}개 상품이 모두 채워져 있습니다.`);
+    const curEmpty = (machine?.items?.length ?? 0) === 0;
+    const totalEmpty = machines.filter((m) => (m?.items?.length ?? 0) === 0).length;
+    if (!curEmpty && totalEmpty === 0) {
+      setStatusMessage(`이미 ${GACHA_TOTAL_SLOTS}개 뽑기판 모두 상품이 채워져 있습니다.`);
       return;
     }
-    if (!confirm(`비어있는 상품 ${missingCount}개를 새로 리필하시겠습니까?`)) return;
+    const refillAll = !curEmpty && totalEmpty > 0;
+    const confirmMsg = refillAll
+      ? `현재 뽑기판은 채워져 있습니다. 비어있는 다른 뽑기판 ${totalEmpty}개를 모두 리필하시겠습니까?`
+      : `[${selectedMachineIndex + 1}번 뽑기판] ${getMachineLabel(selectedMachineIndex)}을(를) 새로 리필하시겠습니까?`;
+    if (!confirm(confirmMsg)) return;
     try {
       setIsRefilling(true);
       const { adminId, adminPw } = getAdminCreds();
@@ -416,11 +501,17 @@ export default function GachaPage() {
           'x-admin-id': adminId,
           'x-admin-pw': adminPw,
         },
-        body: JSON.stringify({ adminId, adminPw }),
+        body: JSON.stringify({
+          adminId,
+          adminPw,
+          machineIndex: selectedMachineIndex,
+          all: refillAll,
+        }),
       });
       const data = await resp.json();
       if (data.success) {
-        if (data.machine) setMachine(data.machine);
+        if (Array.isArray(data.machines)) setMachines(data.machines);
+        else if (data.machine) updateMachineAt(selectedMachineIndex, data.machine);
         setActiveTurnId(null);
         setStatusMessage(data.message || '📦 뽑기판 리필이 완료되었습니다.');
       } else {
@@ -434,10 +525,15 @@ export default function GachaPage() {
   const handleAdminReset = async () => {
     const currentCount = machine?.items?.length ?? 0;
     if (currentCount === 0) {
-      setStatusMessage('초기화할 남은 상품이 없습니다. [뽑기판 리필] 버튼을 눌러주세요.');
+      setStatusMessage('현재 뽑기판에 남은 상품이 없습니다. [뽑기판 리필] 버튼을 눌러주세요.');
       return;
     }
-    if (!confirm(`현재 남아있는 상품 ${currentCount}개만 초기 정위치로 되돌리시겠습니까?`)) return;
+    if (
+      !confirm(
+        `[${selectedMachineIndex + 1}번 뽑기판] ${getMachineLabel(selectedMachineIndex)}을(를) 중앙 정위치로 되돌리시겠습니까?`
+      )
+    )
+      return;
     try {
       setIsResetting(true);
       const { adminId, adminPw } = getAdminCreds();
@@ -448,13 +544,18 @@ export default function GachaPage() {
           'x-admin-id': adminId,
           'x-admin-pw': adminPw,
         },
-        body: JSON.stringify({ adminId, adminPw }),
+        body: JSON.stringify({
+          adminId,
+          adminPw,
+          machineIndex: selectedMachineIndex,
+        }),
       });
       const data = await resp.json();
       if (data.success) {
-        setMachine(data.machine);
+        if (Array.isArray(data.machines)) setMachines(data.machines);
+        else if (data.machine) updateMachineAt(selectedMachineIndex, data.machine);
         setActiveTurnId(null);
-        setStatusMessage(data.message || '🔄 남아있는 상품들을 초기 정위치로 재세팅했습니다.');
+        setStatusMessage(data.message || '🔄 현재 뽑기판 상품을 중앙 정위치로 재세팅했습니다.');
       } else {
         setStatusMessage(data.message || '초기화 실패');
       }
@@ -841,7 +942,7 @@ export default function GachaPage() {
           </div>
         )}
 
-        {/* 2. 3D UFO 크레인 머신 */}
+        {/* 2. 3D UFO 크레인 머신 (개별 1상품 전용 뽑기판 6종) */}
         <UfoClawMachine3D
           items={machine?.items || []}
           isMyTurn={Boolean(activeTurnId) && !isFinishing && !pendingNextTurnKey}
@@ -856,6 +957,15 @@ export default function GachaPage() {
           isFinishing={isFinishing}
           sessionProgress={sessionProgress}
           otherSessionProgress={otherSessionProgress}
+          machineIndex={selectedMachineIndex}
+          machineCount={GACHA_MACHINE_COUNT}
+          machineLabel={GACHA_SLOT_LABELS[selectedMachineIndex] || getMachineLabel(selectedMachineIndex)}
+          machineDifficulty={GACHA_SLOT_DIFFICULTY_TEXT[selectedMachineIndex] || '난이도 6.5'}
+          machineRewardSol={getBoxRewardAmount(selectedMachineIndex)}
+          onPrevMachine={handlePrevMachine}
+          onNextMachine={handleNextMachine}
+          onSelectMachine={handleSelectMachine}
+          machineSummaries={machineSummaries}
         />
 
         {/* 3. 최근 뽑기 당첨 내역 */}
@@ -1559,7 +1669,7 @@ export default function GachaPage() {
                       <p className="flex items-start gap-2">
                         <Sparkles className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                         <span>
-                          현재 뽑기판은 <strong className="text-cyan-300">6개 상품 확장판 (박스 5종 + 입체 쿠션 인형 1종)</strong>(평균 난이도 <strong className="text-rose-300">6.5 중상</strong>)으로 운영되며, 신규 캐릭터(노엘 실바·레제·바니카·<strong className="text-amber-300">산드로네 쿠션 인형</strong>) 및 상품별 차등 난이도·SOL 리워드가 적용되었습니다.
+                          각 상품끼리 충돌 없이 집중 공략할 수 있도록 <strong className="text-cyan-300">개별 6개 뽑기판 (1판 1상품 · 박스 5종 + 입체 쿠션 인형 1종)</strong>으로 개편되었습니다! 하단 <strong className="text-amber-300">[이전 뽑기] / [다음 뽑기]</strong> 버튼으로 원하는 뽑기판을 선택해 도전하세요. (평균 난이도 <strong className="text-rose-300">6.5 중상</strong>)
                         </span>
                       </p>
                       <p className="ml-6 text-[11px] sm:text-xs text-cyan-300/90 font-semibold">

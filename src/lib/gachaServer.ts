@@ -7,12 +7,15 @@ import {
 } from '@/types/gacha';
 import {
   createBoxForSlot,
-  createInitialGachaBoxes,
+  createSingleMachineItems,
   GACHA_ALL_SLOT_INDICES,
   GACHA_PHYSICS,
   GACHA_SLOT_X,
   GACHA_TOTAL_SLOTS,
+  getMachineDocId,
+  getMachineLabel,
   getRestingBoxPosition,
+  normalizeMachineIndex,
   sanitizeBoxForClient,
 } from '@/constants/gacha';
 import { MEMBERS } from '@/constants/members';
@@ -193,18 +196,25 @@ function getLatestScheduledCheckpoint(nowMs: number): {
 }
 
 /**
- * 공유 UFO 크레인 머신 상태 조회 (미생성 시 초기화, 만료된 락 자동 해제, 10:30/14:00/23:00 정기 자동 재정렬+리필)
+ * 개별 UFO 크레인 머신(machineIndex: 0..5, 1판 1상품) 상태 조회
+ * (미생성 시 초기화, 만료된 락 자동 해제, 10:30/14:00/23:00 정기 자동 재정렬+리필)
  */
-export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> {
+export async function getOrInitMachineState(db: Db, rawMachineIndex = 0): Promise<GachaMachineState> {
+  const machineIndex = normalizeMachineIndex(rawMachineIndex, 0);
+  const docId = getMachineDocId(machineIndex);
+  const machineLabel = getMachineLabel(machineIndex);
   const col = db.collection('gacha_machine');
-  const existing = (await col.findOne({ _id: 'main_ufo_bridge' as any })) as any;
+  const existing = (await col.findOne({ _id: docId as any })) as any;
   const now = Date.now();
   const latestCp = getLatestScheduledCheckpoint(now);
 
   if (!existing || !Array.isArray(existing.items)) {
     const initial: GachaMachineState = {
-      id: 'main_ufo_bridge',
-      items: createInitialGachaBoxes(),
+      id: docId,
+      machineIndex,
+      slotIndex: machineIndex,
+      machineLabel,
+      items: createSingleMachineItems(machineIndex, now),
       lock: {
         active: false,
         member: null,
@@ -214,13 +224,13 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
       },
       lastPlayedBy: null,
       lastPlayedAt: null,
-      lastActionSummary: 'UFO 브릿지 뽑기판이 준비되었습니다!',
+      lastActionSummary: `[${machineIndex + 1}번 뽑기판] ${machineLabel} 준비 완료!`,
       resetCount: existing?.resetCount || 0,
       updatedAt: now,
     };
 
     await col.updateOne(
-      { _id: 'main_ufo_bridge' as any },
+      { _id: docId as any },
       {
         $set: {
           ...initial,
@@ -244,10 +254,10 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
       expiresAt: null,
     };
     const expiredSummary = expiredMember
-      ? `${expiredMember}님의 조작 시간이 만료되어 기계 잠금이 해제되었습니다.`
+      ? `[${machineIndex + 1}번 뽑기판] ${expiredMember}님의 조작 시간이 만료되어 잠금이 해제되었습니다.`
       : existing.lastActionSummary;
     await col.updateOne(
-      { _id: 'main_ufo_bridge' as any },
+      { _id: docId as any },
       {
         $set: {
           lock: clearedLock,
@@ -261,7 +271,7 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
         type: 'lock_expired',
         member: expiredMember,
         message: expiredSummary,
-        meta: { turnId: existing.lock?.turnId || null },
+        meta: { turnId: existing.lock?.turnId || null, machineIndex, machineLabel },
         createdAt: now,
       });
     }
@@ -269,7 +279,6 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
   }
 
   // 정기 자동 재정렬 및 리필 체크 (매일 KST 10:30, 14:00, 23:00)
-  // 현재 플레이 중인 턴 락이 없을 때만 안전하게 4개 전체 재정렬 및 리필 실행
   const isActivelyLocked = Boolean(
     existing.lock?.active && existing.lock?.expiresAt && existing.lock.expiresAt > now
   );
@@ -279,8 +288,8 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
     existing.lastAutoResetSlot !== latestCp.key &&
     latestCp.timestampMs > lastHandledMs
   ) {
-    const freshBoxes = createInitialGachaBoxes();
-    const autoSummary = `⏰ 정기 스케줄(${latestCp.label})로 뽑기판 상품 ${GACHA_TOTAL_SLOTS}개가 자동 재정렬 및 리필되었습니다!`;
+    const freshBoxes = createSingleMachineItems(machineIndex, now);
+    const autoSummary = `⏰ 정기 스케줄(${latestCp.label})로 [${machineIndex + 1}번 뽑기판] ${machineLabel}이(가) 자동 재정렬 및 리필되었습니다!`;
 
     const clearedLock = {
       active: false,
@@ -291,7 +300,7 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
     };
     const autoUpdated = (await col.findOneAndUpdate(
       {
-        _id: 'main_ufo_bridge' as any,
+        _id: docId as any,
         lastAutoResetSlot: { $ne: latestCp.key },
         $or: [
           { 'lock.active': false },
@@ -301,6 +310,10 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
       },
       {
         $set: {
+          id: docId,
+          machineIndex,
+          slotIndex: machineIndex,
+          machineLabel,
           items: freshBoxes,
           lock: clearedLock,
           lastActionSummary: autoSummary,
@@ -319,6 +332,8 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
         member: 'SYSTEM',
         message: autoSummary,
         meta: {
+          machineIndex,
+          machineLabel,
           scheduleSlot: latestCp.key,
           scheduleLabel: latestCp.label,
           remainingStock: freshBoxes.length,
@@ -326,7 +341,10 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
         createdAt: now,
       });
       return {
-        id: 'main_ufo_bridge',
+        id: docId,
+        machineIndex,
+        slotIndex: machineIndex,
+        machineLabel,
         items: autoUpdated.items,
         lock: autoUpdated.lock || clearedLock,
         lastPlayedBy: autoUpdated.lastPlayedBy || null,
@@ -339,7 +357,10 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
   }
 
   return {
-    id: 'main_ufo_bridge',
+    id: docId,
+    machineIndex,
+    slotIndex: machineIndex,
+    machineLabel,
     items: existing.items,
     lock: existing.lock || {
       active: false,
@@ -354,6 +375,13 @@ export async function getOrInitMachineState(db: Db): Promise<GachaMachineState> 
     resetCount: existing.resetCount || 0,
     updatedAt: existing.updatedAt || now,
   };
+}
+
+/**
+ * 전체 6개 개별 UFO 뽑기판 상태 일괄 조회 (0..5)
+ */
+export async function getAllMachineStates(db: Db): Promise<GachaMachineState[]> {
+  return Promise.all(GACHA_ALL_SLOT_INDICES.map((idx) => getOrInitMachineState(db, idx)));
 }
 
 /**

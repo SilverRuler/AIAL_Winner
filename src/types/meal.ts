@@ -15,10 +15,14 @@ export interface MealComment {
   createdAt: number;
   ip?: string; // 몽고디비 원본 저장용 전체 IP
   maskedIp?: string; // 화면 노출용 마스킹 IP (예: 211.123)
+  userAgent?: string; // 몽고디비 원본 저장용 User-Agent (UI 비공개)
+  uaPlatform?: string; // 몽고디비 원본 저장용 Sec-CH-UA-Platform (UI 비공개)
+  uaMobile?: string; // 몽고디비 원본 저장용 Sec-CH-UA-Mobile (UI 비공개)
   isDeleted?: boolean; // 소프트 딜리트: 몽고디비 원본 기록 보존용 플래그
   deletedAt?: number; // 삭제 일시 타임스탬프
   deletedBy?: string; // 삭제 주체 ('author_ip' | 'admin')
   deletedIp?: string; // 삭제 시점 클라이언트 IP
+  deletedUserAgent?: string; // 삭제 시점 클라이언트 User-Agent
 }
 
 export interface MealEntry {

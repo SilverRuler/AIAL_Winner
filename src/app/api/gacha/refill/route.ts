@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
-import { GachaBoxItem } from '@/types/gacha';
 import {
-  createBoxForSlot,
-  createInitialGachaBoxes,
+  createSingleMachineItems,
   GACHA_ALL_SLOT_INDICES,
   GACHA_TOTAL_SLOTS,
-  getBoxDimensions,
-  getNearestSeatIndex,
-  getRestingBoxPosition,
-  shuffleIndices,
+  getMachineDocId,
+  getMachineLabel,
+  normalizeMachineIndex,
 } from '@/constants/gacha';
-import { isAdminAuthorized, recordGachaLog, sanitizeMachineForClient } from '@/lib/gachaServer';
+import {
+  getAllMachineStates,
+  isAdminAuthorized,
+  recordGachaLog,
+  sanitizeMachineForClient,
+} from '@/lib/gachaServer';
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,59 +34,11 @@ export async function POST(request: NextRequest) {
     }
 
     const col = db.collection('gacha_machine');
-    const existing = (await col.findOne({ _id: 'main_ufo_bridge' as any })) as any;
     const now = Date.now();
-    const currentItems: GachaBoxItem[] = Array.isArray(existing?.items) ? existing.items : [];
-
-    const occupiedSlots = new Set(currentItems.map((it) => it.slotIndex));
-    const missingSlots = GACHA_ALL_SLOT_INDICES.filter((idx) => !occupiedSlots.has(idx));
-
-    if (missingSlots.length === 0) {
-      return NextResponse.json({
-        success: true,
-        refilledCount: 0,
-        message: `이미 ${GACHA_TOTAL_SLOTS}개 상품이 모두 채워져 있습니다.`,
-        machine: sanitizeMachineForClient(existing as any),
-      });
-    }
-
-    let nextItems: GachaBoxItem[];
-    if (currentItems.length === 0) {
-      // 전체 뽑힌 상태 -> 전체 랜덤 순서로 새로 리필
-      nextItems = createInitialGachaBoxes();
-    } else {
-      // 일부만 뽑힌 상태 -> 남은 상품 위치는 유지하고 빈 좌석에 빠진 상품들을 랜덤 배치로 리필
-      nextItems = [...currentItems];
-      const usedSeats = new Set<number>(
-        nextItems.map((it) =>
-          typeof it.seatIndex === 'number' ? it.seatIndex : getNearestSeatIndex(it.position[0])
-        )
-      );
-      const freeSeats = shuffleIndices(GACHA_ALL_SLOT_INDICES.filter((s) => !usedSeats.has(s)));
-      const shuffledMissing = shuffleIndices([...missingSlots]);
-
-      for (let i = 0; i < shuffledMissing.length; i++) {
-        const slotIdx = shuffledMissing[i];
-        const seatIdx = freeSeats[i] !== undefined ? freeSeats[i] : slotIdx;
-        const newBox = createBoxForSlot(slotIdx, now + i * 10, seatIdx);
-        const [rx, ry, rz] = getRestingBoxPosition(slotIdx, seatIdx);
-        const overlapsExisting = nextItems.some(
-          (item) => Math.abs(item.position[0] - rx) < 0.92 && item.position[1] > 0.35
-        );
-        if (overlapsExisting) {
-          const { h } = getBoxDimensions(slotIdx);
-          newBox.position = [rx, ry + h + 0.25, rz];
-        }
-        nextItems.push(newBox);
-      }
-      nextItems.sort((a, b) => (a.seatIndex ?? a.slotIndex) - (b.seatIndex ?? b.slotIndex));
-    }
-
-    const refilledCount = missingSlots.length;
-    const summary =
-      refilledCount === GACHA_TOTAL_SLOTS
-        ? `📦 운영자(관리자)가 ${GACHA_TOTAL_SLOTS}개 상품을 모두 랜덤 배치로 새로 리필했습니다!`
-        : `📦 운영자(관리자)가 빈 자리 상품 ${refilledCount}개를 랜덤 리필했습니다! (총 ${nextItems.length}개)`;
+    const refillAll = Boolean(body?.all);
+    const targetIndices = refillAll
+      ? [...GACHA_ALL_SLOT_INDICES]
+      : [normalizeMachineIndex(body?.machineIndex, 0)];
 
     const clearedLock = {
       active: false,
@@ -94,33 +48,73 @@ export async function POST(request: NextRequest) {
       expiresAt: null,
     };
 
-    const updated = await col.findOneAndUpdate(
-      { _id: 'main_ufo_bridge' as any },
-      {
-        $set: {
-          id: 'main_ufo_bridge',
-          items: nextItems,
-          lock: clearedLock,
-          lastActionSummary: summary,
-          updatedAt: now,
+    const refilledLabels: string[] = [];
+
+    for (const idx of targetIndices) {
+      const docId = getMachineDocId(idx);
+      const machineLabel = getMachineLabel(idx);
+      const existing = (await col.findOne({ _id: docId as any })) as any;
+      const hasItem = Array.isArray(existing?.items) && existing.items.length > 0;
+      if (hasItem) continue;
+
+      const freshItems = createSingleMachineItems(idx, now + idx * 10);
+      const summary = `📦 운영자(관리자)가 [${idx + 1}번 뽑기판] ${machineLabel}을(를) 새로 리필했습니다!`;
+
+      await col.updateOne(
+        { _id: docId as any },
+        {
+          $set: {
+            id: docId,
+            machineIndex: idx,
+            slotIndex: idx,
+            machineLabel,
+            items: freshItems,
+            lock: clearedLock,
+            lastActionSummary: summary,
+            updatedAt: now,
+          },
         },
-      },
-      { upsert: true, returnDocument: 'after' }
-    );
+        { upsert: true }
+      );
+      refilledLabels.push(`${idx + 1}번 ${machineLabel}`);
+    }
+
+    const machines = (await getAllMachineStates(db)).map(sanitizeMachineForClient);
+    const primaryIdx = targetIndices[0] ?? 0;
+
+    if (refilledLabels.length === 0) {
+      return NextResponse.json({
+        success: true,
+        refilledCount: 0,
+        message: refillAll
+          ? `이미 ${GACHA_TOTAL_SLOTS}개 뽑기판 모두 상품이 채워져 있습니다.`
+          : `[${primaryIdx + 1}번 뽑기판] ${getMachineLabel(primaryIdx)}은(는) 이미 상품이 채워져 있습니다.`,
+        machineIndex: primaryIdx,
+        machine: machines[primaryIdx],
+        machines,
+      });
+    }
+
+    const totalStock = machines.reduce((sum, m) => sum + m.items.length, 0);
+    const summary = refillAll
+      ? `📦 운영자(관리자)가 빈 뽑기판 ${refilledLabels.length}개를 리필했습니다! (전체 ${totalStock}/${GACHA_TOTAL_SLOTS}개)`
+      : `📦 운영자(관리자)가 [${primaryIdx + 1}번 뽑기판] ${getMachineLabel(primaryIdx)}을(를) 리필했습니다!`;
 
     await recordGachaLog(db, {
       type: 'admin_refill',
       member: '관리자',
       message: summary,
-      meta: { refilledCount, totalStock: nextItems.length },
+      meta: { refillAll, machineIndex: primaryIdx, refilledCount: refilledLabels.length, totalStock },
       createdAt: now,
     });
 
     return NextResponse.json({
       success: true,
-      refilledCount,
+      refilledCount: refilledLabels.length,
       message: summary,
-      machine: sanitizeMachineForClient(updated as any),
+      machineIndex: primaryIdx,
+      machine: machines[primaryIdx],
+      machines,
     });
   } catch (error: any) {
     console.error('Failed to refill gacha machine:', error);

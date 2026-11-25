@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MEMBERS } from '@/constants/members';
 import {
+  getAllMachineStates,
   getAllMemberTicketBalances,
-  getOrInitMachineState,
   sanitizeMachineForClient,
 } from '@/lib/gachaServer';
 
@@ -19,9 +19,9 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [machine, ticketsByMember, allWinsRaw, validAppsRaw, solExchangesRaw, mealWinDocs, mealRewardApps, winExchanges] =
+    const [machines, ticketsByMember, allWinsRaw, validAppsRaw, solExchangesRaw, mealWinDocs, mealRewardApps, winExchanges] =
       await Promise.all([
-        getOrInitMachineState(db),
+        getAllMachineStates(db),
         getAllMemberTicketBalances(db),
         db
           .collection('gacha_wins')
@@ -182,11 +182,14 @@ export async function GET(request: NextRequest) {
       .filter((d: any) => (d.claimStatus || 'unclaimed') === 'unclaimed')
       .map(formatWin);
 
+    const sanitizedMachines = machines.map(sanitizeMachineForClient);
+
     return NextResponse.json(
       {
         success: true,
         serverNow: Date.now(),
-        machine: sanitizeMachineForClient(machine),
+        machine: sanitizedMachines[0],
+        machines: sanitizedMachines,
         ticketsByMember,
         unclaimedWins,
         recentWins,

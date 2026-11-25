@@ -10,7 +10,7 @@ import { GACHA_PHYSICS } from '@/constants/gacha';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { turnId, member } = body || {};
+    const { turnId, member, machineIndex } = body || {};
 
     if (!turnId || !member) {
       return NextResponse.json(
@@ -30,13 +30,17 @@ export async function POST(request: NextRequest) {
     const now = Date.now();
     const nextExpiresAt = now + GACHA_PHYSICS.LOCK_TTL_MS;
 
+    const filter: Record<string, any> = {
+      'lock.active': true,
+      'lock.turnId': turnId,
+      'lock.member': member,
+    };
+    if (typeof machineIndex === 'number' && Number.isInteger(machineIndex)) {
+      filter.machineIndex = machineIndex;
+    }
+
     const res = await db.collection('gacha_machine').findOneAndUpdate(
-      {
-        _id: 'main_ufo_bridge' as any,
-        'lock.active': true,
-        'lock.turnId': turnId,
-        'lock.member': member,
-      },
+      filter,
       {
         $set: {
           'lock.expiresAt': nextExpiresAt,

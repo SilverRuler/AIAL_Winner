@@ -3,9 +3,14 @@ import { getDatabase } from '@/lib/mongodb';
 import { GachaBoxItem, GachaWinRecord } from '@/types/gacha';
 import {
   GACHA_PHYSICS,
+  GACHA_TOTAL_SLOTS,
   getBoxRewardAmount,
+  getMachineDocId,
+  getMachineLabel,
+  normalizeMachineIndex,
 } from '@/constants/gacha';
 import {
+  getAllMachineStates,
   getAllMemberTicketBalances,
   getOrInitMachineState,
   getTelegramConfig,
@@ -31,7 +36,7 @@ function normalizeQuat(q: unknown, fallback: [number, number, number, number]): 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { turnId, member, updatedItems, wonItemIds } = body || {};
+    const { turnId, member, updatedItems, wonItemIds, machineIndex: rawMachineIndex } = body || {};
 
     if (!turnId || !member) {
       return NextResponse.json(
@@ -39,6 +44,10 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const machineIndex = normalizeMachineIndex(rawMachineIndex, 0);
+    const docId = getMachineDocId(machineIndex);
+    const machineLabel = getMachineLabel(machineIndex);
 
     const db = await getDatabase();
     if (!db) {
@@ -49,10 +58,10 @@ export async function POST(request: NextRequest) {
     }
 
     const col = db.collection('gacha_machine');
-    const rawMachine = (await col.findOne({ _id: 'main_ufo_bridge' as any })) as any;
+    const rawMachine = (await col.findOne({ _id: docId as any })) as any;
 
     if (!rawMachine) {
-      const fresh = await getOrInitMachineState(db);
+      const fresh = await getOrInitMachineState(db, machineIndex);
       return NextResponse.json({
         success: false,
         message: '뽑기 기계 상태를 찾을 수 없어 초기화되었습니다.',
@@ -171,10 +180,8 @@ export async function POST(request: NextRequest) {
       refundedTickets > 0 ? ` · 미사용 뽑기권 ${refundedTickets}장 자동 환불` : '';
     const actionSummary =
       wonRecords.length > 0
-        ? remainingItems.length === 0
-          ? `🎉 ${member}님이 마지막 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공! 모든 상품이 뽑혔습니다. (운영자 리필 대기${refundNote})`
-          : `🎉 ${member}님이 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공했습니다!${progressTag} (남은 상품 ${remainingItems.length}개)`
-        : `${member}님이 크레인을 조작하여 상자 위치를 움직였습니다.${progressTag}`;
+        ? `🎉 [${machineIndex + 1}번 뽑기판] ${member}님이 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공! (품절 · 리필 대기${refundNote})`
+        : `[${machineIndex + 1}번 ${machineLabel}] ${member}님이 크레인을 조작하여 위치를 움직였습니다.${progressTag}`;
 
     const nextLock = sessionContinue
       ? {
@@ -198,7 +205,7 @@ export async function POST(request: NextRequest) {
         };
 
     const nextMachine = await col.findOneAndUpdate(
-      { _id: 'main_ufo_bridge' as any },
+      { _id: docId as any },
       {
         $set: {
           items: remainingItems,
@@ -220,6 +227,8 @@ export async function POST(request: NextRequest) {
       message: actionSummary,
       meta: {
         turnId,
+        machineIndex,
+        machineLabel,
         shotIndex: prevShotIndex,
         totalPlays,
         wonLabels: wonRecords.map((w) => w.boxLabel),
@@ -231,9 +240,14 @@ export async function POST(request: NextRequest) {
       createdAt: now,
     });
 
-    // 누군가가 뽑기에 성공하면 관리자에게 텔레그램 즉시 알람 발송 (남은 재고 수 표기)
+    // 누군가가 뽑기에 성공하면 관리자에게 텔레그램 즉시 알람 발송 (전체 6개 뽑기판 합산 재고 포함)
     if (wonRecords.length > 0) {
       try {
+        const allMachinesAfter = await getAllMachineStates(db);
+        const totalRemainingAcrossAll = allMachinesAfter.reduce(
+          (sum, m) => sum + (Array.isArray(m.items) ? m.items.length : 0),
+          0
+        );
         const { token: teleToken, chatId: teleChatId } = getTelegramConfig();
         const kstDate = new Date(now + 9 * 3600 * 1000)
           .toISOString()
@@ -243,17 +257,16 @@ export async function POST(request: NextRequest) {
         const totalRewardSol = Number(
           wonRecords.reduce((sum, w) => sum + (w.rewardAmount || 0.01), 0).toFixed(4)
         );
-        const stockCount = remainingItems.length;
         const stockLine =
-          stockCount === 0
-            ? `📦 <b>현재 뽑기판에 재고가 0개 남았습니다! (완판 - 리필 필요)</b>`
-            : `📦 <b>현재 뽑기판에 재고가 ${stockCount}개 남았습니다.</b>`;
+          totalRemainingAcrossAll === 0
+            ? `📦 <b>전체 ${GACHA_TOTAL_SLOTS}개 뽑기판 재고가 0개입니다! (전량 완판 - 리필 필요)</b>`
+            : `📦 <b>[${machineIndex + 1}번 뽑기판] 품절 · 전체 잔여 재고: ${totalRemainingAcrossAll}/${GACHA_TOTAL_SLOTS}개</b>`;
 
         const telegramText =
           `🎉 <b>[AIAL Winner] UFO 뽑기 당첨 알림!</b>\n` +
           `━━━━━━━━━━━━━━━━━━\n` +
           `👤 <b>당첨 멤버:</b> <b>${member}</b>\n` +
-          `🎁 <b>획득 상품:</b> ${wonLabels} (${totalRewardSol} SOL)\n` +
+          `🎁 <b>획득 상품:</b> [${machineIndex + 1}번 판] ${wonLabels} (${totalRewardSol} SOL)\n` +
           `${stockLine}\n` +
           `⏰ <b>당첨 일시:</b> ${kstDate} (KST)\n` +
           `━━━━━━━━━━━━━━━━━━`;
@@ -284,6 +297,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       serverNow: Date.now(),
+      machineIndex,
       wonRecords,
       sessionContinue,
       totalPlays,

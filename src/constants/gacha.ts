@@ -11,7 +11,7 @@ export const GACHA_PHYSICS = {
   BAR_HALF_Z: 0.455,      // 중앙 앞 Bar: +0.455, 뒤 Bar: -0.455 (중심 간격 0.91, 내경 틈새 0.73)
   OUTER_BAR_Y: 1.06,      // 외곽 Bar 높이 (중앙 Bar보다 Y축으로 높게 배치)
   OUTER_BAR_HALF_Z: 1.02, // 외곽 앞 Bar: +1.02, 뒤 Bar: -1.02 (중앙 Bar보다 바깥쪽에 배치)
-  BAR_LENGTH: 8.6,        // 6개 상품(박스 5종 + 입체 쿠션 인형 1종) 여유 배치를 위해 가로 확장
+  BAR_LENGTH: 3.6,        // 개별 1상품 전용 컴팩트 UFO 브릿지 (상품 간 충돌 원천 제거 & 확대 시야)
 
   // 상품 상자 크기 (기본 참조 치수)
   BOX_W: 0.60,
@@ -22,16 +22,16 @@ export const GACHA_PHYSICS = {
   // 낙하 승리 판정 Y 임계값 (Bar 아래 WIN 슈트 영역 진입)
   DROP_Y_THRESHOLD: -0.28,
 
-  // 외곽 안전 벽 / 경사 가이드 범위 (6개 슬롯 가로 확장에 맞춰 조정)
-  CABINET_HALF_X: 4.28,
+  // 외곽 안전 벽 / 경사 가이드 범위 (1상품 전용 뽑기판)
+  CABINET_HALF_X: 1.78,
   CABINET_HALF_Z: 1.52,
 
-  // 크레인 이동 범위 및 속도 (6개 슬롯 전체 커버)
-  CLAW_HOME_X: -3.78,
+  // 크레인 이동 범위 및 속도 (1상품 전용 뽑기판)
+  CLAW_HOME_X: -1.32,
   CLAW_HOME_Z: 0.85,
   CLAW_HOME_Y: 2.68,
-  CLAW_MIN_X: -3.78,
-  CLAW_MAX_X: 3.78,
+  CLAW_MIN_X: -1.32,
+  CLAW_MAX_X: 1.32,
   CLAW_MIN_Z: -0.85,
   CLAW_MAX_Z: 0.85,
   CLAW_DROP_Y: 1.24,      // 하강 시 집게 중심 Y (길어진 집게 끝단 y ≈ 0.57로 Bar 높이 0.72 아래까지 자연 도달)
@@ -44,9 +44,21 @@ export const GACHA_PHYSICS = {
   LOCK_TTL_MS: 25 * 1000,
 };
 
-export const GACHA_SLOT_X = [-3.30, -1.98, -0.66, 0.66, 1.98, 3.30] as const;
-export const GACHA_TOTAL_SLOTS = GACHA_SLOT_X.length;
+export const GACHA_SLOT_X = [0, 0, 0, 0, 0, 0] as const; // 개별 뽑기판(1판 1상품) 중앙 정위치
+export const GACHA_TOTAL_SLOTS = 6;
+export const GACHA_MACHINE_COUNT = GACHA_TOTAL_SLOTS;
 export const GACHA_ALL_SLOT_INDICES = [0, 1, 2, 3, 4, 5] as const;
+
+export function getMachineDocId(machineIndex: number): string {
+  const safeIdx = Math.max(0, Math.min(GACHA_MACHINE_COUNT - 1, Math.floor(machineIndex || 0)));
+  return `ufo_machine_${safeIdx}`;
+}
+
+export function normalizeMachineIndex(raw: unknown, fallback = 0): number {
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n >= GACHA_MACHINE_COUNT) return fallback;
+  return n;
+}
 
 /**
  * 슬롯별(1번~6번) 상품 규격 및 난이도 단계 (중앙 Bar 내경 0.73 고정 기준, 평균 난이도 6.5 중상)
@@ -87,19 +99,16 @@ export function getBoxRewardAmount(slotIndex: number): number {
 }
 
 /**
- * 슬롯(상품 종류)과 물리 좌석(0..3, 왼쪽→오른쪽)에 대한 초기 안착 좌표 반환
+ * 개별 뽑기판(1판 1상품) 중앙 정위치 안착 좌표 반환 (x = 0, z = 0)
  */
 export function getRestingBoxPosition(
   slotIndex: number,
-  seatIndex: number = slotIndex
+  _seatIndex: number = 0
 ): [number, number, number] {
-  const safeSlot = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, slotIndex));
-  const safeSeat = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, seatIndex));
-  const x = GACHA_SLOT_X[safeSeat];
+  const safeSlot = Math.max(0, Math.min(GACHA_TOTAL_SLOTS - 1, slotIndex));
   const { h } = getBoxDimensions(safeSlot);
   const y = GACHA_PHYSICS.BAR_Y + GACHA_PHYSICS.BAR_RADIUS + h / 2 + 0.01;
-  const z = 0;
-  return [x, y, z];
+  return [0, y, 0];
 }
 
 /**
@@ -126,7 +135,7 @@ export function shuffleIndices(indices: number[], avoidIdentity = false): number
 /**
  * 특정 상품 종류(slotIndex)를 지정 좌석(seatIndex)에 생성 (서버 측 보상 포함)
  */
-const GACHA_SLOT_LABELS = [
+export const GACHA_SLOT_LABELS = [
   '프리렌 박스 #1',
   '네즈코 박스 #2',
   '노엘 실바 박스 #3',
@@ -135,26 +144,47 @@ const GACHA_SLOT_LABELS = [
   '산드로네 쿠션 인형 #6',
 ] as const;
 
+export const GACHA_SLOT_DIFFICULTY_TEXT = [
+  '난이도 5 (보통)',
+  '난이도 6 (중상)',
+  '난이도 7 (어려움)',
+  '난이도 8 (고난도)',
+  '난이도 6.5 (정사각)',
+  '난이도 6.5 (입체 인형)',
+] as const;
+
+export function getMachineLabel(machineIndex: number): string {
+  const safeIdx = normalizeMachineIndex(machineIndex, 0);
+  return GACHA_SLOT_LABELS[safeIdx] || `미스터리 뽑기 #${safeIdx + 1}`;
+}
+
 export function createBoxForSlot(
   slotIndex: number,
   nowTs = Date.now(),
-  seatIndex: number = slotIndex
+  seatIndex: number = 0
 ): GachaBoxItem {
-  const safeSlot = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, slotIndex));
-  const safeSeat = Math.max(0, Math.min(GACHA_SLOT_X.length - 1, seatIndex));
+  const safeSlot = Math.max(0, Math.min(GACHA_TOTAL_SLOTS - 1, slotIndex));
   const theme = GACHA_COLOR_THEMES[safeSlot % GACHA_COLOR_THEMES.length];
   const charLabel = GACHA_SLOT_LABELS[safeSlot] || `미스터리 박스 #${safeSlot + 1}`;
   return {
     id: `box_s${safeSlot}_${nowTs}_${Math.random().toString(36).substring(2, 7)}`,
     slotIndex: safeSlot,
-    seatIndex: safeSeat,
+    seatIndex,
     label: charLabel,
     colorTheme: theme,
-    position: getRestingBoxPosition(safeSlot, safeSeat),
+    position: getRestingBoxPosition(safeSlot, 0),
     quaternion: [0, 0, 0, 1],
     rewardType: 'SOL',
     rewardAmount: getBoxRewardAmount(safeSlot),
   };
+}
+
+/**
+ * 개별 뽑기판(machineIndex) 전용 1개 상품 초기 세팅 생성 (중앙 x=0 정위치)
+ */
+export function createSingleMachineItems(machineIndex: number, nowTs = Date.now()): GachaBoxItem[] {
+  const safeSlot = normalizeMachineIndex(machineIndex, 0);
+  return [createBoxForSlot(safeSlot, nowTs, 0)];
 }
 
 /**

@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { GachaBoxItem } from '@/types/gacha';
-import { createInitialGachaBoxes, GACHA_ALL_SLOT_INDICES, getNearestSeatIndex, getRestingBoxPosition } from '@/constants/gacha';
-import { isAdminAuthorized, recordGachaLog, sanitizeMachineForClient } from '@/lib/gachaServer';
+import {
+  createSingleMachineItems,
+  GACHA_ALL_SLOT_INDICES,
+  getMachineDocId,
+  getMachineLabel,
+  getRestingBoxPosition,
+  normalizeMachineIndex,
+} from '@/constants/gacha';
+import {
+  getAllMachineStates,
+  isAdminAuthorized,
+  recordGachaLog,
+  sanitizeMachineForClient,
+} from '@/lib/gachaServer';
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,8 +35,11 @@ export async function POST(request: NextRequest) {
     }
 
     const col = db.collection('gacha_machine');
-    const existing = (await col.findOne({ _id: 'main_ufo_bridge' as any })) as any;
     const now = Date.now();
+    const resetAll = Boolean(body?.all);
+    const targetIndices = resetAll
+      ? [...GACHA_ALL_SLOT_INDICES]
+      : [normalizeMachineIndex(body?.machineIndex, 0)];
 
     const clearedLock = {
       active: false,
@@ -34,80 +49,87 @@ export async function POST(request: NextRequest) {
       expiresAt: null,
     };
 
-    // 기존 문서가 아예 없는 경우에만 최초 4개 생성, 그 외에는 현재 남아있는 상품들만 각자의 배치 좌석 정위치로 복귀
-    let resetItems: GachaBoxItem[];
-    if (!existing || !Array.isArray(existing.items)) {
-      resetItems = createInitialGachaBoxes();
-    } else {
-      const takenSeats = new Set<number>();
-      resetItems = existing.items.map((item: GachaBoxItem) => {
-        let seat =
-          typeof item.seatIndex === 'number'
-            ? item.seatIndex
-            : getNearestSeatIndex(item.position?.[0] ?? 0);
-        if (takenSeats.has(seat)) {
-          const free = GACHA_ALL_SLOT_INDICES.find((s) => !takenSeats.has(s));
-          if (free !== undefined) seat = free;
-        }
-        takenSeats.add(seat);
-        return {
-          ...item,
-          seatIndex: seat,
-          position: getRestingBoxPosition(item.slotIndex, seat),
-          quaternion: [0, 0, 0, 1] as [number, number, number, number],
-        };
-      });
-      resetItems.sort((a, b) => (a.seatIndex ?? a.slotIndex) - (b.seatIndex ?? b.slotIndex));
-    }
+    let resetCountTotal = 0;
 
-    if (resetItems.length === 0) {
-      const updatedEmpty = await col.findOneAndUpdate(
-        { _id: 'main_ufo_bridge' as any },
+    for (const idx of targetIndices) {
+      const docId = getMachineDocId(idx);
+      const machineLabel = getMachineLabel(idx);
+      const existing = (await col.findOne({ _id: docId as any })) as any;
+
+      let resetItems: GachaBoxItem[];
+      if (!existing || !Array.isArray(existing.items)) {
+        resetItems = createSingleMachineItems(idx, now);
+      } else {
+        resetItems = existing.items.map((item: GachaBoxItem) => ({
+          ...item,
+          slotIndex: idx,
+          seatIndex: 0,
+          position: getRestingBoxPosition(idx, 0),
+          quaternion: [0, 0, 0, 1] as [number, number, number, number],
+        }));
+      }
+
+      if (resetItems.length === 0) {
+        await col.updateOne(
+          { _id: docId as any },
+          { $set: { lock: clearedLock, updatedAt: now } }
+        );
+        continue;
+      }
+
+      resetCountTotal += 1;
+      const summary = `🔄 운영자(관리자)가 [${idx + 1}번 뽑기판] ${machineLabel}을(를) 중앙 정위치로 재정비했습니다.`;
+
+      await col.updateOne(
+        { _id: docId as any },
         {
           $set: {
+            id: docId,
+            machineIndex: idx,
+            slotIndex: idx,
+            machineLabel,
+            items: resetItems,
             lock: clearedLock,
+            lastActionSummary: summary,
             updatedAt: now,
           },
+          $inc: { resetCount: 1 },
         },
-        { returnDocument: 'after' }
+        { upsert: true }
       );
+    }
 
+    const machines = (await getAllMachineStates(db)).map(sanitizeMachineForClient);
+    const primaryIdx = targetIndices[0] ?? 0;
+
+    if (resetCountTotal === 0) {
       return NextResponse.json({
         success: true,
         message: '초기화할 남은 상품이 없습니다. [뽑기판 리필] 버튼을 눌러 상품을 보충하세요.',
-        machine: sanitizeMachineForClient((updatedEmpty || existing) as any),
+        machineIndex: primaryIdx,
+        machine: machines[primaryIdx],
+        machines,
       });
     }
 
-    const summary = `🔄 운영자(관리자)가 남은 상품 ${resetItems.length}개를 초기 정위치로 재정비했습니다.`;
-
-    const updated = await col.findOneAndUpdate(
-      { _id: 'main_ufo_bridge' as any },
-      {
-        $set: {
-          id: 'main_ufo_bridge',
-          items: resetItems,
-          lock: clearedLock,
-          lastActionSummary: summary,
-          updatedAt: now,
-        },
-        $inc: { resetCount: 1 },
-      },
-      { upsert: true, returnDocument: 'after' }
-    );
+    const logSummary = resetAll
+      ? `🔄 운영자(관리자)가 전체 뽑기판 중 남은 상품 ${resetCountTotal}개를 중앙 정위치로 재정비했습니다.`
+      : `🔄 운영자(관리자)가 [${primaryIdx + 1}번 뽑기판] ${getMachineLabel(primaryIdx)}을(를) 중앙 정위치로 재정비했습니다.`;
 
     await recordGachaLog(db, {
       type: 'admin_reset',
       member: '관리자',
-      message: summary,
-      meta: { remainingStock: resetItems.length },
+      message: logSummary,
+      meta: { resetAll, machineIndex: primaryIdx, resetCountTotal },
       createdAt: now,
     });
 
     return NextResponse.json({
       success: true,
-      message: `남아있는 상품 ${resetItems.length}개가 초기 정위치로 재세팅되었습니다.`,
-      machine: sanitizeMachineForClient(updated as any),
+      message: logSummary,
+      machineIndex: primaryIdx,
+      machine: machines[primaryIdx],
+      machines,
     });
   } catch (error: any) {
     console.error('Failed to reset gacha machine:', error);

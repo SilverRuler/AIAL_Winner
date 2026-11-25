@@ -29,7 +29,10 @@ export interface GachaMachineLock {
 }
 
 export interface GachaMachineState {
-  id: 'main_ufo_bridge';
+  id: string; // e.g. 'ufo_machine_0' .. 'ufo_machine_5'
+  machineIndex: number; // 0..5 (개별 뽑기판 번호)
+  slotIndex: number; // 0..5 (해당 뽑기판 전용 상품 종류)
+  machineLabel: string; // 예: '프리렌 박스 #1'
   items: GachaBoxItem[];
   lock: GachaMachineLock;
   lastPlayedBy?: string | null;

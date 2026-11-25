@@ -36,8 +36,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 클라이언트 IP 추출 (12인 멤버 칩 선택 시 화면 노출용 maskedIp는 생략)
+    // 클라이언트 IP 및 User-Agent 추출 (12인 멤버 칩 선택 시 화면 노출용 maskedIp는 생략)
     const clientIp = getClientIp(request);
+    const userAgent = (request.headers.get('user-agent') || '').trim();
+    const uaPlatform = (request.headers.get('sec-ch-ua-platform') || '').replace(/"/g, '').trim() || undefined;
+    const uaMobile = (request.headers.get('sec-ch-ua-mobile') || '').trim() || undefined;
+
     const isMember =
       MEMBERS.some((m) => m.name === trimmedAuthor) ||
       LEGACY_MEMBERS.some((m) => m.name === trimmedAuthor);
@@ -50,6 +54,9 @@ export async function POST(request: NextRequest) {
       createdAt: Date.now(),
       ip: clientIp, // 몽고디비 원본 full IP 기록
       maskedIp: maskedIp, // 유동닉일 때만 (211.123) 마스킹 IP 설정
+      userAgent: userAgent || undefined, // 몽고디비 원본 User-Agent 기록 (유동 통신사 IP 보조 식별용)
+      uaPlatform,
+      uaMobile,
     };
 
     const db = await getDatabase();
@@ -67,10 +74,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 클라이언트 응답 시 원본 full IP는 보안상 제외하고 마스킹된 IP만 반환
+    // 클라이언트 응답 시 원본 full IP 및 User-Agent는 보안상 제외하고 마스킹된 IP만 반환
     const responseComment: MealComment = {
       ...newComment,
       ip: undefined,
+      userAgent: undefined,
+      uaPlatform: undefined,
+      uaMobile: undefined,
     };
 
     return NextResponse.json({
@@ -169,6 +179,7 @@ export async function DELETE(request: NextRequest) {
       }
 
       // 3) 몽고디비 원본 기록 보존을 위해 완전 삭제($pull) 대신 소프트 딜리트(isDeleted: true) 적용
+      const deletedUserAgent = (request.headers.get('user-agent') || '').trim();
       await db.collection('meals').updateOne(
         {
           $or: [{ id: mealId }, { _id: mealId as any }],
@@ -180,6 +191,7 @@ export async function DELETE(request: NextRequest) {
             'comments.$.deletedAt': Date.now(),
             'comments.$.deletedBy': isAdmin ? 'admin' : 'author_ip',
             'comments.$.deletedIp': clientIp,
+            'comments.$.deletedUserAgent': deletedUserAgent || undefined,
           },
         } as any
       );

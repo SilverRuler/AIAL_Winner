@@ -14,6 +14,9 @@ import {
   ChevronRight,
   ChevronLeft,
   Camera,
+  PackagePlus,
+  RotateCcw,
+  Loader2,
 } from 'lucide-react';
 import { GachaBoxItem } from '@/types/gacha';
 import { GACHA_PHYSICS, getBoxDimensions, getBoxRewardAmount, isPlushSlot } from '@/constants/gacha';
@@ -70,6 +73,11 @@ interface UfoClawMachine3DProps {
     hasStock: boolean;
     lockedBy: string | null;
   }>;
+  isAdmin?: boolean;
+  onAdminRefill?: () => void;
+  onAdminReset?: () => void;
+  isRefilling?: boolean;
+  isResetting?: boolean;
 }
 
 function createSidePanelTexture(title: string, accent: string, bg: string, rewardSol: number): THREE.CanvasTexture {
@@ -327,6 +335,11 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   onNextMachine,
   onSelectMachine,
   machineSummaries = [],
+  isAdmin = false,
+  onAdminRefill,
+  onAdminReset,
+  isRefilling = false,
+  isResetting = false,
 }) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<CranePhase>('idle');
@@ -1899,39 +1912,75 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           </button>
         </div>
 
-        {/* 개별 뽑기판 빠른 전환 탭 (#1 ~ #6) */}
+        {/* 개별 뽑기판 빠른 전환 탭 (#1 ~ #6) + 우측 관리자 전용 개별 리필/초기화 버튼 */}
         {machineSummaries.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
-            {machineSummaries.map((ms) => {
-              const isActive = ms.index === machineIndex;
-              return (
-                <button
-                  key={ms.index}
-                  type="button"
-                  disabled={isCraneLockedToFront}
-                  onClick={() => onSelectMachine?.(ms.index)}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-bold shrink-0 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
-                    isActive
-                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-sm'
-                      : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  <span
-                    className={`w-1.5 h-1.5 rounded-full ${
-                      ms.lockedBy
-                        ? 'bg-rose-400 animate-pulse'
-                        : ms.hasStock
-                        ? 'bg-emerald-400'
-                        : 'bg-slate-600'
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+              {machineSummaries.map((ms) => {
+                const isActive = ms.index === machineIndex;
+                return (
+                  <button
+                    key={ms.index}
+                    type="button"
+                    disabled={isCraneLockedToFront}
+                    onClick={() => onSelectMachine?.(ms.index)}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-bold shrink-0 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+                      isActive
+                        ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-sm'
+                        : 'bg-slate-950/80 hover:bg-slate-800 border-slate-800 text-slate-400 hover:text-slate-200'
                     }`}
-                  />
-                  <span>{ms.shortName}</span>
-                  {!ms.hasStock && (
-                    <span className="text-[9px] text-rose-400 font-black">품절</span>
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        ms.lockedBy
+                          ? 'bg-rose-400 animate-pulse'
+                          : ms.hasStock
+                          ? 'bg-emerald-400'
+                          : 'bg-slate-600'
+                      }`}
+                    />
+                    <span>{ms.shortName}</span>
+                    {!ms.hasStock && (
+                      <span className="text-[9px] text-rose-400 font-black">품절</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {isAdmin && (
+              <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+                <button
+                  type="button"
+                  onClick={onAdminRefill}
+                  disabled={isRefilling || isResetting || isCraneLockedToFront}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 text-[11px] font-black cursor-pointer disabled:opacity-45 transition-colors"
+                  title={`현재 선택된 ${machineLabel} 뽑기판 리필`}
+                >
+                  {isRefilling ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <PackagePlus className="w-3.5 h-3.5" />
                   )}
+                  <span>뽑기판 리필</span>
                 </button>
-              );
-            })}
+
+                <button
+                  type="button"
+                  onClick={onAdminReset}
+                  disabled={isResetting || isRefilling || isCraneLockedToFront}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-[11px] font-black cursor-pointer disabled:opacity-45 transition-colors"
+                  title={`현재 선택된 ${machineLabel} 뽑기판 중앙 정위치 초기화`}
+                >
+                  {isResetting ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  )}
+                  <span>뽑기판 초기화</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

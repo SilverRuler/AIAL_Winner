@@ -481,16 +481,12 @@ export default function GachaPage() {
 
   const handleAdminRefill = async () => {
     const curEmpty = (machine?.items?.length ?? 0) === 0;
-    const totalEmpty = machines.filter((m) => (m?.items?.length ?? 0) === 0).length;
-    if (!curEmpty && totalEmpty === 0) {
-      setStatusMessage(`이미 ${GACHA_TOTAL_SLOTS}개 뽑기판 모두 상품이 채워져 있습니다.`);
+    const label = getMachineLabel(selectedMachineIndex);
+    if (!curEmpty) {
+      setStatusMessage(`[${selectedMachineIndex + 1}번 뽑기판] ${label}은(는) 이미 상품이 채워져 있습니다.`);
       return;
     }
-    const refillAll = !curEmpty && totalEmpty > 0;
-    const confirmMsg = refillAll
-      ? `현재 뽑기판은 채워져 있습니다. 비어있는 다른 뽑기판 ${totalEmpty}개를 모두 리필하시겠습니까?`
-      : `[${selectedMachineIndex + 1}번 뽑기판] ${getMachineLabel(selectedMachineIndex)}을(를) 새로 리필하시겠습니까?`;
-    if (!confirm(confirmMsg)) return;
+    if (!confirm(`[${selectedMachineIndex + 1}번 뽑기판] ${label}을(를) 새로 리필하시겠습니까?`)) return;
     try {
       setIsRefilling(true);
       const { adminId, adminPw } = getAdminCreds();
@@ -505,7 +501,7 @@ export default function GachaPage() {
           adminId,
           adminPw,
           machineIndex: selectedMachineIndex,
-          all: refillAll,
+          all: false,
         }),
       });
       const data = await resp.json();
@@ -513,7 +509,7 @@ export default function GachaPage() {
         if (Array.isArray(data.machines)) setMachines(data.machines);
         else if (data.machine) updateMachineAt(selectedMachineIndex, data.machine);
         setActiveTurnId(null);
-        setStatusMessage(data.message || '📦 뽑기판 리필이 완료되었습니다.');
+        setStatusMessage(data.message || `📦 [${selectedMachineIndex + 1}번 뽑기판] 리필이 완료되었습니다.`);
       } else {
         setStatusMessage(data.message || '리필 실패');
       }
@@ -765,28 +761,6 @@ export default function GachaPage() {
                   <span>티켓 -1</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={handleAdminRefill}
-                  disabled={isRefilling || isResetting || !!activeTurnId}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 text-xs font-black cursor-pointer disabled:opacity-50"
-                  title="뽑혀서 비어있는 상품 슬롯만 새로 리필 (4개 모두 뽑혔으면 4개 전부 리필)"
-                >
-                  {isRefilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PackagePlus className="w-3.5 h-3.5" />}
-                  <span>뽑기판 리필</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleAdminReset}
-                  disabled={isResetting || isRefilling || !!activeTurnId}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 text-xs font-black cursor-pointer disabled:opacity-50"
-                  title="각도가 틀어졌을 때 현재 남아있는 상자들만 초기 정위치로 복구"
-                >
-                  {isResetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-                  <span>뽑기판 초기화</span>
-                </button>
-
                 <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold">
                   <ShieldCheck className="w-3.5 h-3.5" />
                   관리자 모드
@@ -966,6 +940,11 @@ export default function GachaPage() {
           onNextMachine={handleNextMachine}
           onSelectMachine={handleSelectMachine}
           machineSummaries={machineSummaries}
+          isAdmin={isAdmin}
+          onAdminRefill={handleAdminRefill}
+          onAdminReset={handleAdminReset}
+          isRefilling={isRefilling}
+          isResetting={isResetting}
         />
 
         {/* 3. 최근 뽑기 당첨 내역 */}

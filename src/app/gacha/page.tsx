@@ -436,17 +436,20 @@ export default function GachaPage() {
     const summary = mealWinSummaryByMember[selectedMember];
     const actualWins = summary?.actualWins ?? 0;
     const exchangedWins = summary?.exchangedWins ?? 0;
-    const availAfter = (summary?.availableMealWins ?? 0) - 1;
+    const availableMealWins = summary?.availableMealWins ?? 0;
+    const availAfter = availableMealWins - 1;
 
-    if (actualWins - exchangedWins < 1) {
-      setStatusMessage(`${selectedMember}님은 교환 가능한 식사배틀 승점이 없습니다.`);
+    if (availableMealWins < 1) {
+      setStatusMessage(
+        `${selectedMember}님의 신청 가능 리워드 WIN은 ${availableMealWins}WIN으로 뽑기권 교환이 불가능합니다. (1WIN 이상 필요)`
+      );
       return;
     }
 
     const ok = confirm(
-      `[${selectedMember}] 식사배틀 승점 1WIN을 소모하여 뽑기권 5장으로 교환하시겠습니까?\n\n` +
+      `[${selectedMember}] 식사배틀 신청 가능 리워드 승점 1WIN을 소모하여 뽑기권 5장으로 교환하시겠습니까?\n\n` +
         `• 식사배틀 총 승수(${actualWins}WIN) 표시는 그대로 유지됩니다.\n` +
-        `• 식사배틀 리워드 신청 가능 WIN이 1 차감되어 ${availAfter}WIN이 됩니다. (뽑기권과 승수 교환 ${exchangedWins + 1}회 차감)`
+        `• 신청 가능 리워드 WIN이 ${availableMealWins}WIN → ${availAfter}WIN으로 1 차감됩니다. (뽑기권과 승수 교환 ${exchangedWins + 1}회 차감)`
     );
     if (!ok) return;
 
@@ -652,12 +655,10 @@ export default function GachaPage() {
                 disabled={
                   isExchangingWin ||
                   !!activeTurnId ||
-                  ((mealWinSummaryByMember[selectedMember]?.actualWins ?? 0) -
-                    (mealWinSummaryByMember[selectedMember]?.exchangedWins ?? 0) <
-                    1)
+                  (mealWinSummaryByMember[selectedMember]?.availableMealWins ?? 0) < 1
                 }
                 className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/50 text-purple-200 text-[11px] font-black transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                title="식사배틀 승점 1WIN을 소모해 뽑기권 5장으로 교환 (식사배틀 리워드 신청 가능 승수에서 1WIN 차감)"
+                title="식사배틀 신청 가능 리워드 승점 1WIN을 소모해 뽑기권 5장으로 교환 (신청 가능 WIN이 1 이상일 때만 가능)"
               >
                 {isExchangingWin ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -667,7 +668,7 @@ export default function GachaPage() {
                 <span>
                   승점 1WIN → 뽑기권 5회 교환
                   {mealWinSummaryByMember[selectedMember]
-                    ? ` (보유 ${mealWinSummaryByMember[selectedMember].actualWins}WIN)`
+                    ? ` (신청가능 ${mealWinSummaryByMember[selectedMember].availableMealWins}WIN)`
                     : ''}
                 </span>
               </button>

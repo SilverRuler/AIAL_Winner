@@ -785,7 +785,7 @@ export default function GachaPage() {
                 </strong>{' '}
                 있습니다!{' '}
                 <span className="text-[11px] text-slate-300">
-                  (업비트 입금 시 0.01 SOL 이상 모아서 신청 권장)
+                  (업비트 입금 시 0.02 SOL 이상 모아서 신청 권장)
                 </span>
               </div>
             </div>

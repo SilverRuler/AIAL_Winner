@@ -1056,7 +1056,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                         )}
                         현재 <strong className="text-cyan-300 font-bold font-mono">신청 가능 잔고는 {gachaAvailableSol} SOL</strong>입니다.
                         <span className="block mt-1.5 text-[11px] text-amber-300">
-                          💡 원하시는 SOL 수량을 직접 입력해 신청하실 수 있으며, 업비트 지갑은 0.01 SOL 미만 입금 시 미반영될 수 있습니다.
+                          💡 원하시는 SOL 수량을 직접 입력해 신청하실 수 있으며, 업비트 지갑은 0.02 SOL 미만 입금 시 미반영될 수 있습니다.
                         </span>
                       </>
                     ) : (
@@ -1534,9 +1534,9 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                       ⚠️ 신청 가능 잔고({gachaAvailableSol} SOL)를 초과했습니다.
                     </p>
                   )}
-                  {parsedRequestedSol > 0 && parsedRequestedSol < 0.01 && (
+                  {parsedRequestedSol > 0 && parsedRequestedSol < 0.02 && (
                     <p className="text-[11px] text-amber-300">
-                      ⚠️ 업비트 지갑은 0.01 SOL 미만 입금 시 미반영될 수 있습니다. (0.01 SOL 이상 권장)
+                      ⚠️ 업비트 지갑은 0.02 SOL 미만 입금 시 미반영될 수 있습니다. (0.02 SOL 이상 권장)
                     </p>
                   )}
                 </div>

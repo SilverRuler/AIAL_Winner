@@ -1857,38 +1857,34 @@ export default function Home() {
         title={viewerImage?.title}
       />
 
-      {/* 식사 등록 완료 후 UFO 뽑기 이동 확인 모달 */}
+      {/* 식사 등록 완료 확인 팝업 */}
       {gachaPromptMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
-          <div className="bg-slate-900 border border-cyan-500/50 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-5 text-center">
-            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-cyan-500/25 to-blue-500/25 border border-cyan-400/50 flex items-center justify-center text-3xl shadow-lg">
-              🎟️
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+          onClick={() => setGachaPromptMember(null)}
+        >
+          <div
+            className="bg-slate-900 border border-emerald-500/50 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-5 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-emerald-500/25 to-teal-500/25 border border-emerald-400/50 flex items-center justify-center text-3xl shadow-lg">
+              ✅
             </div>
             <div className="space-y-1.5">
               <h3 className="text-base sm:text-lg font-black text-white">
-                뽑기권이 5회 생겼습니다!
+                식사 등록이 완료되었습니다!
               </h3>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                <strong className="text-amber-300">{gachaPromptMember}</strong>님, 지금 바로 UFO 브릿지 뽑기하러 가시겠습니까?
+                <strong className="text-amber-300">{gachaPromptMember}</strong>님의 식사가 정상적으로 등록되었습니다.
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-2.5 pt-1">
+            <div className="pt-1">
               <button
                 type="button"
                 onClick={() => setGachaPromptMember(null)}
-                className="py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs sm:text-sm transition-colors cursor-pointer"
+                className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-emerald-500/20 transition-all cursor-pointer"
               >
-                아니오
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setGachaPromptMember(null);
-                  router.push('/gacha');
-                }}
-                className="py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-black text-xs sm:text-sm shadow-lg shadow-cyan-500/25 transition-all cursor-pointer"
-              >
-                예 (뽑기하러 가기)
+                확인
               </button>
             </div>
           </div>

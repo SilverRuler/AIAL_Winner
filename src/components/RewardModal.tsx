@@ -24,6 +24,7 @@ import {
   ArrowLeft,
   Trophy,
   ZoomIn,
+  RotateCcw,
 } from 'lucide-react';
 import { RewardItem, MemberWinStats } from '@/types/meal';
 import { MEMBERS, LEGACY_MEMBERS, getMemberInfo } from '@/constants/members';
@@ -117,6 +118,23 @@ export const RewardModal: React.FC<RewardModalProps> = ({
 
   // 멤버별 기신청 차감 승수 맵
   const [memberUsedWins, setMemberUsedWins] = useState<Record<string, number>>({});
+
+  // 리워드 신청 접수 목록 (관리자 Revert 기능용)
+  const [applications, setApplications] = useState<
+    Array<{
+      id: string;
+      member: string;
+      requestedWins: number;
+      rewardAmount?: number;
+      walletAddress: string;
+      memo?: string;
+      status: string;
+      date: string;
+      createdAt: number;
+    }>
+  >([]);
+  const [showAdminApps, setShowAdminApps] = useState<boolean>(false);
+  const [revertingAppId, setRevertingAppId] = useState<string | null>(null);
 
   // 멤버별 뽑기권 교환 차감 승수 맵 (식사배틀 전용)
   const [memberExchangedWins, setMemberExchangedWins] = useState<Record<string, number>>({});
@@ -376,9 +394,12 @@ export const RewardModal: React.FC<RewardModalProps> = ({
   // 리워드 신청 내역 및 기신청 차감 승수/풀이 완료 퀴즈 조회
   const fetchApplications = async () => {
     try {
-      const res = await fetch(applyApiUrl);
+      const res = await fetch(`${applyApiUrl}?_t=${Date.now()}`, { cache: 'no-store' });
       const data = await res.json();
       if (data.success) {
+        if (Array.isArray(data.applications)) {
+          setApplications(data.applications);
+        }
         if (data.memberActualWins) {
           setMemberActualWinsMap(data.memberActualWins);
         }
@@ -684,9 +705,56 @@ export const RewardModal: React.FC<RewardModalProps> = ({
   // 관리자 인증 정보 취득 헬퍼
   const getAdminCredentials = () => {
     if (typeof window === 'undefined') return { adminId: 'aaa', adminPw: 'bbb' };
-    const adminId = sessionStorage.getItem('aial_admin_id') || 'aaa';
-    const adminPw = sessionStorage.getItem('aial_admin_pw') || 'bbb';
+    const adminId =
+      sessionStorage.getItem('aial_admin_id') || localStorage.getItem('aial_admin_id') || 'aaa';
+    const adminPw =
+      sessionStorage.getItem('aial_admin_pw') || localStorage.getItem('aial_admin_pw') || 'bbb';
     return { adminId, adminPw };
+  };
+
+  // 관리자 전용: 리워드 신청 내역 원복(Revert)
+  const handleRevertApplication = async (app: {
+    id: string;
+    member: string;
+    requestedWins: number;
+    rewardAmount?: number;
+    date: string;
+  }) => {
+    const amountLabel = isGacha
+      ? `${app.rewardAmount ?? 0} SOL`
+      : `${app.requestedWins} WIN`;
+    const ok = confirm(
+      `[${app.member}] ${app.date || ''}에 신청한 ${
+        isGacha ? 'UFO 뽑기' : '식사배틀'
+      } ${amountLabel} 리워드 신청을 취소(Revert)하시겠습니까?\n\n차감되었던 ${amountLabel}이(가) 즉시 복구됩니다.`
+    );
+    if (!ok) return;
+
+    setRevertingAppId(app.id);
+    try {
+      const { adminId, adminPw } = getAdminCredentials();
+      const res = await fetch(`${applyApiUrl}?id=${encodeURIComponent(app.id)}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-id': adminId,
+          'x-admin-pw': adminPw,
+        },
+        body: JSON.stringify({ id: app.id, adminId, adminPw }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        await fetchApplications();
+        if (onApplySuccess) onApplySuccess();
+        setApplySuccessMsg(data.message || `${app.member}님의 리워드 신청이 Revert 되었습니다.`);
+      } else {
+        alert(data.message || '신청 취소(Revert)에 실패했습니다.');
+      }
+    } catch {
+      alert('신청 취소(Revert) 중 오류가 발생했습니다.');
+    } finally {
+      setRevertingAppId(null);
+    }
   };
 
   // 관리자 저장 처리
@@ -789,6 +857,13 @@ export const RewardModal: React.FC<RewardModalProps> = ({
       alert('삭제 중 오류가 발생했습니다.');
     }
   };
+
+  // 필터링된 리워드 신청 목록 (관리자 Revert용)
+  const filteredApplications = useMemo(() => {
+    const valid = applications.filter((a) => a.status !== 'rejected');
+    if (selectedMember === 'all') return valid;
+    return valid.filter((a) => a.member === selectedMember);
+  }, [applications, selectedMember]);
 
   // 필터링된 리워드 목록
   const filteredRewards = useMemo(() => {
@@ -1023,6 +1098,19 @@ export const RewardModal: React.FC<RewardModalProps> = ({
               >
                 지급 내역 확인하기
               </button>
+              {isAdmin && filteredApplications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewMode('history');
+                    setShowAdminApps(true);
+                  }}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/50 text-amber-300 font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>신청 Revert ({filteredApplications.length})</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1614,18 +1702,109 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                 </div>
               </div>
 
-              {/* 관리자: 내역 추가 버튼 */}
+              {/* 관리자: 신청 내역 Revert 토글 + 지급 내역 추가 버튼 */}
               {isAdmin && !isFormOpen && (
-                <button
-                  type="button"
-                  onClick={handleOpenAddForm}
-                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-purple-600/20 cursor-pointer w-full sm:w-auto justify-center shrink-0"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>리워드 지급 내역 추가</span>
-                </button>
+                <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap justify-end shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminApps((prev) => !prev)}
+                    className={`px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer justify-center ${
+                      showAdminApps
+                        ? 'bg-rose-500/25 border-rose-400 text-rose-200 shadow-sm'
+                        : 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-400/50 text-amber-300'
+                    }`}
+                    title="유저가 신청한 리워드 접수 내역 확인 및 취소(Revert)"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>신청 Revert ({filteredApplications.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleOpenAddForm}
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-md shadow-purple-600/20 cursor-pointer justify-center"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>리워드 지급 내역 추가</span>
+                  </button>
+                </div>
               )}
             </div>
+
+            {/* 관리자 전용: 유저 리워드 신청 접수 내역 및 Revert 패널 */}
+            {isAdmin && showAdminApps && !isFormOpen && (
+              <div className="p-4 bg-rose-950/20 border-b border-rose-500/35 space-y-2.5 animate-fade-in shrink-0 max-h-64 overflow-y-auto">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-black text-rose-300 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-rose-400" />
+                    <span>
+                      관리자 전용 · {isGacha ? 'UFO 뽑기' : '식사배틀'} 리워드 신청 내역 (
+                      {selectedMember === 'all' ? '전체' : selectedMember} {filteredApplications.length}건)
+                    </span>
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminApps(false)}
+                    className="text-[11px] text-slate-400 hover:text-white font-semibold cursor-pointer"
+                  >
+                    접기 ✕
+                  </button>
+                </div>
+
+                {filteredApplications.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-3 text-center">
+                    접수된 리워드 신청 내역이 없습니다.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredApplications.map((app) => {
+                      const amountText = isGacha
+                        ? `${app.rewardAmount ?? 0} SOL`
+                        : `${app.requestedWins} WIN`;
+                      const shortWallet =
+                        app.walletAddress && app.walletAddress.length > 16
+                          ? `${app.walletAddress.slice(0, 6)}...${app.walletAddress.slice(-6)}`
+                          : app.walletAddress || '-';
+                      return (
+                        <div
+                          key={app.id}
+                          className="p-2.5 rounded-xl bg-slate-950/90 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-black text-white">{app.member}</span>
+                              <span className="px-2 py-0.5 rounded-md bg-amber-500/20 border border-amber-400/40 text-amber-300 font-mono font-black text-[11px]">
+                                {amountText}
+                              </span>
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {app.date || ''}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono truncate">
+                              지갑: {shortWallet}
+                              {app.memo ? ` · 메모: ${app.memo}` : ''}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={revertingAppId === app.id}
+                            onClick={() => handleRevertApplication(app)}
+                            className="px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/35 border border-rose-500/50 text-rose-200 font-black text-[11px] shrink-0 flex items-center gap-1 cursor-pointer disabled:opacity-50 transition-colors"
+                            title="실수 신청 취소 및 차감된 승수/SOL 즉시 복구"
+                          >
+                            {revertingAppId === app.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <RotateCcw className="w-3 h-3" />
+                            )}
+                            <span>Revert</span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* 관리자 등록 / 수정 폼 (열렸을 때) */}
             {isFormOpen && (

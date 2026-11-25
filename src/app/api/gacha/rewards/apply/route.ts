@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { ObjectId } from 'mongodb';
 import { getDatabase } from '@/lib/mongodb';
-import { getTelegramConfig } from '@/lib/gachaServer';
+import { getTelegramConfig, isAdminAuthorized, recordGachaLog } from '@/lib/gachaServer';
 import { GACHA_DEFAULT_REWARD_AMOUNT } from '@/constants/gacha';
 import { getClientIp, normalizeIp } from '@/lib/ip';
 
@@ -350,6 +351,100 @@ export async function POST(request: NextRequest) {
     console.error('Failed to process gacha reward application:', err);
     return NextResponse.json(
       { success: false, message: err.message || '신청 처리 중 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/gacha/rewards/apply
+ * 관리자 전용: UFO 뽑기 리워드 신청 내역 원복(Revert/삭제) -> 차감된 SOL 잔고 즉시 복구
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      body = {};
+    }
+
+    const { searchParams } = new URL(request.url);
+    const adminCheckBody = {
+      adminId: body?.adminId || searchParams.get('adminId') || undefined,
+      adminPw: body?.adminPw || searchParams.get('adminPw') || undefined,
+    };
+
+    if (!isAdminAuthorized(request, adminCheckBody)) {
+      return NextResponse.json(
+        { success: false, message: '관리자 권한이 필요합니다.' },
+        { status: 401 }
+      );
+    }
+
+    const appId = (body?.id || searchParams.get('id') || '').trim();
+    if (!appId) {
+      return NextResponse.json(
+        { success: false, message: '취소(Revert)할 신청 ID가 필요합니다.' },
+        { status: 400 }
+      );
+    }
+
+    const db = await getDatabase();
+    if (!db) {
+      return NextResponse.json(
+        { success: false, message: 'Database connection failed' },
+        { status: 500 }
+      );
+    }
+
+    const col = db.collection('gacha_reward_applications');
+    const filter: any = ObjectId.isValid(appId)
+      ? { $or: [{ id: appId }, { _id: new ObjectId(appId) }] }
+      : { id: appId };
+
+    const target = (await col.findOne(filter)) as any;
+    if (!target) {
+      return NextResponse.json(
+        { success: false, message: '해당 UFO 뽑기 리워드 신청 내역을 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    const revertedSol =
+      typeof target.rewardAmount === 'number'
+        ? target.rewardAmount
+        : roundSol((Number(target.requestedWins) || 0) * GACHA_DEFAULT_REWARD_AMOUNT);
+
+    await col.deleteOne({ _id: target._id });
+
+    await recordGachaLog(db, {
+      type: 'admin_ticket',
+      member: '관리자',
+      message: `↩️ 관리자가 ${target.member}님의 UFO 뽑기 리워드 신청(${revertedSol} SOL)을 취소(Revert) 처리했습니다.`,
+      meta: {
+        action: 'revert_gacha_reward_application',
+        applicationId: target.id || target._id.toString(),
+        targetMember: target.member,
+        revertedSol,
+        appliedDate: target.date || '',
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: `${target.member}님의 UFO 뽑기 ${revertedSol} SOL 리워드 신청이 취소(Revert)되어 복구되었습니다.`,
+      revertedApplication: {
+        id: target.id || target._id.toString(),
+        member: target.member,
+        rewardAmount: revertedSol,
+        date: target.date || '',
+      },
+    });
+  } catch (err: any) {
+    console.error('Failed to revert gacha reward application:', err);
+    return NextResponse.json(
+      { success: false, message: err.message || '뽑기 리워드 신청 취소(Revert) 중 오류가 발생했습니다.' },
       { status: 500 }
     );
   }

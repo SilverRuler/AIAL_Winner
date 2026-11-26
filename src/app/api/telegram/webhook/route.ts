@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import https from 'node:https';
 import { getDatabase } from '@/lib/mongodb';
 import { GachaBoxItem } from '@/types/gacha';
 import {
@@ -24,12 +25,29 @@ export const dynamic = 'force-dynamic';
 
 const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || 'aial_gacha_tg_secret_261125';
 
+function buildWebhookReply(
+  chatId: string | number,
+  text: string,
+  replyToMessageId?: number
+) {
+  const payload: Record<string, any> = {
+    method: 'sendMessage',
+    chat_id: chatId,
+    text,
+    parse_mode: 'HTML',
+  };
+  if (replyToMessageId) {
+    payload.reply_to_message_id = replyToMessageId;
+  }
+  return NextResponse.json(payload);
+}
+
 async function sendTelegramReply(
   token: string,
   chatId: string | number,
   text: string,
   replyToMessageId?: number
-) {
+): Promise<boolean> {
   try {
     const payload: Record<string, any> = {
       chat_id: chatId,
@@ -39,14 +57,37 @@ async function sendTelegramReply(
     if (replyToMessageId) {
       payload.reply_to_message_id = replyToMessageId;
     }
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(8000),
+    const bodyStr = JSON.stringify(payload);
+    await new Promise<void>((resolve, reject) => {
+      const req = https.request(
+        {
+          hostname: 'api.telegram.org',
+          port: 443,
+          path: `/bot${token}/sendMessage`,
+          method: 'POST',
+          family: 4, // IPv4 강제 (oci2 IPv6 미지원으로 인한 Node Happy Eyeballs ETIMEDOUT 방지)
+          timeout: 10000,
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(bodyStr),
+          },
+        },
+        (res) => {
+          res.resume();
+          res.on('end', () => resolve());
+        }
+      );
+      req.on('timeout', () => {
+        req.destroy(new Error('Telegram IPv4 request timeout'));
+      });
+      req.on('error', reject);
+      req.write(bodyStr);
+      req.end();
     });
+    return true;
   } catch (err) {
     console.error('Failed to send Telegram webhook reply:', err);
+    return false;
   }
 }
 
@@ -96,8 +137,7 @@ export async function POST(request: NextRequest) {
     const isClearAllItemsCmd = normalized === '전기기상품제거';
 
     if (isHelpCmd) {
-      await sendTelegramReply(
-        token,
+      return buildWebhookReply(
         senderChatId,
         `📖 <b>AIAL Winner &amp; UFO 뽑기 텔레그램 관리자 명령어</b>\n\n` +
           `<b>[1] 현황 조회</b>\n` +
@@ -116,7 +156,6 @@ export async function POST(request: NextRequest) {
           `<i>※ 자동 알림(식사 등록·댓글·리워드 신청)은 백그라운드 봇이 상시 발송합니다.</i>`,
         replyToId
       );
-      return NextResponse.json({ ok: true });
     }
 
     if (

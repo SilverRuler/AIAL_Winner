@@ -1011,7 +1011,7 @@ export const RewardModal: React.FC<RewardModalProps> = ({
                   <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
                     {isGacha ? (
                       <>
-                        UFO 뽑기 리워드는 상자별 획득한 SOL(#1: 0.003 / #2: 0.008 / #3: 0.01 / #4: 0.015 SOL) 중{' '}
+                        UFO 뽑기 리워드는 상자별 획득한 SOL(상품별 0.003 ~ 0.01 SOL) 중{' '}
                         <strong className="text-purple-300 font-bold">원하는 SOL 수량을 직접 입력</strong>해 신청하실 수 있습니다.
                         현재 {selectedMember}님의 누적 획득액은 <strong className="text-amber-400 font-mono">{gachaTotalSol} SOL</strong>이며,
                         {gachaUsedSol > 0 && (

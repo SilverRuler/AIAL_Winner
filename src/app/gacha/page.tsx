@@ -725,7 +725,7 @@ export default function GachaPage() {
                 <span>UFO 브릿지 뽑기 (SOL 리워드)</span>
               </h1>
               <p className="text-[10px] sm:text-xs text-slate-400">
-                12인 공유 릴레이 크레인 · Bar 사이로 상자를 통과시키면 <strong className="text-amber-300">0.003 ~ 0.015 SOL</strong> 당첨!
+                12인 공유 릴레이 크레인 · Bar 사이로 상자를 통과시키면 <strong className="text-amber-300">0.003 ~ 0.01 SOL</strong> 당첨!
               </p>
             </div>
           </div>
@@ -1002,7 +1002,7 @@ export default function GachaPage() {
                 </h2>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] text-slate-400">
-                    상자별 당첨 리워드: 0.003 ~ 0.015 SOL
+                    상자별 당첨 리워드: 0.003 ~ 0.01 SOL
                   </span>
                   {showAllRecentWins && totalRecentCount > RECENT_PREVIEW_COUNT && (
                     <button

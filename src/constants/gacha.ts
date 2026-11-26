@@ -99,8 +99,8 @@ export const GACHA_DEFAULT_REWARD_AMOUNT = 0.01; // 레거시 기본값
  * 슬롯별(1번~13번) 상품 리워드 금액 (SOL)
  */
 export const GACHA_SLOT_REWARD_AMOUNTS = [
-  0.006, 0.010, 0.012, 0.003, 0.014, 0.009,
-  0.011, 0.012, 0.008, 0.015, 0.005, 0.005, 0.013,
+  0.005, 0.005, 0.009, 0.003, 0.008, 0.007,
+  0.008, 0.006, 0.006, 0.010, 0.004, 0.004, 0.007,
 ] as const;
 
 export function getBoxRewardAmount(slotIndex: number): number {

@@ -44,10 +44,10 @@ export const GACHA_PHYSICS = {
   LOCK_TTL_MS: 25 * 1000,
 };
 
-export const GACHA_SLOT_X = [0, 0, 0, 0, 0, 0] as const; // 개별 뽑기판(1판 1상품) 중앙 정위치
-export const GACHA_TOTAL_SLOTS = 6;
+export const GACHA_SLOT_X = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] as const; // 개별 뽑기판(1판 1상품) 중앙 정위치
+export const GACHA_TOTAL_SLOTS = 12;
 export const GACHA_MACHINE_COUNT = GACHA_TOTAL_SLOTS;
-export const GACHA_ALL_SLOT_INDICES = [0, 1, 2, 3, 4, 5] as const;
+export const GACHA_ALL_SLOT_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
 export function getMachineDocId(machineIndex: number): string {
   const safeIdx = Math.max(0, Math.min(GACHA_MACHINE_COUNT - 1, Math.floor(machineIndex || 0)));
@@ -61,21 +61,25 @@ export function normalizeMachineIndex(raw: unknown, fallback = 0): number {
 }
 
 /**
- * 슬롯별(1번~6번) 상품 규격 및 난이도 단계 (중앙 Bar 내경 0.73 고정 기준, 평균 난이도 6.5 중상)
- * #1(5) · #2(6) · #5 바니카(6.5, 정사각) · #6 산드로네(6.5, 3D 입체 쿠션 인형) · #3(7) · #4(8)
- * 모든 6종 모두 Bar 위 안정 안착 및 cannon-es 물리 기준 정상 낙하 가능 검증 완료
+ * 슬롯별(1번~12번) 상품 규격 및 난이도 단계 (피규어 박스 8종 + 3D 입체 인형 4종)
  */
 export const GACHA_SLOT_BOX_DIMS = [
-  { w: 0.54, h: 0.52, d: 1.32, mass: 1.35 }, // #1 프리렌 (난이도 5): 가볍고 컴팩트하여 회전·기울기 공략이 수월한 박스
-  { w: 0.60, h: 0.56, d: 1.44, mass: 1.55 }, // #2 네즈코 (난이도 6): 표준 규격·무게의 정석 아케이드 브릿지 박스
-  { w: 0.63, h: 0.60, d: 1.50, mass: 1.68 }, // #3 노엘 실바 (난이도 7): 두툼하고 길며 묵직해 정밀 각도 조절이 필요한 박스
-  { w: 0.66, h: 0.64, d: 1.58, mass: 1.80 }, // #4 레제 (난이도 8): 틈새 여유가 좁고 길고 무거운 고난도 마스터 박스
-  { w: 0.90, h: 0.58, d: 1.08, mass: 1.70 }, // #5 바니카 (난이도 6.5): 정사각형에 가까운 와이드 박스 (옆세우기·누르기 공략 특화)
-  { w: 0.96, h: 0.44, d: 1.36, mass: 1.45 }, // #6 산드로네 쿠션 인형 (난이도 6.5): 3D 입체 다이컷 쿠션 인형 (말랑한 복합 형태·옆기울이기 공략)
+  { w: 0.54, h: 0.52, d: 1.32, mass: 1.25 }, // #1 프리렌 (난이도 5)
+  { w: 0.60, h: 0.56, d: 1.44, mass: 1.48 }, // #2 네즈코 (난이도 6)
+  { w: 0.58, h: 0.54, d: 1.38, mass: 1.40 }, // #3 페른 (난이도 5.5)
+  { w: 0.66, h: 0.64, d: 1.58, mass: 1.76 }, // #4 레제 (난이도 8)
+  { w: 0.90, h: 0.58, d: 1.08, mass: 1.58 }, // #5 바니카 (난이도 6.5, 정사각)
+  { w: 0.96, h: 0.44, d: 1.36, mass: 1.32 }, // #6 산드로네 3D 인형 (난이도 6.5)
+  { w: 0.62, h: 0.58, d: 1.48, mass: 1.56 }, // #7 루시 (난이도 7)
+  { w: 0.64, h: 0.58, d: 1.52, mass: 1.64 }, // #8 렘 (난이도 7.5)
+  { w: 0.56, h: 0.54, d: 1.36, mass: 1.34 }, // #9 시노부 (난이도 5.5)
+  { w: 1.06, h: 0.46, d: 1.08, mass: 1.46 }, // #10 키타가와 마린 3D 인형 (난이도 7)
+  { w: 0.94, h: 0.44, d: 1.44, mass: 1.52 }, // #11 하쿠네 미쿠 3D 인형 (난이도 7.5)
+  { w: 0.52, h: 0.44, d: 1.56, mass: 1.60 }, // #12 타야마 3D 인형 (난이도 8)
 ] as const;
 
 export function isPlushSlot(slotIndex: number): boolean {
-  return slotIndex === 5;
+  return slotIndex === 5 || slotIndex === 9 || slotIndex === 10 || slotIndex === 11;
 }
 
 export function getBoxDimensions(slotIndex: number) {
@@ -83,15 +87,20 @@ export function getBoxDimensions(slotIndex: number) {
   return GACHA_SLOT_BOX_DIMS[safeIdx];
 }
 
-export const GACHA_COLOR_THEMES: GachaColorTheme[] = ['gold', 'cyan', 'rose', 'purple', 'rose', 'gold'];
+export const GACHA_COLOR_THEMES: GachaColorTheme[] = [
+  'gold', 'cyan', 'purple', 'purple', 'rose', 'gold',
+  'cyan', 'cyan', 'purple', 'rose', 'cyan', 'rose',
+];
 
 export const GACHA_DEFAULT_REWARD_AMOUNT = 0.01; // 레거시 기본값
 
 /**
- * 슬롯별(1번~6번) 상품 리워드 금액 (SOL)
- * #1 프리렌: 0.003, #2 네즈코: 0.008, #3 노엘 실바: 0.01, #4 레제: 0.015, #5 바니카: 0.009, #6 산드로네 인형: 0.005 SOL
+ * 슬롯별(1번~12번) 상품 리워드 금액 (SOL)
  */
-export const GACHA_SLOT_REWARD_AMOUNTS = [0.003, 0.008, 0.01, 0.015, 0.009, 0.005] as const;
+export const GACHA_SLOT_REWARD_AMOUNTS = [
+  0.003, 0.008, 0.006, 0.015, 0.009, 0.005,
+  0.011, 0.012, 0.005, 0.010, 0.012, 0.014,
+] as const;
 
 export function getBoxRewardAmount(slotIndex: number): number {
   const safeIdx = Math.max(0, Math.min(GACHA_SLOT_REWARD_AMOUNTS.length - 1, slotIndex));
@@ -138,19 +147,31 @@ export function shuffleIndices(indices: number[], avoidIdentity = false): number
 export const GACHA_SLOT_LABELS = [
   '프리렌 박스 #1',
   '네즈코 박스 #2',
-  '노엘 실바 박스 #3',
+  '페른 박스 #3',
   '레제 박스 #4',
   '바니카 박스 #5',
-  '산드로네 쿠션 인형 #6',
+  '산드로네 3D 인형 #6',
+  '루시 박스 #7',
+  '렘 박스 #8',
+  '시노부 박스 #9',
+  '키타가와 마린 3D 인형 #10',
+  '하쿠네 미쿠 3D 인형 #11',
+  '타야마 3D 인형 #12',
 ] as const;
 
 export const GACHA_SLOT_DIFFICULTY_TEXT = [
   '난이도 5 (보통)',
   '난이도 6 (중상)',
-  '난이도 7 (어려움)',
+  '난이도 5.5 (보통)',
   '난이도 8 (고난도)',
   '난이도 6.5 (정사각)',
-  '난이도 6.5 (입체 인형)',
+  '난이도 6.5 (3D 인형)',
+  '난이도 7 (어려움)',
+  '난이도 7.5 (어려움)',
+  '난이도 5.5 (보통)',
+  '난이도 7 (3D 인형)',
+  '난이도 7.5 (3D 인형)',
+  '난이도 8 (3D 인형)',
 ] as const;
 
 export function getMachineLabel(machineIndex: number): string {

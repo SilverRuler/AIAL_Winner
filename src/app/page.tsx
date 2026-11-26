@@ -40,6 +40,7 @@ import { LeaderboardModal } from '@/components/LeaderboardModal';
 import { HowToModal } from '@/components/HowToModal';
 import { NoticeModal } from '@/components/NoticeModal';
 import { OperatorBalanceModal } from '@/components/OperatorBalanceModal';
+import { AttendanceModal } from '@/components/AttendanceModal';
 import { AdminLoginModal } from '@/components/AdminLoginModal';
 import { ImageViewerModal } from '@/components/ImageViewerModal';
 import { AdminAuthModal, AdminActionType } from '@/components/AdminAuthModal';
@@ -80,6 +81,7 @@ export default function Home() {
   const [isHowToOpen, setIsHowToOpen] = useState<boolean>(false);
   const [isNoticeOpen, setIsNoticeOpen] = useState<boolean>(false);
   const [isOperatorBalanceOpen, setIsOperatorBalanceOpen] = useState<boolean>(false);
+  const [isAttendanceOpen, setIsAttendanceOpen] = useState<boolean>(false);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState<boolean>(false);
   const [isAdminQuizOpen, setIsAdminQuizOpen] = useState<boolean>(false);
   const [isBestWinnerOpen, setIsBestWinnerOpen] = useState<boolean>(false);
@@ -1164,6 +1166,7 @@ export default function Home() {
         onOpenLeaderboard={() => setIsLeaderboardOpen(true)}
         onOpenNotice={() => setIsNoticeOpen(true)}
         onOpenOperatorBalance={() => setIsOperatorBalanceOpen(true)}
+        onOpenAttendance={() => setIsAttendanceOpen(true)}
         onOpenHowTo={() => setIsHowToOpen(true)}
         onOpenAdminLogin={() => setIsAdminLoginOpen(true)}
         onAdminLogout={handleAdminLogout}
@@ -1825,6 +1828,11 @@ export default function Home() {
       <AdminQuizModal
         isOpen={isAdminQuizOpen}
         onClose={() => setIsAdminQuizOpen(false)}
+      />
+
+      <AttendanceModal
+        isOpen={isAttendanceOpen}
+        onClose={() => setIsAttendanceOpen(false)}
       />
 
       <MealDetailModal

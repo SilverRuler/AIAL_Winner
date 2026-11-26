@@ -1,13 +1,14 @@
 'use client';
 
-import React from 'react';
-import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell, Gamepad2, Wallet } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell, Gamepad2, Wallet, CalendarCheck } from 'lucide-react';
 
 interface HeaderProps {
   onOpenNewMeal: () => void;
   onOpenLeaderboard: () => void;
   onOpenNotice: () => void;
   onOpenOperatorBalance: () => void;
+  onOpenAttendance: () => void;
   onOpenHowTo: () => void;
   onOpenAdminLogin: () => void;
   onAdminLogout: () => void;
@@ -23,6 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenLeaderboard,
   onOpenNotice,
   onOpenOperatorBalance,
+  onOpenAttendance,
   onOpenHowTo,
   onOpenAdminLogin,
   onAdminLogout,
@@ -32,6 +34,26 @@ export const Header: React.FC<HeaderProps> = ({
   totalMealsCount,
   totalWinsCount,
 }) => {
+  const actionBarRef = useRef<HTMLDivElement>(null);
+
+  // 모바일에서 버튼이 가로로 넘칠 때 기본 스크롤을 우측 끝(식사 등록 노출)으로 맞추고,
+  // 좌측으로 스와이프하면 맨 왼쪽 '명예의 전당'까지 전부 터치 가능하도록 유지
+  useEffect(() => {
+    const syncRightDefault = () => {
+      const el = actionBarRef.current;
+      if (el && el.scrollWidth > el.clientWidth) {
+        el.scrollLeft = el.scrollWidth;
+      }
+    };
+    syncRightDefault();
+    const raf = requestAnimationFrame(syncRightDefault);
+    window.addEventListener('resize', syncRightDefault);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', syncRightDefault);
+    };
+  }, [isAdmin, totalWinsCount]);
+
   return (
     <header className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 shadow-lg">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
@@ -64,6 +86,21 @@ export const Header: React.FC<HeaderProps> = ({
                       <Sparkles className="w-2.5 h-2.5 text-amber-400" />
                       미식 배틀
                     </span>
+
+                    {/* 출석보상 버튼 (관리자 로그인 버튼 왼쪽 · 모바일에서는 '출석' 표시) */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenAttendance();
+                      }}
+                      className="inline-flex items-center space-x-1 px-1.5 sm:px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 border border-amber-400/50 text-[10px] sm:text-xs font-black transition-all cursor-pointer shrink-0 shadow-sm shadow-amber-900/30"
+                      title="출석보상 받기 (매일 09:00~09:10 · 15:00~15:10 KST · 뽑기권 +3)"
+                    >
+                      <CalendarCheck className="w-3 h-3 text-amber-300" />
+                      <span className="sm:hidden">출석</span>
+                      <span className="hidden sm:inline">출석보상</span>
+                    </button>
 
                     {/* 관리자 로그인/로그아웃 버튼 */}
                     {isAdmin ? (
@@ -120,16 +157,15 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* 2. 하단/우측: [명예의 전당] - [공지사항] - [뽑기하러 가기] - [사용방법] - [식사 등록] 버튼 그룹 */}
+          {/* 2. 하단/우측: [명예의 전당] - [공지사항] - [운영자 잔고] - [뽑기하러 가기] - [사용방법] - [식사 등록] 버튼 그룹 */}
           <div
-            className={`flex items-center gap-1 sm:gap-2.5 overflow-x-auto no-scrollbar py-1 max-w-full touch-pan-x ${
-              isAdmin ? 'justify-start sm:justify-end' : 'justify-end'
-            }`}
+            ref={actionBarRef}
+            className="flex items-center justify-start gap-1 sm:gap-2.5 overflow-x-auto no-scrollbar py-1 w-full sm:w-auto min-w-0 max-w-full touch-pan-x"
           >
-            {/* 1) 명예의 전당 */}
+            {/* 1) 명예의 전당 (first:ml-auto로 여유 폭이 있을 땐 우측 정렬, 넘칠 땐 좌측 끝까지 스크롤 가능) */}
             <button
               onClick={onOpenLeaderboard}
-              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-900 border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 hover:border-amber-500/60 transition-all text-[11px] sm:text-sm font-semibold shrink-0 cursor-pointer"
+              className="ml-auto inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-slate-900 border border-amber-500/30 text-amber-300 hover:bg-amber-500/10 hover:border-amber-500/60 transition-all text-[11px] sm:text-sm font-semibold shrink-0 cursor-pointer"
               title="먀미의 승리(WIN) 랭킹 및 명예의 전당"
             >
               <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />

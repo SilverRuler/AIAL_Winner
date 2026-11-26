@@ -36,7 +36,8 @@ export type GachaLogType =
   | 'admin_ops'
   | 'admin_clear_all'
   | 'exchange'
-  | 'exchange_sol';
+  | 'exchange_sol'
+  | 'attendance';
 
 export interface GachaLogInput {
   type: GachaLogType;

@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
-import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell, Gamepad2, Wallet, CalendarCheck, Radio, Dices } from 'lucide-react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell, Gamepad2, Wallet, CalendarCheck, Radio, Dices, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface HeaderProps {
   onOpenNewMeal: () => void;
@@ -39,43 +39,80 @@ export const Header: React.FC<HeaderProps> = ({
   totalWinsCount,
 }) => {
   const actionBarRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
-  // 모바일에서 버튼이 가로로 넘칠 때 기본 스크롤을 우측 끝(식사 등록 노출)으로 맞추고,
-  // 좌측으로 스와이프하면 맨 왼쪽 '명예의 전당'까지 전부 터치 가능하도록 유지
+  const updateScrollIndicators = useCallback(() => {
+    const el = actionBarRef.current;
+    if (!el) return;
+    const maxScroll = Math.max(0, el.scrollWidth - el.clientWidth);
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(maxScroll - el.scrollLeft > 4);
+  }, []);
+
+  // 모바일·데스크톱 모두 버튼이 가로로 넘칠 때 기본 스크롤을 우측 끝(식사 등록 노출)으로 맞추고,
+  // 좌측 스와이프 / 마우스 휠 / 좌우 화살표 버튼으로 '명예의 전당'까지 전부 접근 가능하도록 유지
   useEffect(() => {
     const syncRightDefault = () => {
       const el = actionBarRef.current;
-      if (el && el.scrollWidth > el.clientWidth) {
+      if (!el) return;
+      if (el.scrollWidth > el.clientWidth) {
         el.scrollLeft = el.scrollWidth;
       }
+      updateScrollIndicators();
     };
     syncRightDefault();
     const raf = requestAnimationFrame(syncRightDefault);
     window.addEventListener('resize', syncRightDefault);
+
+    const el = actionBarRef.current;
+    let ro: ResizeObserver | null = null;
+    if (el && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(updateScrollIndicators);
+      ro.observe(el);
+    }
+
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', syncRightDefault);
+      ro?.disconnect();
     };
-  }, [isAdmin, totalWinsCount]);
+  }, [isAdmin, totalWinsCount, activeUsersCount, updateScrollIndicators]);
+
+  const handleWheelScroll = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const el = actionBarRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+      updateScrollIndicators();
+    }
+  }, [updateScrollIndicators]);
+
+  const scrollActionBarBy = useCallback((delta: number) => {
+    const el = actionBarRef.current;
+    if (!el) return;
+    el.scrollBy({ left: delta, behavior: 'smooth' });
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 shadow-lg">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between py-2.5 sm:py-0 sm:h-20 gap-2 sm:gap-4">
-          {/* 1. 상단/좌측: 로고, 타이틀, 서브타이틀 (클릭 시 홈으로 이동) & 관리자 버튼 */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between py-2.5 sm:py-0 sm:h-20 gap-2 sm:gap-3">
+          {/* 1. 상단/좌측: 로고, 타이틀, 출석보상 & 관리자(로그아웃)까지 항상 온전하게 고정 표시 */}
           <div className="flex items-center justify-between sm:justify-start space-x-2.5 sm:space-x-3 shrink-0">
-            <div className="flex items-center space-x-2.5">
+            <div className="flex items-center space-x-2.5 shrink-0">
               {/* 식사 이미지 + 타이틀 + 서브타이틀 (클릭 시 홈 복귀) */}
               <div
                 onClick={onGoHome}
-                className="flex items-center space-x-2.5 cursor-pointer group"
+                className="flex items-center space-x-2.5 cursor-pointer group shrink-0"
                 title="AIAL Winner 홈으로 이동 (필터 초기화)"
               >
                 <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500 flex items-center justify-center shadow-lg shadow-orange-500/20 ring-2 ring-amber-400/30 shrink-0 group-hover:scale-105 transition-transform">
                   <Utensils className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 </div>
-                <div>
-                  <div className="flex items-center space-x-1.5 flex-wrap">
+                <div className="shrink-0">
+                  <div className="flex items-center space-x-1.5 flex-wrap sm:flex-nowrap whitespace-nowrap">
                     <h1 className="text-base sm:text-xl font-black tracking-tight text-white flex items-center gap-1 group-hover:opacity-90 transition-opacity">
                       <span className="bg-gradient-to-r from-amber-400 via-orange-400 to-rose-400 bg-clip-text text-transparent">
                         AIAL
@@ -175,11 +212,28 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* 2. 하단/우측: [명예의 전당] - [공지사항] - [운영자 잔고] - [뽑기하러 가기] - [사용방법] - [식사 등록] 버튼 그룹 */}
-          <div
-            ref={actionBarRef}
-            className="flex items-center justify-start gap-1 sm:gap-2.5 overflow-x-auto no-scrollbar py-1 w-full sm:w-auto min-w-0 max-w-full touch-pan-x"
-          >
+          {/* 2. 하단/우측: [명예의 전당] ~ [식사 등록] 가로 스크롤 영역 (데스크톱 휠·화살표 + 모바일 스와이프 지원) */}
+          <div className="relative flex items-center flex-1 min-w-0 max-w-full">
+            {canScrollLeft && (
+              <div className="hidden sm:flex items-center absolute left-0 top-0 bottom-0 z-10 pr-4 bg-gradient-to-r from-slate-950 via-slate-950/95 to-transparent pointer-events-none">
+                <button
+                  type="button"
+                  onClick={() => scrollActionBarBy(-220)}
+                  className="pointer-events-auto inline-flex items-center justify-center w-7 h-8 rounded-lg bg-slate-900 hover:bg-slate-800 border border-amber-400/50 text-amber-300 hover:text-white shadow-lg cursor-pointer transition-colors"
+                  title="왼쪽 메뉴 더 보기"
+                  aria-label="왼쪽으로 스크롤"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            <div
+              ref={actionBarRef}
+              onScroll={updateScrollIndicators}
+              onWheel={handleWheelScroll}
+              className="flex items-center justify-start gap-1 sm:gap-2 overflow-x-auto no-scrollbar py-1 w-full min-w-0 max-w-full touch-pan-x"
+            >
             {/* 1) 명예의 전당 (first:ml-auto로 여유 폭이 있을 땐 우측 정렬, 넘칠 땐 좌측 끝까지 스크롤 가능) */}
             <button
               onClick={onOpenLeaderboard}
@@ -215,18 +269,6 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="sm:hidden">잔고</span>
               <span className="hidden sm:inline">운영자 잔고</span>
             </button>
-
-            {/* 3) 관리자 QUIZ 메뉴 버튼 */}
-            {isAdmin && onOpenAdminQuiz && (
-              <button
-                onClick={onOpenAdminQuiz}
-                className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-purple-950/80 border border-purple-500/50 text-purple-300 hover:text-white hover:bg-purple-600/30 hover:border-purple-400 transition-all text-[11px] sm:text-sm font-black shrink-0 cursor-pointer shadow-sm shadow-purple-950/40"
-                title="솔라나 리워드 퀴즈 관리자 메뉴"
-              >
-                <HelpCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-400" />
-                <span>QUIZ</span>
-              </button>
-            )}
 
             {/* 3-1) 실시간 눈치 미니게임 (4500 포트 · 뽑기하러 가기 바로 왼쪽) */}
             <button
@@ -285,6 +327,21 @@ export const Header: React.FC<HeaderProps> = ({
               <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4 stroke-[2.5]" />
               <span>식사 등록</span>
             </button>
+            </div>
+
+            {canScrollRight && (
+              <div className="hidden sm:flex items-center absolute right-0 top-0 bottom-0 z-10 pl-4 bg-gradient-to-l from-slate-950 via-slate-950/95 to-transparent pointer-events-none">
+                <button
+                  type="button"
+                  onClick={() => scrollActionBarBy(220)}
+                  className="pointer-events-auto inline-flex items-center justify-center w-7 h-8 rounded-lg bg-slate-900 hover:bg-slate-800 border border-amber-400/50 text-amber-300 hover:text-white shadow-lg cursor-pointer transition-colors"
+                  title="오른쪽 메뉴 더 보기"
+                  aria-label="오른쪽으로 스크롤"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -8,7 +8,17 @@ import {
   getMachineLabel,
   getRestingBoxPosition,
 } from '@/constants/gacha';
-import { getAllMachineStates, getTelegramConfig, recordGachaLog } from '@/lib/gachaServer';
+import { MEMBERS } from '@/constants/members';
+import {
+  getAllMachineStates,
+  getAllMemberTicketBalances,
+  getGachaMachineOps,
+  getLatestScheduledCheckpoint,
+  getTelegramConfig,
+  grantGachaTickets,
+  recordGachaLog,
+  setGachaMachineOps,
+} from '@/lib/gachaServer';
 
 export const dynamic = 'force-dynamic';
 
@@ -66,7 +76,7 @@ export async function POST(request: NextRequest) {
     const normalized = rawText.replace(/^\/+/, '').replace(/\s+/g, '');
     const replyToId = typeof msg.message_id === 'number' ? msg.message_id : undefined;
 
-    // 반드시 "1번 리필", "1번 재정렬", "1번 정렬" (1~6번) 형식으로 명령해야 작동
+    // 1) 개별 뽑기판 명령: "1번 리필", "1번 재정렬", "1번 정렬" (1~6번)
     const exactMatch = normalized.match(/^([1-6])번(리필|재정렬|정렬)$/);
     const requestedSlotNum = exactMatch ? Number(exactMatch[1]) : null; // 1..6
     const actionWord = exactMatch ? exactMatch[2] : null;
@@ -75,7 +85,24 @@ export async function POST(request: NextRequest) {
     const isResetCmd = actionWord === '재정렬' || actionWord === '정렬';
     const isStatusCmd = normalized === '상태' || normalized === '재고';
 
-    if (!isRefillCmd && !isResetCmd && !isStatusCmd) {
+    // 2) 전체 유저 티켓 지급 명령: "전체 유저 N티켓 지급" (예: 전체 유저 1티켓 지급)
+    const grantAllMatch = normalized.match(/^전체유저(\d+)티켓지급$/);
+    const grantAllAmount = grantAllMatch ? Number(grantAllMatch[1]) : null;
+
+    // 3) 전 기기 운영 제어 명령: "전 기기 운영 중단", "전 기기 운영 재개", "전 기기 상품 제거"
+    const isSuspendAllCmd = normalized === '전기기운영중단';
+    const isResumeAllCmd = normalized === '전기기운영재개';
+    const isClearAllItemsCmd = normalized === '전기기상품제거';
+
+    if (
+      !isRefillCmd &&
+      !isResetCmd &&
+      !isStatusCmd &&
+      grantAllAmount === null &&
+      !isSuspendAllCmd &&
+      !isResumeAllCmd &&
+      !isClearAllItemsCmd
+    ) {
       return NextResponse.json({ ok: true });
     }
 
@@ -88,6 +115,7 @@ export async function POST(request: NextRequest) {
     const col = db.collection('gacha_machine');
     const now = Date.now();
     const machines = await getAllMachineStates(db);
+    const machineOps = await getGachaMachineOps(db);
 
     const formatMachineStatusList = (list: typeof machines) =>
       list
@@ -99,15 +127,145 @@ export async function POST(request: NextRequest) {
         })
         .join('\n');
 
-    // [상태 / 재고 조회]
-    if (isStatusCmd) {
-      const totalStock = machines.reduce((sum, m) => sum + m.items.length, 0);
+    // [전체 유저 N티켓 지급]
+    if (grantAllAmount !== null) {
+      if (!Number.isInteger(grantAllAmount) || grantAllAmount < 1 || grantAllAmount > 1000) {
+        await sendTelegramReply(
+          token,
+          senderChatId,
+          '❌ 지급 수량은 1 ~ 1000 사이의 정수로 입력해주세요. (예: <b>전체 유저 1티켓 지급</b>)',
+          replyToId
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      for (const m of MEMBERS) {
+        await grantGachaTickets(db, m.name, grantAllAmount);
+      }
+
+      const balances = await getAllMemberTicketBalances(db);
+      const summaryLines = MEMBERS.map(
+        (m) => `• ${m.name}: <b>${balances[m.name]?.tickets ?? 0}장</b>`
+      ).join('\n');
+
+      await recordGachaLog(db, {
+        type: 'admin_grant_all',
+        member: '관리자(텔레그램)',
+        message: `🎟️ 운영자(텔레그램)가 전체 12명 유저에게 뽑기권 +${grantAllAmount}장을 일괄 지급했습니다.`,
+        meta: { amount: grantAllAmount, memberCount: MEMBERS.length, source: 'telegram' },
+        createdAt: now,
+      });
+
       await sendTelegramReply(
         token,
         senderChatId,
-        `🎰 <b>개별 UFO 뽑기판 현황 (${totalStock}/${GACHA_TOTAL_SLOTS}개)</b>\n\n` +
+        `🎟️ <b>전체 유저(${MEMBERS.length}명) 뽑기권 +${grantAllAmount}장 지급 완료!</b>\n\n${summaryLines}`,
+        replyToId
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // [전 기기 운영 중단]
+    if (isSuspendAllCmd) {
+      await setGachaMachineOps(db, true, 'telegram');
+      await recordGachaLog(db, {
+        type: 'admin_ops',
+        member: '관리자(텔레그램)',
+        message: '🛑 운영자(텔레그램)가 전 기기 운영 중단(점검중)을 실행했습니다.',
+        meta: { suspended: true, source: 'telegram' },
+        createdAt: now,
+      });
+      await sendTelegramReply(
+        token,
+        senderChatId,
+        `🛑 <b>전 기기 운영 중단(점검중) 적용 완료!</b>\n` +
+          `• 모든 뽑기판이 점검중 상태로 잠기며 뽑기 시작이 차단됩니다.\n` +
+          `• 해제하려면 <b>전 기기 운영 재개</b>라고 입력하세요.`,
+        replyToId
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // [전 기기 운영 재개]
+    if (isResumeAllCmd) {
+      await setGachaMachineOps(db, false, 'telegram');
+      await recordGachaLog(db, {
+        type: 'admin_ops',
+        member: '관리자(텔레그램)',
+        message: '🟢 운영자(텔레그램)가 전 기기 운영을 재개했습니다.',
+        meta: { suspended: false, source: 'telegram' },
+        createdAt: now,
+      });
+      await sendTelegramReply(
+        token,
+        senderChatId,
+        `🟢 <b>전 기기 운영 재개 완료!</b>\n모든 뽑기판이 정상 운영 상태로 복귀했습니다.`,
+        replyToId
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // [전 기기 상품 제거]
+    if (isClearAllItemsCmd) {
+      const latestCp = getLatestScheduledCheckpoint(now);
+      const clearedLock = {
+        active: false,
+        member: null,
+        turnId: null,
+        startedAt: null,
+        expiresAt: null,
+      };
+      for (let idx = 0; idx < GACHA_TOTAL_SLOTS; idx++) {
+        const docId = getMachineDocId(idx);
+        const machineLabel = getMachineLabel(idx);
+        await col.updateOne(
+          { _id: docId as any },
+          {
+            $set: {
+              id: docId,
+              machineIndex: idx,
+              slotIndex: idx,
+              machineLabel,
+              items: [],
+              lock: clearedLock,
+              lastAutoResetSlot: latestCp.key,
+              lastAutoResetAt: now,
+              lastActionSummary: `🧹 운영자(텔레그램)가 전 기기의 상품을 모두 제거했습니다.`,
+              updatedAt: now,
+            },
+          },
+          { upsert: true }
+        );
+      }
+      const updatedMachines = await getAllMachineStates(db);
+      await recordGachaLog(db, {
+        type: 'admin_clear_all',
+        member: '관리자(텔레그램)',
+        message: '🧹 운영자(텔레그램)가 전 기기(1~6번)의 상품을 모두 제거했습니다.',
+        meta: { clearedMachines: GACHA_TOTAL_SLOTS, source: 'telegram' },
+        createdAt: now,
+      });
+      await sendTelegramReply(
+        token,
+        senderChatId,
+        `🧹 <b>전 기기 상품 제거 완료! (0/${GACHA_TOTAL_SLOTS}개)</b>\n\n` +
+          `${formatMachineStatusList(updatedMachines)}`,
+        replyToId
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // [상태 / 재고 조회]
+    if (isStatusCmd) {
+      const totalStock = machines.reduce((sum, m) => sum + m.items.length, 0);
+      const opsBadge = machineOps.suspended ? '🛑 점검중 (운영 중단)' : '🟢 정상 운영 중';
+      await sendTelegramReply(
+        token,
+        senderChatId,
+        `🎰 <b>개별 UFO 뽑기판 현황 (${totalStock}/${GACHA_TOTAL_SLOTS}개)</b>\n` +
+          `• 운영 상태: <b>${opsBadge}</b>\n\n` +
           `${formatMachineStatusList(machines)}\n\n` +
-          `<i>💡 팁: "1번 리필", "1번 재정렬", "1번 정렬" (1~6번) 형식으로 입력하세요</i>`,
+          `<i>💡 명령어: "1번 리필/재정렬/정렬", "전체 유저 1티켓 지급", "전 기기 운영 중단/재개", "전 기기 상품 제거"</i>`,
         replyToId
       );
       return NextResponse.json({ ok: true });

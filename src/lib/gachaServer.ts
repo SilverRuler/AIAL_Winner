@@ -32,6 +32,9 @@ export type GachaLogType =
   | 'admin_reset'
   | 'admin_refill'
   | 'admin_ticket'
+  | 'admin_grant_all'
+  | 'admin_ops'
+  | 'admin_clear_all'
   | 'exchange'
   | 'exchange_sol';
 
@@ -151,9 +154,47 @@ export async function getAllMemberTicketBalances(db: Db): Promise<Record<string,
 }
 
 /**
+ * 전 기기 운영 중단(점검중) 상태 조회 및 변경 (gacha_settings._id = 'machine_ops')
+ */
+export interface GachaMachineOps {
+  suspended: boolean;
+  updatedAt: number;
+  updatedBy?: string;
+}
+
+export async function getGachaMachineOps(db: Db): Promise<GachaMachineOps> {
+  try {
+    const doc = (await db
+      .collection('gacha_settings')
+      .findOne({ _id: 'machine_ops' as any })) as any;
+    return {
+      suspended: Boolean(doc?.suspended),
+      updatedAt: typeof doc?.updatedAt === 'number' ? doc.updatedAt : 0,
+      updatedBy: typeof doc?.updatedBy === 'string' ? doc.updatedBy : undefined,
+    };
+  } catch {
+    return { suspended: false, updatedAt: 0 };
+  }
+}
+
+export async function setGachaMachineOps(
+  db: Db,
+  suspended: boolean,
+  updatedBy = 'telegram'
+): Promise<GachaMachineOps> {
+  const now = Date.now();
+  await db.collection('gacha_settings').updateOne(
+    { _id: 'machine_ops' as any },
+    { $set: { suspended, updatedAt: now, updatedBy } },
+    { upsert: true }
+  );
+  return { suspended, updatedAt: now, updatedBy };
+}
+
+/**
  * KST 기준 정기 자동 재정렬·리필 스케줄(10:30, 14:00, 23:00) 중 가장 최근에 도래한 체크포인트 계산
  */
-function getLatestScheduledCheckpoint(nowMs: number): {
+export function getLatestScheduledCheckpoint(nowMs: number): {
   key: string;
   label: string;
   timestampMs: number;
@@ -192,6 +233,38 @@ function getLatestScheduledCheckpoint(nowMs: number): {
     key: `${fmtDate(latest.ts)}_${latest.label}`,
     label: latest.label,
     timestampMs: latest.ts,
+  };
+}
+
+/**
+ * 다음 정기 자동 재정렬·리필 예정 시각(KST 10:30, 14:00, 23:00) 계산
+ */
+export function getNextScheduledResetInfo(nowMs: number): {
+  nextResetAt: number;
+  nextResetLabel: string;
+  secondsUntilReset: number;
+} {
+  const KST_OFFSET_MS = 9 * 3600 * 1000;
+  const kstDate = new Date(nowMs + KST_OFFSET_MS);
+  const y = kstDate.getUTCFullYear();
+  const m = kstDate.getUTCMonth();
+  const d = kstDate.getUTCDate();
+
+  const makeKstMs = (year: number, month: number, day: number, hour: number, minute: number) =>
+    Date.UTC(year, month, day, hour, minute, 0, 0) - KST_OFFSET_MS;
+
+  const upcoming = [
+    { label: '10:30', ts: makeKstMs(y, m, d, 10, 30) },
+    { label: '14:00', ts: makeKstMs(y, m, d, 14, 0) },
+    { label: '23:00', ts: makeKstMs(y, m, d, 23, 0) },
+    { label: '10:30', ts: makeKstMs(y, m, d + 1, 10, 30) },
+  ];
+
+  const next = upcoming.find((c) => c.ts > nowMs) || upcoming[upcoming.length - 1];
+  return {
+    nextResetAt: next.ts,
+    nextResetLabel: next.label,
+    secondsUntilReset: Math.max(0, (next.ts - nowMs) / 1000),
   };
 }
 
@@ -278,12 +351,14 @@ export async function getOrInitMachineState(db: Db, rawMachineIndex = 0): Promis
     existing.lock = clearedLock;
   }
 
-  // 정기 자동 재정렬 및 리필 체크 (매일 KST 10:30, 14:00, 23:00)
+  // 정기 자동 재정렬 및 리필 체크 (매일 KST 10:30, 14:00, 23:00 — 전 기기 운영 중단 시 건너뜀)
+  const ops = await getGachaMachineOps(db);
   const isActivelyLocked = Boolean(
     existing.lock?.active && existing.lock?.expiresAt && existing.lock.expiresAt > now
   );
   const lastHandledMs = Number(existing.lastAutoResetAt) || Number(existing.updatedAt) || 0;
   if (
+    !ops.suspended &&
     !isActivelyLocked &&
     existing.lastAutoResetSlot !== latestCp.key &&
     latestCp.timestampMs > lastHandledMs

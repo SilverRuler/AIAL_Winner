@@ -89,9 +89,9 @@ export const GACHA_DEFAULT_REWARD_AMOUNT = 0.01; // 레거시 기본값
 
 /**
  * 슬롯별(1번~6번) 상품 리워드 금액 (SOL)
- * #1 프리렌: 0.003, #2 네즈코: 0.008, #3 노엘 실바: 0.01, #4 레제: 0.015, #5 바니카: 0.009, #6 산드로네 인형: 0.01 SOL
+ * #1 프리렌: 0.003, #2 네즈코: 0.008, #3 노엘 실바: 0.01, #4 레제: 0.015, #5 바니카: 0.009, #6 산드로네 인형: 0.005 SOL
  */
-export const GACHA_SLOT_REWARD_AMOUNTS = [0.003, 0.008, 0.01, 0.015, 0.009, 0.01] as const;
+export const GACHA_SLOT_REWARD_AMOUNTS = [0.003, 0.008, 0.01, 0.015, 0.009, 0.005] as const;
 
 export function getBoxRewardAmount(slotIndex: number): number {
   const safeIdx = Math.max(0, Math.min(GACHA_SLOT_REWARD_AMOUNTS.length - 1, slotIndex));

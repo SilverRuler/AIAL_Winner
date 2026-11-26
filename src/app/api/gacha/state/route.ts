@@ -4,6 +4,8 @@ import { MEMBERS } from '@/constants/members';
 import {
   getAllMachineStates,
   getAllMemberTicketBalances,
+  getGachaMachineOps,
+  getNextScheduledResetInfo,
   sanitizeMachineForClient,
 } from '@/lib/gachaServer';
 
@@ -19,7 +21,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [machines, ticketsByMember, allWinsRaw, validAppsRaw, solExchangesRaw, mealWinDocs, mealRewardApps, winExchanges] =
+    const [machines, ticketsByMember, allWinsRaw, validAppsRaw, solExchangesRaw, mealWinDocs, mealRewardApps, winExchanges, machineOps] =
       await Promise.all([
         getAllMachineStates(db),
         getAllMemberTicketBalances(db),
@@ -48,6 +50,7 @@ export async function GET(request: NextRequest) {
           .collection('gacha_win_exchanges')
           .find({}, { projection: { member: 1, winsUsed: 1 } })
           .toArray(),
+        getGachaMachineOps(db),
       ]);
 
     const formatWin = (doc: any) => ({
@@ -183,11 +186,16 @@ export async function GET(request: NextRequest) {
       .map(formatWin);
 
     const sanitizedMachines = machines.map(sanitizeMachineForClient);
+    const nowMs = Date.now();
+    const nextReset = getNextScheduledResetInfo(nowMs);
 
     return NextResponse.json(
       {
         success: true,
-        serverNow: Date.now(),
+        serverNow: nowMs,
+        nextResetAt: nextReset.nextResetAt,
+        nextResetLabel: nextReset.nextResetLabel,
+        machineOps,
         machine: sanitizedMachines[0],
         machines: sanitizedMachines,
         ticketsByMember,

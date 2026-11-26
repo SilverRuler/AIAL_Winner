@@ -4,6 +4,8 @@ import { MEMBERS } from '@/constants/members';
 import { GACHA_PHYSICS, getMachineDocId, getMachineLabel, normalizeMachineIndex } from '@/constants/gacha';
 import {
   getAllMemberTicketBalances,
+  getGachaMachineOps,
+  getNextScheduledResetInfo,
   getOrInitMachineState,
   recordGachaLog,
   sanitizeMachineForClient,
@@ -46,9 +48,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. 머신 상태 확인 및 만료된 락 정리
-    const machine = await getOrInitMachineState(db, machineIndex);
+    // 0. 전 기기 운영 중단(점검중) 및 정기 리셋 5초 전 락다운 검증
+    const [machineOps, machine] = await Promise.all([
+      getGachaMachineOps(db),
+      getOrInitMachineState(db, machineIndex),
+    ]);
     const now = Date.now();
+
+    if (machineOps.suspended) {
+      return NextResponse.json(
+        {
+          success: false,
+          suspended: true,
+          serverNow: now,
+          message: '현재 전 기기 운영 중단(점검중) 상태입니다. 운영 재개 후 다시 이용해주세요!',
+        },
+        { status: 503 }
+      );
+    }
+
+    const nextReset = getNextScheduledResetInfo(now);
+    if (nextReset.secondsUntilReset > 0 && nextReset.secondsUntilReset <= 5) {
+      const remain = Math.max(1, Math.ceil(nextReset.secondsUntilReset));
+      return NextResponse.json(
+        {
+          success: false,
+          resetLockdown: true,
+          serverNow: now,
+          message: `${remain}초 뒤에 정기 뽑기 리셋(${nextReset.nextResetLabel})이 진행되어 잠시 잠금 상태입니다. 리셋 직후 다시 시도해주세요!`,
+        },
+        { status: 423 }
+      );
+    }
 
     if (machine.lock.active && machine.lock.expiresAt && machine.lock.expiresAt > now) {
       return NextResponse.json(

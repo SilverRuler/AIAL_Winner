@@ -1874,6 +1874,9 @@ export default function Home() {
               <h3 className="text-base sm:text-lg font-black text-white">
                 식사 등록이 완료되었습니다!
               </h3>
+              <p className="text-xs sm:text-sm font-black text-amber-300">
+                🎟️ 뽑기권 +5 장이 지급되었습니다!
+              </p>
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
                 <strong className="text-amber-300">{gachaPromptMember}</strong>님의 식사가 정상적으로 등록되었습니다.
               </p>

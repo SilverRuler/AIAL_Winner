@@ -354,7 +354,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                 <p className="text-cyan-300 text-xs sm:text-sm flex items-start gap-2">
                   <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                   <span>
-                    UFO 뽑기판 12종 확장(신규 3D 인형 3종 포함)·실시간 관전(LIVE)·뽑기정보 스펙표는 뽑기 페이지의 <strong>[UFO 공지]</strong>와 <strong>[뽑기정보]</strong>에서 확인하실 수 있습니다.
+                    UFO 뽑기판 13종 확장(신규 3D 인형 4종 포함)·실시간 관전(LIVE)·뽑기정보 스펙표는 뽑기 페이지의 <strong>[UFO 공지]</strong>와 <strong>[뽑기정보]</strong>에서 확인하실 수 있습니다.
                   </span>
                 </p>
               </div>

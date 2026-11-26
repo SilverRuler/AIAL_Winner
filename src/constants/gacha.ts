@@ -44,10 +44,10 @@ export const GACHA_PHYSICS = {
   LOCK_TTL_MS: 25 * 1000,
 };
 
-export const GACHA_SLOT_X = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] as const; // 개별 뽑기판(1판 1상품) 중앙 정위치
-export const GACHA_TOTAL_SLOTS = 12;
+export const GACHA_SLOT_X = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] as const; // 개별 뽑기판(1판 1상품) 중앙 정위치
+export const GACHA_TOTAL_SLOTS = 13;
 export const GACHA_MACHINE_COUNT = GACHA_TOTAL_SLOTS;
-export const GACHA_ALL_SLOT_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+export const GACHA_ALL_SLOT_INDICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 
 export function getMachineDocId(machineIndex: number): string {
   const safeIdx = Math.max(0, Math.min(GACHA_MACHINE_COUNT - 1, Math.floor(machineIndex || 0)));
@@ -76,10 +76,11 @@ export const GACHA_SLOT_BOX_DIMS = [
   { w: 0.66, h: 0.64, d: 1.58, mass: 1.76 }, // #10 레제 (난이도 8)
   { w: 0.96, h: 0.44, d: 1.36, mass: 1.32 }, // #11 산드로네 3D 인형 (난이도 6.5)
   { w: 0.56, h: 0.54, d: 1.36, mass: 1.34 }, // #12 시노부 (난이도 5.5)
+  { w: 0.53, h: 0.44, d: 1.54, mass: 1.58 }, // #13 마키마 3D 인형 (난이도 7.5)
 ] as const;
 
 export function isPlushSlot(slotIndex: number): boolean {
-  return slotIndex === 1 || slotIndex === 4 || slotIndex === 7 || slotIndex === 10;
+  return slotIndex === 1 || slotIndex === 4 || slotIndex === 7 || slotIndex === 10 || slotIndex === 12;
 }
 
 export function getBoxDimensions(slotIndex: number) {
@@ -89,17 +90,17 @@ export function getBoxDimensions(slotIndex: number) {
 
 export const GACHA_COLOR_THEMES: GachaColorTheme[] = [
   'purple', 'rose', 'cyan', 'gold', 'rose', 'rose',
-  'cyan', 'cyan', 'cyan', 'purple', 'gold', 'purple',
+  'cyan', 'cyan', 'cyan', 'purple', 'gold', 'purple', 'rose',
 ];
 
 export const GACHA_DEFAULT_REWARD_AMOUNT = 0.01; // 레거시 기본값
 
 /**
- * 슬롯별(1번~12번) 상품 리워드 금액 (SOL)
+ * 슬롯별(1번~13번) 상품 리워드 금액 (SOL)
  */
 export const GACHA_SLOT_REWARD_AMOUNTS = [
   0.006, 0.010, 0.012, 0.003, 0.014, 0.009,
-  0.011, 0.012, 0.008, 0.015, 0.005, 0.005,
+  0.011, 0.012, 0.008, 0.015, 0.005, 0.005, 0.013,
 ] as const;
 
 export function getBoxRewardAmount(slotIndex: number): number {
@@ -157,6 +158,7 @@ export const GACHA_SLOT_LABELS = [
   '레제 박스 #10',
   '산드로네 3D 인형 #11',
   '시노부 박스 #12',
+  '마키마 3D 인형 #13',
 ] as const;
 
 export const GACHA_SLOT_DIFFICULTY_TEXT = [
@@ -172,6 +174,7 @@ export const GACHA_SLOT_DIFFICULTY_TEXT = [
   '난이도 8 (고난도)',
   '난이도 6.5 (3D 인형)',
   '난이도 5.5 (보통)',
+  '난이도 7.5 (3D 인형)',
 ] as const;
 
 export function getMachineLabel(machineIndex: number): string {

@@ -99,29 +99,33 @@ export const Header: React.FC<HeaderProps> = ({
     <header className="sticky top-0 z-30 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 shadow-lg">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between py-2.5 sm:py-0 sm:h-20 gap-2 sm:gap-3">
-          {/* 1. 상단/좌측: 로고, 타이틀, 출석보상 & 관리자(로그아웃)까지 항상 온전하게 고정 표시 */}
-          <div className="flex items-center justify-between sm:justify-start space-x-2.5 sm:space-x-3 shrink-0">
-            <div className="flex items-center space-x-2.5 shrink-0">
+          {/* 1. 상단/좌측: 모바일에서는 로고 고정 + 우측 배지/관리자 버튼 가로 스크롤, 데스크톱에서는 관리자(로그아웃)까지 전부 고정 표시 */}
+          <div className="flex items-center justify-between sm:justify-start space-x-2 sm:space-x-3 shrink-0 min-w-0 max-w-full">
+            <div className="flex items-center space-x-2 sm:space-x-2.5 min-w-0 flex-1 sm:flex-initial">
               {/* 식사 이미지 + 타이틀 + 서브타이틀 (클릭 시 홈 복귀) */}
               <div
                 onClick={onGoHome}
-                className="flex items-center space-x-2.5 cursor-pointer group shrink-0"
+                className="flex items-center space-x-2 sm:space-x-2.5 cursor-pointer group min-w-0 flex-1 sm:flex-initial"
                 title="AIAL Winner 홈으로 이동 (필터 초기화)"
               >
                 <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-tr from-amber-500 via-orange-500 to-rose-500 flex items-center justify-center shadow-lg shadow-orange-500/20 ring-2 ring-amber-400/30 shrink-0 group-hover:scale-105 transition-transform">
                   <Utensils className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
                 </div>
-                <div className="shrink-0">
-                  <div className="flex items-center space-x-1.5 flex-wrap sm:flex-nowrap whitespace-nowrap">
-                    <h1 className="text-base sm:text-xl font-black tracking-tight text-white flex items-center gap-1 group-hover:opacity-90 transition-opacity">
+                <div className="min-w-0 flex-1 sm:flex-initial">
+                  <div className="flex items-center gap-1.5 flex-nowrap whitespace-nowrap min-w-0">
+                    <h1 className="text-base sm:text-xl font-black tracking-tight text-white flex items-center gap-1 group-hover:opacity-90 transition-opacity shrink-0">
                       <span className="bg-gradient-to-r from-amber-400 via-orange-400 to-rose-400 bg-clip-text text-transparent">
                         AIAL
                       </span>
                       <span className="text-white">Winner</span>
                     </h1>
 
-                    <span
+                    {/* 모바일: 미식배틀~관리자(로그아웃) 가로 스크롤 가능 / 데스크톱: 스크롤 없이 전부 노출 */}
+                    <div
                       onClick={(e) => e.stopPropagation()}
+                      className="flex items-center gap-1.5 flex-nowrap overflow-x-auto sm:overflow-visible no-scrollbar touch-pan-x min-w-0 flex-1 sm:flex-initial py-0.5 pr-1 sm:pr-0"
+                    >
+                    <span
                       className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold tracking-normal inline-flex items-center gap-0.5 shrink-0"
                     >
                       <Sparkles className="w-2.5 h-2.5 text-amber-400" />
@@ -201,6 +205,7 @@ export const Header: React.FC<HeaderProps> = ({
                         <span>관리자</span>
                       </button>
                     )}
+                    </div>
                   </div>
 
                   {/* 먀미의 식사 사진 중... 서브타이틀 */}

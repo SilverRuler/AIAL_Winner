@@ -21,6 +21,7 @@ import {
   setGachaMachineOps,
 } from '@/lib/gachaServer';
 import { getActivePresenceSummary } from '@/lib/presence';
+import { getWinSiteMode, switchWinSiteMode } from '@/lib/siteMode';
 
 export const dynamic = 'force-dynamic';
 
@@ -136,17 +137,22 @@ export async function POST(request: NextRequest) {
     const grantAllMatch = normalized.match(/^전체유저(\d+)티켓지급$/);
     const grantAllAmount = grantAllMatch ? Number(grantAllMatch[1]) : null;
 
-    // 3) 전 기기 운영 제어 명령: "전 기기 운영 중단", "전 기기 운영 재개", "전 기기 상품 제거"
+    // 3) 전 기기 운영 제어 및 서비스 모드 전환 명령
     const isSuspendAllCmd = normalized === '전기기운영중단';
     const isResumeAllCmd = normalized === '전기기운영재개';
     const isClearAllItemsCmd = normalized === '전기기상품제거';
+    const isDevModeCmd = normalized === '개발모드';
+    const isNormalModeCmd = normalized === '일반모드';
 
     if (isHelpCmd) {
       return buildWebhookReply(
         senderChatId,
         `📖 <b>AIAL Winner &amp; UFO 뽑기 텔레그램 관리자 명령어</b>\n\n` +
+          `<b>[0] 원클릭 모드 전환 (사이트 + 뽑기판 동시 제어)</b>\n` +
+          `• <code>개발 모드</code> — <code>win.silverruler.xyz</code> 점검 페이지 전환 + 전 기기 운영 중단\n` +
+          `• <code>일반 모드</code> — <code>win.silverruler.xyz</code> 정상 서비스 복귀 + 전 기기 운영 재개\n\n` +
           `<b>[1] 현황 조회</b>\n` +
-          `• <code>상태</code> 또는 <code>재고</code> — 전체 ${GACHA_TOTAL_SLOTS}개 뽑기판 재고·잠금·운영 상태 조회\n` +
+          `• <code>상태</code> 또는 <code>재고</code> — 사이트 모드·동접·전체 ${GACHA_TOTAL_SLOTS}개 뽑기판 재고 조회\n` +
           `• <code>동접</code> 또는 <code>접속자</code> — 실시간 IP별 동접 현황 조회 (기기·닉·위치)\n` +
           `• <code>/위너</code> — 관리자 명령어 전체 목록 보기\n\n` +
           `<b>[2] 개별 뽑기판 관리 (1~${GACHA_TOTAL_SLOTS}번 지정 필수)</b>\n` +
@@ -200,7 +206,9 @@ export async function POST(request: NextRequest) {
       grantAllAmount === null &&
       !isSuspendAllCmd &&
       !isResumeAllCmd &&
-      !isClearAllItemsCmd
+      !isClearAllItemsCmd &&
+      !isDevModeCmd &&
+      !isNormalModeCmd
     ) {
       return NextResponse.json({ ok: true });
     }
@@ -259,6 +267,79 @@ export async function POST(request: NextRequest) {
         token,
         senderChatId,
         `🎟️ <b>전체 유저(${MEMBERS.length}명) 뽑기권 +${grantAllAmount}장 지급 완료!</b>\n\n${summaryLines}`,
+        replyToId
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // [개발 모드: win.silverruler.xyz 점검 페이지 + 전 기기 운영 중단 동시 적용]
+    if (isDevModeCmd) {
+      const siteRes = switchWinSiteMode('dev');
+      await setGachaMachineOps(db, true, 'telegram_dev_mode');
+      await recordGachaLog(db, {
+        type: 'admin_ops',
+        member: '관리자(텔레그램)',
+        message: '🛠️ 운영자(텔레그램)가 개발 모드(사이트 점검 페이지 + 전 기기 운영 중단)를 적용했습니다.',
+        meta: { mode: 'dev', siteOk: siteRes.ok, suspended: true, source: 'telegram' },
+        createdAt: now,
+      });
+
+      if (!siteRes.ok) {
+        await sendTelegramReply(
+          token,
+          senderChatId,
+          `⚠️ <b>개발 모드 부분 적용</b>\n` +
+            `• 뽑기판: 🛑 <b>전 기기 운영 중단 적용 완료</b>\n` +
+            `• 메인 사이트 전환 실패: <code>${siteRes.message}</code>`,
+          replyToId
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      await sendTelegramReply(
+        token,
+        senderChatId,
+        `🛠️ <b>개발 모드 전환 완료!</b>\n` +
+          `• <code>win.silverruler.xyz</code>: <b>점검중 페이지</b>로 전환\n` +
+          `• 뽑기판 (4000/4100): 🛑 <b>전 기기 운영 중단</b> 적용 (진행 중 락 해제)\n` +
+          `• 개발 테스트 주소: <code>windev.silverruler.xyz</code>\n\n` +
+          `<i>💡 정상 서비스로 복구하려면 <b>일반 모드</b>라고 입력하세요.</i>`,
+        replyToId
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // [일반 모드: win.silverruler.xyz 정상 서비스 복귀 + 전 기기 운영 재개 동시 적용]
+    if (isNormalModeCmd) {
+      const siteRes = switchWinSiteMode('normal');
+      await setGachaMachineOps(db, false, 'telegram_normal_mode');
+      await recordGachaLog(db, {
+        type: 'admin_ops',
+        member: '관리자(텔레그램)',
+        message: '🟢 운영자(텔레그램)가 일반 모드(사이트 정상 서비스 + 전 기기 운영 재개)를 적용했습니다.',
+        meta: { mode: 'normal', siteOk: siteRes.ok, suspended: false, source: 'telegram' },
+        createdAt: now,
+      });
+
+      if (!siteRes.ok) {
+        await sendTelegramReply(
+          token,
+          senderChatId,
+          `⚠️ <b>일반 모드 부분 적용</b>\n` +
+            `• 뽑기판: 🟢 <b>전 기기 운영 재개 적용 완료</b>\n` +
+            `• 메인 사이트 전환 실패: <code>${siteRes.message}</code>`,
+          replyToId
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      await sendTelegramReply(
+        token,
+        senderChatId,
+        `🟢 <b>일반 모드 전환 완료!</b>\n` +
+          `• <code>win.silverruler.xyz</code>: <b>정상 서비스</b> 복귀\n` +
+          `• 뽑기판 (4000/4100): 🟢 <b>전 기기 운영 재개</b> 완료\n\n` +
+          `<i>💡 다시 점검으로 전환하려면 <b>개발 모드</b>라고 입력하세요.</i>`,
         replyToId
       );
       return NextResponse.json({ ok: true });
@@ -358,15 +439,23 @@ export async function POST(request: NextRequest) {
     if (isStatusCmd) {
       const totalStock = machines.reduce((sum, m) => sum + m.items.length, 0);
       const opsBadge = machineOps.suspended ? '🛑 점검중 (운영 중단)' : '🟢 정상 운영 중';
+      const siteMode = getWinSiteMode();
+      const siteBadge =
+        siteMode === 'dev'
+          ? '🛠️ 개발 모드 (점검중 페이지)'
+          : siteMode === 'normal'
+          ? '🟢 일반 모드 (정상 서비스)'
+          : '❓ 확인 불가';
       const presence = getActivePresenceSummary();
       await sendTelegramReply(
         token,
         senderChatId,
         `🎰 <b>개별 UFO 뽑기판 현황 (${totalStock}/${GACHA_TOTAL_SLOTS}개)</b>\n` +
-          `• 운영 상태: <b>${opsBadge}</b>\n` +
+          `• 메인 사이트(win): <b>${siteBadge}</b>\n` +
+          `• 뽑기판 상태: <b>${opsBadge}</b>\n` +
           `• 실시간 동접: <b>${presence.totalActive}명</b> (뽑기방 ${presence.byArea.gacha} · 식사배틀 ${presence.byArea.main} · 점검 ${presence.byArea.maintenance})\n\n` +
           `${formatMachineStatusList(machines)}\n\n` +
-          `<i>💡 명령어: "동접", "1번 리필/재정렬/정렬", "전체 유저 1티켓 지급", "전 기기 운영 중단/재개"</i>`,
+          `<i>💡 명령어: "개발 모드", "일반 모드", "동접", "1번 리필/재정렬", "전체 유저 1티켓 지급"</i>`,
         replyToId
       );
       return NextResponse.json({ ok: true });

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell, Gamepad2, Wallet, CalendarCheck, Radio } from 'lucide-react';
+import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell, Gamepad2, Wallet, CalendarCheck, Radio, Dices } from 'lucide-react';
 
 interface HeaderProps {
   onOpenNewMeal: () => void;
@@ -227,6 +227,23 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>QUIZ</span>
               </button>
             )}
+
+            {/* 3-1) 실시간 눈치 미니게임 (4500 포트 · 뽑기하러 가기 바로 왼쪽) */}
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window === 'undefined') return;
+                const savedMem = localStorage.getItem('aial_gacha_member') || '';
+                const qs = savedMem ? `?member=${encodeURIComponent(savedMem)}` : '';
+                window.location.href = `http://oci2.silverruler.xyz:4500${qs}`;
+              }}
+              className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-fuchsia-500/20 to-pink-600/25 border border-fuchsia-400/60 text-fuchsia-200 hover:text-white hover:from-fuchsia-500/35 hover:to-pink-600/40 transition-all text-[11px] sm:text-sm font-black shrink-0 shadow-sm shadow-fuchsia-900/40 cursor-pointer"
+              title="실시간 눈치 미니게임 (매일 14:00~14:03 · 단독 우승 시 뽑기권 +5장)"
+            >
+              <Dices className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-fuchsia-300" />
+              <span className="sm:hidden">미니</span>
+              <span className="hidden sm:inline">미니게임</span>
+            </button>
 
             {/* 3-2) UFO 뽑기하러 가기 버튼 (서버 설정에 따라 4000 Jolt / 4100 Rapier 즉시 스위칭 리다이렉션) */}
             <button

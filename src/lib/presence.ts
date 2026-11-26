@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getClientIp, maskIp, normalizeIp } from '@/lib/ip';
-import { GACHA_SLOT_SHORT_LABELS } from '@/constants/gacha';
+import { getMachineLabel } from '@/constants/gacha';
 
 export type PresenceArea = 'main' | 'gacha' | 'maintenance';
 
@@ -108,8 +108,8 @@ export function buildGachaPageLabel(
     return `${eng} (점검중)`;
   }
   if (typeof machineIndex === 'number' && Number.isInteger(machineIndex) && machineIndex >= 0) {
-    const shortName = GACHA_SLOT_SHORT_LABELS[machineIndex] || `${machineIndex + 1}번`;
-    return `${eng} #${machineIndex + 1} ${shortName}`;
+    const shortName = getMachineLabel(machineIndex).replace(/\s*(박스|인형)\s*#\d+$/, '').trim();
+    return `${eng} #${machineIndex + 1} ${shortName || `${machineIndex + 1}번`}`;
   }
   return eng;
 }

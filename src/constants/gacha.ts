@@ -34,7 +34,7 @@ export const GACHA_PHYSICS = {
   CLAW_MAX_X: 1.36,
   CLAW_MIN_Z: -1.18,
   CLAW_MAX_Z: 1.42,
-  CLAW_DROP_Y: 1.24,      // 하강 시 집게 중심 Y (원래 크기 집게 끝단 y ≈ 0.55로 Bar 높이 0.72 아래까지 자연 도달)
+  CLAW_DROP_Y: 1.44,      // 하강 시 집게 중심 Y (롱 <> 집게 끝단 y ≈ 0.53~0.73로 Bar 높이 0.72 아래까지 깊게 감싸 도달)
   CLAW_LIFT_Y: 3.04,      // 들어올림 최고 높이
   MOVE_SPEED_X: 0.825,      // 초당 X 이동 속도 (기존 1.65의 1/2)
   MOVE_SPEED_Z: 0.625,      // 초당 Z 이동 속도 (기존 1.25의 1/2)

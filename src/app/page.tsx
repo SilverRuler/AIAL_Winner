@@ -1129,6 +1129,60 @@ export default function Home() {
     }
   }, []);
 
+  // 전역 모달/확인창 단축키: Enter = 확인, Escape = 취소/닫기
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing) return;
+      if (e.key !== 'Enter' && e.key !== 'Escape') return;
+      const target = e.target as HTMLElement | null;
+      const inInput = Boolean(
+        target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)
+      );
+
+      // 1) 식사 등록 완료 확인 팝업
+      if (gachaPromptMember) {
+        e.preventDefault();
+        setGachaPromptMember(null);
+        return;
+      }
+
+      if (e.key === 'Escape') {
+        if (viewerImage) { e.preventDefault(); setViewerImage(null); return; }
+        if (adminTargetMeal) { e.preventDefault(); setAdminTargetMeal(null); return; }
+        if (isAdminLoginOpen) { e.preventDefault(); setIsAdminLoginOpen(false); return; }
+        if (isPresenceOpen) { e.preventDefault(); setIsPresenceOpen(false); return; }
+        if (isAttendanceOpen) { e.preventDefault(); setIsAttendanceOpen(false); return; }
+        if (isOperatorBalanceOpen) { e.preventDefault(); setIsOperatorBalanceOpen(false); return; }
+        if (isNoticeOpen) { e.preventDefault(); setIsNoticeOpen(false); return; }
+        if (isHowToOpen) { e.preventDefault(); setIsHowToOpen(false); return; }
+        if (isLeaderboardOpen) { e.preventDefault(); setIsLeaderboardOpen(false); return; }
+        if (isNewMealOpen) { e.preventDefault(); setIsNewMealOpen(false); return; }
+        return;
+      }
+
+      if (e.key === 'Enter' && !inInput) {
+        if (isNoticeOpen) { e.preventDefault(); setIsNoticeOpen(false); return; }
+        if (isHowToOpen) { e.preventDefault(); setIsHowToOpen(false); return; }
+        if (isOperatorBalanceOpen) { e.preventDefault(); setIsOperatorBalanceOpen(false); return; }
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    gachaPromptMember,
+    viewerImage,
+    adminTargetMeal,
+    isAdminLoginOpen,
+    isPresenceOpen,
+    isAttendanceOpen,
+    isOperatorBalanceOpen,
+    isNoticeOpen,
+    isHowToOpen,
+    isLeaderboardOpen,
+    isNewMealOpen,
+  ]);
+
   return (
     <div
       className="min-h-screen bg-slate-950 text-slate-100 flex flex-col overflow-x-hidden relative"

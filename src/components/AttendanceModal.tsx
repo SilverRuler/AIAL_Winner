@@ -96,8 +96,6 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({ isOpen, onClos
 
   const liveInfo = useMemo(() => getLiveKstInfo(tickNow + clockOffset), [tickNow, clockOffset]);
 
-  if (!isOpen) return null;
-
   const activeWindow = liveInfo.activeWindow;
   const activeClaimedList =
     activeWindow === 'morning'
@@ -110,7 +108,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({ isOpen, onClos
   );
   const canClaim = Boolean(activeWindow && selectedMember && !isSelectedAlreadyClaimed && !isClaiming);
 
-  const handleClaim = async () => {
+  const handleClaim = useCallback(async () => {
     if (!selectedMember) {
       setFeedback({ type: 'error', text: '보상을 받을 유저 닉네임을 먼저 선택해주세요.' });
       return;
@@ -152,7 +150,34 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({ isOpen, onClos
     } finally {
       setIsClaiming(false);
     }
-  };
+  }, [selectedMember, fetchState]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing) return;
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key === 'Enter') {
+        const tag = (e.target as HTMLElement | null)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (feedback?.type === 'success') {
+          e.preventDefault();
+          onClose();
+        } else if (canClaim) {
+          e.preventDefault();
+          handleClaim();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose, canClaim, handleClaim, feedback]);
+
+  if (!isOpen) return null;
 
   return (
     <div

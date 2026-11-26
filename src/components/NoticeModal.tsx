@@ -270,7 +270,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                 </p>
                 <div className="ml-6 bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] sm:text-xs text-slate-300">
                   <p>• 등록 필수 조건: <strong className="text-white">사진 또는 메뉴 이름(제목) 중 1개 필수</strong> (기존처럼 사진만 올려도 등록 가능)</p>
-                  <p>• 사진 미첨부 시 기본 이미지가 적용되며, 설명을 자세히 적을수록 <strong className="text-amber-300">최대 30점 한도</strong> 내에서 AI가 최대한 평가합니다.</p>
+                  <p>• 사진 미첨부 시 기본 이미지가 적용되며, 설명을 자세히 적을수록 <strong className="text-amber-300">최대 50점 한도</strong> 내에서 AI가 최대한 평가합니다.</p>
                 </div>
                 <p className="text-slate-300 text-xs sm:text-sm flex items-start gap-2">
                   <Wallet className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />

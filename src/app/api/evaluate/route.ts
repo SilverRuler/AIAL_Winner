@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
         const { score: rawScore, review } = await evaluateSingleMeal(slot, un);
         const isNoPhoto = isNoPhotoMeal(un);
         const score = isNoPhoto
-          ? Math.min(winnerScore - 1, Math.min(30, Math.max(1, rawScore)))
+          ? Math.min(winnerScore - 1, Math.min(50, Math.max(1, rawScore)))
           : Math.min(winnerScore - 1, Math.max(30, rawScore));
 
         if (db) {
@@ -339,7 +339,7 @@ function isNoPhotoMeal(entry: MealEntry): boolean {
 
 /**
  * 참가자 1명의 식사를 개별 평가
- * - 사내 보안(MDM)으로 사진 없이 텍스트만 등록된 경우: 최대 30점(1~30점) 한도 내 텍스트 설명 충실도 평가
+ * - 사내 보안(MDM)으로 사진 없이 텍스트만 등록된 경우: 최대 50점(1~50점) 한도 내 텍스트 설명 충실도 평가
  * - 일반 사진 등록 건: NIM Vision 1~3순위 -> sr-combo -> 휴리스틱 순으로 평가
  */
 async function evaluateSingleMeal(
@@ -355,29 +355,29 @@ async function evaluateSingleMeal(
   const tDesc = isDefaultTitle ? '(제목 미입력)' : menuName;
   const cDesc = comment || '(등록된 코멘트 없음)';
 
-  // 사내 보안(MDM) 등으로 사진 없이 제목+설명만 올린 경우: 최대 30점 한도 내 텍스트 상세도 평가
+  // 사내 보안(MDM) 등으로 사진 없이 제목+설명만 올린 경우: 최대 50점 한도 내 텍스트 상세도 평가
   if (isNoPhotoMeal(entry)) {
     const mdmSystemPrompt = `당신은 'AIAL 식사 배틀'의 AI 미식 심사위원입니다.
 이 참가자는 회사 보안 규정(MDM 카메라 차단 등)으로 인해 실제 식사 사진을 첨부하지 못하고, 메뉴 이름(제목)과 텍스트 설명만으로 ${slot} 식사를 출품했습니다.
 
-[사진 미첨부(MDM) 출품작 채점 규칙 - 반드시 1점 ~ 30점 범위 엄수!]
-사진 증빙이 없으므로 점수는 절대 30점을 초과할 수 없습니다. 하지만 참가자가 메뉴와 맛, 재료, 조리법, 반찬 구성 등을 얼마나 생생하고 자세히 묘사했는지에 따라 1점 ~ 30점 사이에서 최대한 성의 있게 차등 평가하세요:
-- 25 ~ 30점: 재료, 조리 방식, 국물/양념의 풍미, 식감, 곁들임 반찬 구성 등이 매우 구체적이고 먹음직스럽게 묘사되어 사진이 없어도 눈앞에 그려질 정도로 정성이 가득한 설명
-- 18 ~ 24점: 메뉴 구성과 맛의 포인트가 어느 정도 구체적으로 설명된 성실한 텍스트
-- 10 ~ 17점: 메뉴 이름과 간단한 한 줄 소감 정도만 작성된 경우
-- 1 ~ 9점: 메뉴 이름만 짧게 적고 설명이 거의 없거나 매우 단출한 경우
+[사진 미첨부(MDM) 출품작 채점 규칙 - 반드시 1점 ~ 50점 범위 엄수!]
+사진 증빙이 없으므로 점수는 절대 50점을 초과할 수 없습니다. 하지만 참가자가 메뉴와 맛, 재료, 조리법, 반찬 구성 등을 얼마나 생생하고 자세히 묘사했는지에 따라 1점 ~ 50점 사이에서 최대한 성의 있게 차등 평가하세요:
+- 40 ~ 50점: 재료, 조리 방식, 국물/양념의 풍미, 식감, 곁들임 반찬 구성 등이 매우 구체적이고 먹음직스럽게 묘사되어 사진이 없어도 눈앞에 그려질 정도로 정성이 가득한 설명
+- 28 ~ 39점: 메뉴 구성과 맛의 포인트가 어느 정도 구체적으로 설명된 성실한 텍스트
+- 15 ~ 27점: 메뉴 이름과 간단한 한 줄 소감 정도만 작성된 경우
+- 1 ~ 14점: 메뉴 이름만 짧게 적고 설명이 거의 없거나 매우 단출한 경우
 
 [총평 작성 규칙]
 1. 2~3문장으로 간결하게 작성하세요.
-2. 반드시 "이 식사는 사내 보안(MDM)으로 사진 없이 텍스트로 출품된 [메뉴명]이며, ..."로 시작하고, 설명의 구체성/정성과 사진 미첨부(최대 30점 한도) 사유를 들어 점수를 부여한 이유를 명확히 적으세요.
+2. 반드시 "이 식사는 사내 보안(MDM)으로 사진 없이 텍스트로 출품된 [메뉴명]이며, ..."로 시작하고, 설명의 구체성/정성과 사진 미첨부(최대 50점 한도) 사유를 들어 점수를 부여한 이유를 명확히 적으세요.
 3. 반드시 순수 JSON 포맷 하나만 출력하세요. (마크다운 코드블록 금지)
 
 응답 포맷:
-{"score": 24, "review": "이 식사는 사내 보안(MDM)으로 사진 없이 텍스트로 출품된 ...이며, ... 사진 미첨부 최대 30점 한도 내에서 24점을 부여했습니다."}`;
+{"score": 42, "review": "이 식사는 사내 보안(MDM)으로 사진 없이 텍스트로 출품된 ...이며, ... 사진 미첨부 최대 50점 한도 내에서 42점을 부여했습니다."}`;
 
-    const mdmUserPrompt = `참가자: ${member}\n출품 메뉴(제목): ${tDesc}\n식사 상세 설명/코멘트: ${cDesc}\n(사내 보안 MDM으로 사진 미첨부 출품작입니다. 1~30점 한도 내에서 설명의 정성과 구체성을 최대한 평가해주세요.)`;
+    const mdmUserPrompt = `참가자: ${member}\n출품 메뉴(제목): ${tDesc}\n식사 상세 설명/코멘트: ${cDesc}\n(사내 보안 MDM으로 사진 미첨부 출품작입니다. 1~50점 한도 내에서 설명의 정성과 구체성을 최대한 평가해주세요.)`;
     const textOnlyContent = [{ type: 'text', text: mdmUserPrompt }];
-    const clampMdmScore = (s: number) => Math.max(1, Math.min(30, Math.round(s)));
+    const clampMdmScore = (s: number) => Math.max(1, Math.min(50, Math.round(s)));
 
     if (NVIDIA_API_KEY) {
       for (const model of [NIM_MODEL_1, NIM_MODEL_2, NIM_MODEL_3]) {
@@ -439,11 +439,11 @@ async function evaluateSingleMeal(
     }
 
     const detailLen = menuName.length + comment.length;
-    const heuristicMdmScore = clampMdmScore(detailLen >= 80 ? 27 : detailLen >= 40 ? 22 : detailLen >= 18 ? 16 : 10);
+    const heuristicMdmScore = clampMdmScore(detailLen >= 80 ? 45 : detailLen >= 40 ? 36 : detailLen >= 18 ? 26 : 16);
     return {
       score: heuristicMdmScore,
       review: appendModelTag(
-        `이 식사는 사내 보안(MDM)으로 사진 없이 텍스트로 출품된 ${tDesc}이며, 작성해주신 메뉴 설명을 바탕으로 먹음직스러운 한 끼를 떠올릴 수 있었습니다. 사진 미첨부 규정(최대 30점 한도) 내에서 설명의 정성을 반영해 ${heuristicMdmScore}점을 부여했습니다.`,
+        `이 식사는 사내 보안(MDM)으로 사진 없이 텍스트로 출품된 ${tDesc}이며, 작성해주신 메뉴 설명을 바탕으로 먹음직스러운 한 끼를 떠올릴 수 있었습니다. 사진 미첨부 규정(최대 50점 한도) 내에서 설명의 정성을 반영해 ${heuristicMdmScore}점을 부여했습니다.`,
         'heuristic-rule'
       ),
     };

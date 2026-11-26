@@ -917,7 +917,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                       )}
                     </p>
                     <p className="text-[11px] text-cyan-300/90 bg-cyan-950/40 border border-cyan-500/30 rounded-lg px-3 py-1.5 max-w-md">
-                      📵 사내 보안(MDM) 등으로 사진 촬영이 불가한 경우, 사진 없이 아래 <strong>메뉴 이름과 상세 설명</strong>만 입력해도 등록됩니다. (기본 이미지 적용 · 최대 30점 한도 평가)
+                      📵 사내 보안(MDM) 등으로 사진 촬영이 불가한 경우, 사진 없이 아래 <strong>메뉴 이름과 상세 설명</strong>만 입력해도 등록됩니다. (기본 이미지 적용 · 최대 50점 한도 평가)
                     </p>
                   </div>
                 )}
@@ -1024,7 +1024,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                 </label>
                 {!imagePreview && (
                   <span className="text-[10px] text-cyan-300 font-semibold">
-                    자세히 적을수록 30점 한도 내 고득점 유리!
+                    자세히 적을수록 50점 한도 내 고득점 유리!
                   </span>
                 )}
               </div>
@@ -1033,7 +1033,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
                   rows={3}
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
-                  placeholder="사진 없이 등록 시 재료, 조리법, 국물/양념 맛, 반찬 구성 등을 자세히 적어주시면 AI가 최대 30점 이내에서 최대한 평가해드립니다!"
+                  placeholder="사진 없이 등록 시 재료, 조리법, 국물/양념 맛, 반찬 구성 등을 자세히 적어주시면 AI가 최대 50점 이내에서 최대한 평가해드립니다!"
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-y"
                 />
               ) : (
@@ -1051,7 +1051,7 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
               <div className="px-3 py-2 rounded-xl bg-amber-950/40 border border-amber-500/35 text-[11px] text-amber-200 flex items-center gap-2">
                 <span>📵</span>
                 <span>
-                  사진 없이 <strong>텍스트 전용(MDM)</strong>으로 등록됩니다. 기본 이미지가 적용되며 AI 점수는 최대 <strong>30점</strong> 한도 내에서 평가됩니다.
+                  사진 없이 <strong>텍스트 전용(MDM)</strong>으로 등록됩니다. 기본 이미지가 적용되며 AI 점수는 최대 <strong>50점</strong> 한도 내에서 평가됩니다.
                 </span>
               </div>
             )}

@@ -121,6 +121,19 @@ export default function GachaPage() {
   const [activeWinModal, setActiveWinModal] = useState<GachaWinRecord | null>(null);
   const [activeWinRefundedTickets, setActiveWinRefundedTickets] = useState<number>(0);
 
+  // /gacha 직접 접속 시에도 oci2:4000 Jolt Physics 뽑기 서버로 자동 리다이렉션 (선택 멤버 유지)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedMem = localStorage.getItem('aial_gacha_member') || '';
+      const savedMachine = localStorage.getItem('aial_gacha_machine_idx') || '';
+      const params = new URLSearchParams();
+      if (savedMem) params.set('member', savedMem);
+      if (savedMachine) params.set('machine', savedMachine);
+      const qs = params.toString();
+      window.location.replace(`http://oci2.silverruler.xyz:4000${qs ? `?${qs}` : ''}`);
+    }
+  }, []);
+
   // 관리자 세션 확인
   useEffect(() => {
     if (typeof window !== 'undefined') {

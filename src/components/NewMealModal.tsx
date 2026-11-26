@@ -18,7 +18,7 @@ import {
   Camera,
   ImageIcon,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { fireSafeConfetti } from '@/lib/confetti';
 import { MealSlot, MealEntry } from '@/types/meal';
 import {
   MEMBERS,
@@ -512,8 +512,8 @@ export const NewMealModal: React.FC<NewMealModalProps> = ({
         throw new Error(data.message || '식사 등록 실패');
       }
 
-      // 우승 축하 폭죽 효과
-      confetti({
+      // 우승 축하 폭죽 효과 (자동 정리 포함)
+      fireSafeConfetti({
         particleCount: 70,
         spread: 60,
         origin: { y: 0.6 },

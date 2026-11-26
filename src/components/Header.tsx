@@ -174,7 +174,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
             )}
 
-            {/* 3-2) UFO 뽑기하러 가기 버튼 (oci2:4000 Jolt Physics 3D 뽑기 서버로 리다이렉션) */}
+            {/* 3-2) UFO 뽑기하러 가기 버튼 (서버 설정에 따라 4000 Jolt / 4100 Rapier 즉시 스위칭 리다이렉션) */}
             <button
               type="button"
               onClick={() => {
@@ -185,10 +185,10 @@ export const Header: React.FC<HeaderProps> = ({
                 if (savedMem) params.set('member', savedMem);
                 if (savedMachine) params.set('machine', savedMachine);
                 const qs = params.toString();
-                window.location.href = `http://oci2.silverruler.xyz:4000${qs ? `?${qs}` : ''}`;
+                window.location.href = `/api/gacha/go${qs ? `?${qs}` : ''}`;
               }}
               className="inline-flex items-center space-x-1 sm:space-x-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-cyan-500/20 to-blue-600/25 border border-cyan-400/60 text-cyan-200 hover:text-white hover:from-cyan-500/35 hover:to-blue-600/40 transition-all text-[11px] sm:text-sm font-black shrink-0 shadow-sm shadow-cyan-900/40 cursor-pointer"
-              title="Jolt Physics 3D UFO 브릿지 뽑기하러 가기 (oci2:4000)"
+              title="3D UFO 브릿지 뽑기하러 가기"
             >
               <Gamepad2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-300" />
               <span className="sm:hidden">뽑기</span>

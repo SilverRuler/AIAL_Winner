@@ -2,7 +2,7 @@
 
 import React, { useEffect } from 'react';
 import { X, Trophy, Coins, Sparkles } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { fireSafeConfetti, clearSafeConfetti } from '@/lib/confetti';
 import { GachaWinRecord } from '@/types/gacha';
 
 interface GachaWinModalProps {
@@ -22,8 +22,8 @@ export const GachaWinModal: React.FC<GachaWinModalProps> = ({
   useEffect(() => {
     if (!isOpen || !winRecord) return;
 
-    const fire = (particleRatio: number, opts: confetti.Options) => {
-      confetti({
+    const fire = (particleRatio: number, opts: Record<string, unknown>) => {
+      fireSafeConfetti({
         origin: { y: 0.6 },
         colors: ['#f59e0b', '#fbbf24', '#22d3ee', '#10b981', '#a855f7', '#fb7185'],
         ...opts,
@@ -36,14 +36,14 @@ export const GachaWinModal: React.FC<GachaWinModalProps> = ({
     fire(0.35, { spread: 100, decay: 0.91, scalar: 0.95 });
 
     const t1 = setTimeout(() => {
-      confetti({
+      fireSafeConfetti({
         particleCount: 65,
         angle: 60,
         spread: 60,
         origin: { x: 0.15, y: 0.65 },
         colors: ['#f59e0b', '#22d3ee', '#a855f7', '#fb7185'],
       });
-      confetti({
+      fireSafeConfetti({
         particleCount: 65,
         angle: 120,
         spread: 60,
@@ -52,7 +52,10 @@ export const GachaWinModal: React.FC<GachaWinModalProps> = ({
       });
     }, 260);
 
-    return () => clearTimeout(t1);
+    return () => {
+      clearTimeout(t1);
+      clearSafeConfetti();
+    };
   }, [isOpen, winRecord]);
 
   if (!isOpen || !winRecord) return null;

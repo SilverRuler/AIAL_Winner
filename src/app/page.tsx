@@ -24,7 +24,7 @@ import {
   ArrowDown,
   CheckCircle2,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { fireSafeConfetti } from '@/lib/confetti';
 import { MealEntry, MealSlot, MealComment, BestWinnerInfo, BestScoreInfo } from '@/types/meal';
 import {
   getCurrentMealSlot,
@@ -819,8 +819,8 @@ export default function Home() {
         throw new Error(data.message || '평가 실행 실패');
       }
 
-      // 우승 축하 폭죽 팡팡
-      confetti({
+      // 우승 축하 폭죽 팡팡 (자동 정리 포함)
+      fireSafeConfetti({
         particleCount: 120,
         spread: 90,
         origin: { y: 0.5 },

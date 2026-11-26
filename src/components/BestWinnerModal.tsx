@@ -16,7 +16,7 @@ import {
   Eye,
   Heart,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
+import { fireSafeConfetti, clearSafeConfetti } from '@/lib/confetti';
 import { BestWinnerInfo, MealEntry } from '@/types/meal';
 import { getMemberInfo, getWinnerHeaderText } from '@/constants/members';
 
@@ -40,13 +40,16 @@ export const BestWinnerModal: React.FC<BestWinnerModalProps> = ({
   // 모달 오픈 시 축하 콘페티 효과
   useEffect(() => {
     if (isOpen && bestWinner) {
-      confetti({
+      fireSafeConfetti({
         particleCount: 60,
         spread: 75,
         origin: { y: 0.6 },
         colors: ['#f59e0b', '#fbbf24', '#f97316', '#e11d48', '#38bdf8'],
       });
     }
+    return () => {
+      if (isOpen) clearSafeConfetti();
+    };
   }, [isOpen, bestWinner]);
 
   // ESC 키로 닫기

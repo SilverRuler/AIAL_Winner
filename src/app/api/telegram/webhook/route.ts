@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
     const isRefillCmd = actionWord === '리필';
     const isResetCmd = actionWord === '재정렬' || actionWord === '정렬';
     const isStatusCmd = normalized === '상태' || normalized === '재고';
+    const isHelpCmd = normalized === '위너' || normalized === '명령어' || normalized === '도움말';
 
     // 2) 전체 유저 티켓 지급 명령: "전체 유저 N티켓 지급" (예: 전체 유저 1티켓 지급)
     const grantAllMatch = normalized.match(/^전체유저(\d+)티켓지급$/);
@@ -93,6 +94,30 @@ export async function POST(request: NextRequest) {
     const isSuspendAllCmd = normalized === '전기기운영중단';
     const isResumeAllCmd = normalized === '전기기운영재개';
     const isClearAllItemsCmd = normalized === '전기기상품제거';
+
+    if (isHelpCmd) {
+      await sendTelegramReply(
+        token,
+        senderChatId,
+        `📖 <b>AIAL Winner &amp; UFO 뽑기 텔레그램 관리자 명령어</b>\n\n` +
+          `<b>[1] 현황 조회</b>\n` +
+          `• <code>상태</code> 또는 <code>재고</code> — 전체 6개 뽑기판 재고·잠금·운영 상태 조회\n` +
+          `• <code>/위너</code> — 관리자 명령어 전체 목록 보기\n\n` +
+          `<b>[2] 개별 뽑기판 관리 (1~6번 지정 필수)</b>\n` +
+          `• <code>1번 리필</code> ~ <code>6번 리필</code> — 품절된 해당 뽑기판 상품 보충\n` +
+          `• <code>1번 재정렬</code> ~ <code>6번 재정렬</code> — 해당 뽑기판 상품 중앙 정위치 복구\n` +
+          `• <code>1번 정렬</code> ~ <code>6번 정렬</code> — 재정렬과 동일\n\n` +
+          `<b>[3] 티켓 일괄 지급</b>\n` +
+          `• <code>전체 유저 1티켓 지급</code> — 12명 전원에게 뽑기권 +N장 지급 (숫자 자유 변경)\n\n` +
+          `<b>[4] 전 기기 일괄 제어</b>\n` +
+          `• <code>전 기기 운영 중단</code> — 전체 뽑기판 점검중 전환 및 플레이 차단\n` +
+          `• <code>전 기기 운영 재개</code> — 전 기기 점검중 해제 및 정상 운영 복귀\n` +
+          `• <code>전 기기 상품 제거</code> — 1~6번 모든 기기의 상품 일괄 제거\n\n` +
+          `<i>※ 자동 알림(식사 등록·댓글·리워드 신청)은 백그라운드 봇이 상시 발송합니다.</i>`,
+        replyToId
+      );
+      return NextResponse.json({ ok: true });
+    }
 
     if (
       !isRefillCmd &&

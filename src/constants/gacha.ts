@@ -22,20 +22,20 @@ export const GACHA_PHYSICS = {
   // 낙하 승리 판정 Y 임계값 (Bar 아래 WIN 슈트 영역 진입)
   DROP_Y_THRESHOLD: -0.28,
 
-  // 외곽 안전 벽 / 경사 가이드 범위 (1상품 전용 뽑기판)
+  // 외곽 안전 벽 / 경사 가이드 범위 (1상품 전용 뽑기판 — 외곽 파란 Bar와 전면 유리 간극 확대)
   CABINET_HALF_X: 1.78,
-  CABINET_HALF_Z: 1.52,
+  CABINET_HALF_Z: 2.02,
 
-  // 크레인 이동 범위 및 속도 (1상품 전용 뽑기판)
+  // 크레인 이동 범위 및 속도 (1상품 전용 뽑기판 — 크레인 헤드 여유 높이 확대)
   CLAW_HOME_X: -1.32,
   CLAW_HOME_Z: 0.85,
-  CLAW_HOME_Y: 2.68,
+  CLAW_HOME_Y: 3.24,
   CLAW_MIN_X: -1.32,
   CLAW_MAX_X: 1.32,
   CLAW_MIN_Z: -0.85,
   CLAW_MAX_Z: 0.85,
   CLAW_DROP_Y: 1.24,      // 하강 시 집게 중심 Y (길어진 집게 끝단 y ≈ 0.57로 Bar 높이 0.72 아래까지 자연 도달)
-  CLAW_LIFT_Y: 2.52,      // 들어올림 최고 높이
+  CLAW_LIFT_Y: 3.04,      // 들어올림 최고 높이
   MOVE_SPEED_X: 0.825,      // 초당 X 이동 속도 (기존 1.65의 1/2)
   MOVE_SPEED_Z: 0.625,      // 초당 Z 이동 속도 (기존 1.25의 1/2)
   CLAW_DESCEND_SPEED: 0.475, // 초당 집게 하강 속도 (기존 0.95의 1/2)

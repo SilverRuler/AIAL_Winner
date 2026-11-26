@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { getClientIp, maskIp } from '@/lib/ip';
+import { MEMBERS, LEGACY_MEMBERS } from '@/constants/members';
 
 export const dynamic = 'force-dynamic';
 
 interface MaintenanceChatDoc {
   id: string;
   nickname: string;
-  maskedIp: string;
+  isMember?: boolean;
+  maskedIp?: string;
   content: string;
   createdAt: number;
   ip?: string;
@@ -65,13 +67,17 @@ export async function POST(request: NextRequest) {
     const nickname = (rawNickname || 'ㅇㅇ').slice(0, 16);
     const content = rawContent.slice(0, 300);
     const clientIp = getClientIp(request);
-    const maskedIp = maskIp(clientIp) || '0.0';
+    const isMember =
+      MEMBERS.some((m) => m.name === nickname) ||
+      LEGACY_MEMBERS.some((m) => m.name === nickname);
+    const maskedIp = isMember ? undefined : maskIp(clientIp) || '0.0';
     const userAgent = (request.headers.get('user-agent') || '').trim();
     const now = Date.now();
 
     const doc: MaintenanceChatDoc = {
       id: `mchat_${now}_${Math.random().toString(36).substring(2, 8)}`,
       nickname,
+      isMember,
       maskedIp,
       content,
       createdAt: now,
@@ -95,6 +101,7 @@ export async function POST(request: NextRequest) {
         message: {
           id: doc.id,
           nickname: doc.nickname,
+          isMember: doc.isMember,
           maskedIp: doc.maskedIp,
           content: doc.content,
           createdAt: doc.createdAt,

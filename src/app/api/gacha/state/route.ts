@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const [machines, ticketsByMember, allWinsRaw, validAppsRaw, solExchangesRaw, mealWinDocs, mealRewardApps, winExchanges, machineOps] =
+    const [machines, ticketsByMember, allWinsRaw, validAppsRaw, solExchangesRaw, mealWinDocs, mealRewardApps, winExchanges, machineOps, recentLogsRaw, totalLogCount] =
       await Promise.all([
         getAllMachineStates(db),
         getAllMemberTicketBalances(db),
@@ -51,6 +51,25 @@ export async function GET(request: NextRequest) {
           .find({}, { projection: { member: 1, winsUsed: 1 } })
           .toArray(),
         getGachaMachineOps(db),
+        db
+          .collection('gacha_logs')
+          .find(
+            {},
+            {
+              projection: {
+                id: 1,
+                type: 1,
+                member: 1,
+                message: 1,
+                createdAt: 1,
+                'meta.machineIndex': 1,
+              },
+            }
+          )
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .toArray(),
+        db.collection('gacha_logs').countDocuments({}),
       ]);
 
     const formatWin = (doc: any) => ({
@@ -188,6 +207,15 @@ export async function GET(request: NextRequest) {
     const sanitizedMachines = machines.map(sanitizeMachineForClient);
     const nowMs = Date.now();
     const nextReset = getNextScheduledResetInfo(nowMs);
+    const recentLogs = (recentLogsRaw as any[]).map((doc) => ({
+      id: doc.id || String(doc._id),
+      type: doc.type || 'info',
+      member: doc.member || 'SYSTEM',
+      message: doc.message || '',
+      createdAt: typeof doc.createdAt === 'number' ? doc.createdAt : 0,
+      machineIndex:
+        typeof doc.meta?.machineIndex === 'number' ? doc.meta.machineIndex : undefined,
+    }));
 
     return NextResponse.json(
       {
@@ -201,6 +229,8 @@ export async function GET(request: NextRequest) {
         ticketsByMember,
         unclaimedWins,
         recentWins,
+        recentLogs,
+        totalLogCount,
         gachaWinStats,
         usedWinsByMember,
         availableGachaSolByMember,

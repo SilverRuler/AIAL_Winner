@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
+import { MEMBERS } from '@/constants/members';
 
 export const dynamic = 'force-dynamic';
+
+const MEAL_SOL_PER_WIN = 0.002; // 식사배틀 5WIN = 0.01 SOL (1WIN = 0.002 SOL)
+const roundSol = (v: number) => Math.round(v * 1000000) / 1000000;
 
 const OPERATOR_SOL_ADDRESS = '8e3z8Hrqh4T5NRxJVNczqcLKFXsfWtjEuw3zsHrHDUVi';
 const BALANCE_CACHE_TTL_MS = 60 * 60 * 1000; // 기본 1시간마다 잔고 자동 업데이트
@@ -224,6 +228,111 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // 3. 식사배틀 + 뽑기 전체 신청 가능 리워드 집계 (실시간 DB 조회)
+    let mealAvailableWinsTotal = 0;
+    let mealClaimable5WinsTotal = 0;
+    let mealPendingSol = 0;
+    let gachaPendingSol = 0;
+
+    if (db) {
+      const [mealWinDocs, mealRewardApps, winExchanges, gachaWins, gachaApps, gachaSolExchanges] =
+        await Promise.all([
+          db.collection('meals').find({ isWinner: true }, { projection: { member: 1 } }).toArray(),
+          db
+            .collection('reward_applications')
+            .find({ status: { $ne: 'rejected' } }, { projection: { member: 1, requestedWins: 1 } })
+            .toArray(),
+          db
+            .collection('gacha_win_exchanges')
+            .find({}, { projection: { member: 1, winsUsed: 1 } })
+            .toArray(),
+          db
+            .collection('gacha_wins')
+            .find({}, { projection: { member: 1, rewardAmount: 1 } })
+            .toArray(),
+          db
+            .collection('gacha_reward_applications')
+            .find({ status: { $ne: 'rejected' } }, { projection: { member: 1, rewardAmount: 1, requestedWins: 1 } })
+            .toArray(),
+          db
+            .collection('gacha_sol_exchanges')
+            .find({}, { projection: { member: 1, solUsed: 1 } })
+            .toArray(),
+        ]);
+
+      const mealWinsByMember: Record<string, number> = {};
+      for (const d of mealWinDocs as any[]) {
+        if (d.member) mealWinsByMember[d.member] = (mealWinsByMember[d.member] || 0) + 1;
+      }
+      const mealUsedByMember: Record<string, number> = {};
+      for (const a of mealRewardApps as any[]) {
+        if (a.member) {
+          mealUsedByMember[a.member] =
+            (mealUsedByMember[a.member] || 0) + (Number(a.requestedWins) || 0);
+        }
+      }
+      const mealExByMember: Record<string, number> = {};
+      for (const ex of winExchanges as any[]) {
+        if (ex.member) {
+          mealExByMember[ex.member] =
+            (mealExByMember[ex.member] || 0) + (Number(ex.winsUsed) || 1);
+        }
+      }
+
+      const gachaEarnedByMember: Record<string, number> = {};
+      for (const w of gachaWins as any[]) {
+        if (!w?.member) continue;
+        const amt = typeof w.rewardAmount === 'number' ? w.rewardAmount : 0.01;
+        gachaEarnedByMember[w.member] = roundSol((gachaEarnedByMember[w.member] || 0) + amt);
+      }
+      const gachaUsedByMember: Record<string, number> = {};
+      for (const app of gachaApps as any[]) {
+        if (!app?.member) continue;
+        const appSol =
+          typeof app.rewardAmount === 'number'
+            ? app.rewardAmount
+            : roundSol((Number(app.requestedWins) || 0) * 0.01);
+        gachaUsedByMember[app.member] = roundSol((gachaUsedByMember[app.member] || 0) + appSol);
+      }
+      for (const ex of gachaSolExchanges as any[]) {
+        if (!ex?.member) continue;
+        gachaUsedByMember[ex.member] = roundSol(
+          (gachaUsedByMember[ex.member] || 0) + (Number(ex.solUsed) || 0)
+        );
+      }
+
+      const memberNames = new Set<string>(MEMBERS.map((m) => m.name));
+      Object.keys(mealWinsByMember).forEach((k) => memberNames.add(k));
+      Object.keys(gachaEarnedByMember).forEach((k) => memberNames.add(k));
+
+      for (const name of memberNames) {
+        const availMealWins = Math.max(
+          0,
+          (mealWinsByMember[name] || 0) -
+            (mealUsedByMember[name] || 0) -
+            (mealExByMember[name] || 0)
+        );
+        mealAvailableWinsTotal += availMealWins;
+        if (availMealWins >= 5) {
+          mealClaimable5WinsTotal += Math.floor(availMealWins / 5) * 5;
+        }
+        const availGachaSol = Math.max(
+          0,
+          roundSol((gachaEarnedByMember[name] || 0) - (gachaUsedByMember[name] || 0))
+        );
+        gachaPendingSol = roundSol(gachaPendingSol + availGachaSol);
+      }
+      mealPendingSol = roundSol(mealAvailableWinsTotal * MEAL_SOL_PER_WIN);
+    }
+
+    const totalClaimableSol = roundSol(mealPendingSol + gachaPendingSol);
+    const estimatedRemainingSol =
+      typeof balanceSol === 'number' ? roundSol(balanceSol - totalClaimableSol) : null;
+    const estimatedRemainingKrw =
+      typeof estimatedRemainingSol === 'number' && typeof solPriceKrw === 'number'
+        ? Math.round(estimatedRemainingSol * solPriceKrw)
+        : null;
+
     const price001SolKrw =
       typeof solPriceKrw === 'number' ? Number((solPriceKrw * 0.01).toFixed(1)) : null;
     const balanceKrw =
@@ -242,6 +351,16 @@ export async function GET(request: NextRequest) {
       price001SolKrw,
       priceSource,
       priceUpdatedAt,
+      rewardLiability: {
+        mealAvailableWinsTotal,
+        mealClaimable5WinsTotal,
+        mealSolPerWin: MEAL_SOL_PER_WIN,
+        mealPendingSol,
+        gachaPendingSol,
+        totalClaimableSol,
+        estimatedRemainingSol,
+        estimatedRemainingKrw,
+      },
     });
   } catch (error: any) {
     console.error('Failed to fetch operator treasury balance:', error);

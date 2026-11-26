@@ -19,6 +19,17 @@ interface OperatorBalanceModalProps {
   onClose: () => void;
 }
 
+interface RewardLiabilitySummary {
+  mealAvailableWinsTotal: number;
+  mealClaimable5WinsTotal: number;
+  mealSolPerWin: number;
+  mealPendingSol: number;
+  gachaPendingSol: number;
+  totalClaimableSol: number;
+  estimatedRemainingSol: number | null;
+  estimatedRemainingKrw: number | null;
+}
+
 interface TreasuryData {
   address: string;
   balanceSol: number | null;
@@ -29,6 +40,7 @@ interface TreasuryData {
   price001SolKrw: number | null;
   priceSource: string;
   priceUpdatedAt: number;
+  rewardLiability?: RewardLiabilitySummary;
 }
 
 function formatKstTime(ts?: number | null): string {
@@ -220,7 +232,80 @@ export const OperatorBalanceModal: React.FC<OperatorBalanceModalProps> = ({ isOp
                 </div>
               </div>
 
-              {/* 2. 현재 시점 기준 솔라나 가격 & 0.01 SOL 당 원화 가격 */}
+              {/* 2. 신청 가능 전체 리워드 차감 후 운영자 예상 남은 잔고 */}
+              {data?.rewardLiability && (
+                <div className="p-4 rounded-2xl bg-gradient-to-br from-cyan-500/12 via-slate-950 to-slate-950 border border-cyan-500/35 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-black text-cyan-300 flex items-center gap-1.5">
+                      <Wallet className="w-3.5 h-3.5 text-cyan-400" />
+                      예상 남은 잔고 (미신청 리워드 차감)
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-400/30 text-cyan-200 font-semibold">
+                      실시간 집계
+                    </span>
+                  </div>
+
+                  <div>
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span
+                        className={`text-xl sm:text-2xl font-black font-mono tracking-tight ${
+                          typeof data.rewardLiability.estimatedRemainingSol === 'number' &&
+                          data.rewardLiability.estimatedRemainingSol < 0
+                            ? 'text-rose-400'
+                            : 'text-cyan-200'
+                        }`}
+                      >
+                        {typeof data.rewardLiability.estimatedRemainingSol === 'number'
+                          ? data.rewardLiability.estimatedRemainingSol.toFixed(6)
+                          : '-'}
+                      </span>
+                      <span className="text-xs sm:text-sm font-black text-cyan-400">SOL</span>
+                    </div>
+                    {typeof data.rewardLiability.estimatedRemainingKrw === 'number' && (
+                      <p className="text-xs text-slate-300 font-semibold mt-0.5">
+                        원화 환산 약{' '}
+                        <strong
+                          className={`font-mono ${
+                            data.rewardLiability.estimatedRemainingKrw < 0
+                              ? 'text-rose-300'
+                              : 'text-cyan-300'
+                          }`}
+                        >
+                          {data.rewardLiability.estimatedRemainingKrw.toLocaleString()}원
+                        </strong>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800/80 space-y-1 text-[11px] text-slate-300">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">
+                        식사배틀 신청 가능 ({data.rewardLiability.mealAvailableWinsTotal} WIN · 5WIN=0.01 SOL)
+                      </span>
+                      <span className="font-mono font-bold text-amber-300">
+                        -{data.rewardLiability.mealPendingSol.toFixed(4)} SOL
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">뽑기 신청 가능 리워드</span>
+                      <span className="font-mono font-bold text-amber-300">
+                        -{data.rewardLiability.gachaPendingSol.toFixed(4)} SOL
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-800/70">
+                      <span className="text-slate-200 font-bold">차감 예정 리워드 합계</span>
+                      <span className="font-mono font-black text-rose-300">
+                        -{data.rewardLiability.totalClaimableSol.toFixed(4)} SOL
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 pt-0.5">
+                      ※ 5WIN 단위 즉시 신청 가능분 {data.rewardLiability.mealClaimable5WinsTotal} WIN 포함, 전체 잔여 승수 기준 보수적 산정
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. 현재 시점 기준 솔라나 가격 & 0.01 SOL 당 원화 가격 */}
               <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">

@@ -133,9 +133,16 @@ export async function POST(request: NextRequest) {
       normalized === '동접' || normalized === '접속자' || normalized === '동접자';
     const isHelpCmd = normalized === '위너' || normalized === '명령어' || normalized === '도움말';
 
-    // 2) 전체 유저 티켓 지급 명령: "전체 유저 N티켓 지급" (예: 전체 유저 1티켓 지급)
+    // 2) 티켓 지급/차감 명령:
+    //    - 전체: "전체 유저 N티켓 지급" (예: 전체 유저 1티켓 지급)
+    //    - 개별: "{닉네임} 유저 N티켓 지급" 또는 "{닉네임} N티켓 지급" (예: 재쫄 유저 10티켓 지급, 재쫄 유저 5티켓 차감)
     const grantAllMatch = normalized.match(/^전체유저(\d+)티켓지급$/);
     const grantAllAmount = grantAllMatch ? Number(grantAllMatch[1]) : null;
+    const grantUserMatch =
+      grantAllAmount === null ? normalized.match(/^(.+?)(?:유저)?(\d+)티켓(지급|차감)$/) : null;
+    const grantUserRawTarget = grantUserMatch ? grantUserMatch[1] : null;
+    const grantUserAmount = grantUserMatch ? Number(grantUserMatch[2]) : null;
+    const grantUserAction = grantUserMatch ? (grantUserMatch[3] as '지급' | '차감') : null;
 
     // 3) 전 기기 운영 제어 및 서비스 모드 전환 명령
     const isSuspendAllCmd = normalized === '전기기운영중단';
@@ -159,8 +166,9 @@ export async function POST(request: NextRequest) {
           `• <code>1번 리필</code> ~ <code>${GACHA_TOTAL_SLOTS}번 리필</code> — 품절된 해당 뽑기판 상품 보충\n` +
           `• <code>1번 재정렬</code> ~ <code>${GACHA_TOTAL_SLOTS}번 재정렬</code> — 해당 뽑기판 상품 중앙 정위치 복구\n` +
           `• <code>1번 정렬</code> ~ <code>${GACHA_TOTAL_SLOTS}번 정렬</code> — 재정렬과 동일\n\n` +
-          `<b>[3] 티켓 일괄 지급</b>\n` +
-          `• <code>전체 유저 1티켓 지급</code> — 12명 전원에게 뽑기권 +N장 지급 (숫자 자유 변경)\n\n` +
+          `<b>[3] 티켓 지급 / 차감</b>\n` +
+          `• <code>전체 유저 1티켓 지급</code> — 12명 전원에게 뽑기권 +N장 일괄 지급\n` +
+          `• <code>재쫄 유저 10티켓 지급</code> — 특정 멤버에게 뽑기권 +N장 지급 (<code>차감</code>도 지원)\n\n` +
           `<b>[4] 전 기기 일괄 제어</b>\n` +
           `• <code>전 기기 운영 중단</code> — 전체 뽑기판 점검중 전환 및 플레이 차단\n` +
           `• <code>전 기기 운영 재개</code> — 전 기기 점검중 해제 및 정상 운영 복귀\n` +
@@ -204,6 +212,7 @@ export async function POST(request: NextRequest) {
       !isResetCmd &&
       !isStatusCmd &&
       grantAllAmount === null &&
+      grantUserMatch === null &&
       !isSuspendAllCmd &&
       !isResumeAllCmd &&
       !isClearAllItemsCmd &&
@@ -267,6 +276,62 @@ export async function POST(request: NextRequest) {
         token,
         senderChatId,
         `🎟️ <b>전체 유저(${MEMBERS.length}명) 뽑기권 +${grantAllAmount}장 지급 완료!</b>\n\n${summaryLines}`,
+        replyToId
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // [특정 유저 N티켓 지급 / 차감] (예: 재쫄 유저 10티켓 지급)
+    if (grantUserMatch !== null && grantUserRawTarget && grantUserAmount !== null && grantUserAction) {
+      const targetMember = MEMBERS.find(
+        (m) => m.name.replace(/\s+/g, '') === grantUserRawTarget
+      );
+      if (!targetMember) {
+        const validList = MEMBERS.map((m) => m.name).join(', ');
+        await sendTelegramReply(
+          token,
+          senderChatId,
+          `❌ <b>${grantUserRawTarget}</b> 멤버를 찾을 수 없습니다.\n• 활동 멤버: ${validList}`,
+          replyToId
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      if (!Number.isInteger(grantUserAmount) || grantUserAmount < 1 || grantUserAmount > 1000) {
+        await sendTelegramReply(
+          token,
+          senderChatId,
+          `❌ 수량은 1 ~ 1000 사이의 정수로 입력해주세요. (예: <b>${targetMember.name} 유저 10티켓 지급</b>)`,
+          replyToId
+        );
+        return NextResponse.json({ ok: true });
+      }
+
+      const balancesBefore = await getAllMemberTicketBalances(db);
+      const beforeTickets = balancesBefore[targetMember.name]?.tickets ?? 0;
+      const delta = grantUserAction === '차감' ? -grantUserAmount : grantUserAmount;
+      const afterTickets = await grantGachaTickets(db, targetMember.name, delta);
+      const signText = delta > 0 ? `+${grantUserAmount}장 지급` : `-${grantUserAmount}장 차감`;
+
+      await recordGachaLog(db, {
+        type: 'admin_ticket',
+        member: targetMember.name,
+        message: `🎟️ 운영자(텔레그램)가 ${targetMember.name}님에게 뽑기권 ${signText}했습니다. (${beforeTickets}장 → ${afterTickets}장)`,
+        meta: {
+          targetMember: targetMember.name,
+          delta,
+          beforeTickets,
+          afterTickets,
+          source: 'telegram',
+        },
+        createdAt: now,
+      });
+
+      await sendTelegramReply(
+        token,
+        senderChatId,
+        `🎟️ <b>${targetMember.name}님 뽑기권 ${signText} 완료!</b>\n` +
+          `• 변동: <b>${beforeTickets}장 → ${afterTickets}장</b>`,
         replyToId
       );
       return NextResponse.json({ ok: true });

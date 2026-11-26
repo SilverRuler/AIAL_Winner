@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Bell, Sparkles, ShieldCheck, Info, Award, ChevronDown, ChevronUp, Gift, Gamepad2, Wallet, CameraOff } from 'lucide-react';
+import { X, Bell, Sparkles, ShieldCheck, Info, Award, ChevronDown, ChevronUp, Gift, Gamepad2, Wallet, CameraOff, CalendarCheck, Dices } from 'lucide-react';
 
 interface NoticeModalProps {
   isOpen: boolean;
@@ -13,7 +13,8 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
   const [open261101, setOpen261101] = useState(false);
   const [open261102, setOpen261102] = useState(false);
   const [open261122, setOpen261122] = useState(false);
-  const [open261125, setOpen261125] = useState(true);
+  const [open261125, setOpen261125] = useState(false);
+  const [open261126, setOpen261126] = useState(true);
 
   if (!isOpen) return null;
 
@@ -288,6 +289,72 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                   <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                   <span>
                     UFO 뽑기의 상자별 난이도·리워드 개편, 까치발 시점 조작, SOL 직접 입력 리워드 신청 등 상세 변경 사항은 뽑기 페이지의 <strong>[UFO 공지]</strong>에서 확인하실 수 있습니다.
+                  </span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 261126 공지 카드 (출석보상, 눈치 미니게임, 운영자 예상 잔고, 헤더 스크롤) */}
+          <div className="bg-slate-950/85 rounded-xl border border-fuchsia-500/45 overflow-hidden transition-all">
+            <button
+              type="button"
+              onClick={() => setOpen261126(!open261126)}
+              className="w-full p-4 flex items-center justify-between gap-2 text-left hover:bg-slate-900/60 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/40 shrink-0">
+                  📌 261126 공지
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-white truncate">
+                  출석보상 · 눈치 미니게임 오픈 · UI/보안 대규모 업데이트
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <span className="text-[11px] text-slate-400 hidden xs:inline">2026-11-26</span>
+                {open261126 ? (
+                  <ChevronUp className="w-4 h-4 text-fuchsia-400 shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                )}
+              </div>
+            </button>
+
+            {open261126 && (
+              <div className="px-4 pb-4 pt-1 space-y-2.5 border-t border-slate-800/80 text-slate-200 leading-relaxed font-medium">
+                <p className="text-sm sm:text-base font-bold text-white flex items-start gap-2 pt-2">
+                  <CalendarCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    상단 헤더에 <strong className="text-amber-300">[출석보상]</strong> (모바일: <strong>출석</strong>) 버튼이 추가되었습니다! 매일 <strong className="text-white">오전 09:00~09:10 · 오후 15:00~15:10 (KST)</strong>에 접속해 본인 닉네임을 누르면 <strong className="text-amber-300">뽑기권 +3장</strong>이 즉시 지급됩니다.
+                  </span>
+                </p>
+                <p className="text-slate-200 text-xs sm:text-sm flex items-start gap-2">
+                  <Dices className="w-4 h-4 text-fuchsia-400 shrink-0 mt-0.5" />
+                  <span>
+                    실시간 동시접속 <strong className="text-fuchsia-300">[미니게임] (1~9 눈치게임)</strong>이 새롭게 오픈했습니다!
+                  </span>
+                </p>
+                <div className="ml-6 bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] sm:text-xs text-slate-300">
+                  <p>• <strong className="text-white">정규 시간:</strong> 매일 <strong className="text-fuchsia-300">14:00 ~ 14:03 (KST)</strong> 입장 대기 → 14:03 정각 입장 마감 (게릴라 오픈 가능)</p>
+                  <p>• <strong className="text-white">규칙:</strong> 30초 내 1~9 중 중복되지 않는 <strong className="text-amber-300">가장 낮은 숫자</strong>를 고른 단독 1명 우승 → <strong className="text-emerald-300">뽑기권 +5장</strong> 지급</p>
+                  <p>• <strong className="text-white">서든데스 & 이탈:</strong> 전원 중복 시 30초 서든데스 재경기(최대 3회), 14:03 마감 후 새로고침·화면 이탈 시 즉시 탈락(OUT), 1닉네임·1IP 중복 참여 차단</p>
+                </div>
+                <p className="text-slate-300 text-xs sm:text-sm flex items-start gap-2">
+                  <Wallet className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="text-emerald-300">[운영자 잔고]</strong> 모달에 미신청·미지급 리워드(식사 WIN + UFO 뽑기)를 차감한 <strong className="text-white">예상 잔여 잔고</strong> 표시가 추가되었습니다.
+                  </span>
+                </p>
+                <p className="text-slate-300 text-xs sm:text-sm flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <span>
+                    모바일·데스크톱 헤더 액션바 가로 스크롤을 개선했습니다. 기본 위치는 우측 끝(식사 등록)이며, 모바일 스와이프·데스크톱 마우스 휠 및 좌/우 화살표로 모든 메뉴를 편하게 이용할 수 있습니다.
+                  </span>
+                </p>
+                <p className="text-cyan-300 text-xs sm:text-sm flex items-start gap-2">
+                  <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <span>
+                    UFO 뽑기판 12종 확장(신규 3D 인형 3종 포함)·실시간 관전(LIVE)·뽑기정보 스펙표는 뽑기 페이지의 <strong>[UFO 공지]</strong>와 <strong>[뽑기정보]</strong>에서 확인하실 수 있습니다.
                   </span>
                 </p>
               </div>

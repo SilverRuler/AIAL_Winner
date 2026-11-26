@@ -41,6 +41,7 @@ import { HowToModal } from '@/components/HowToModal';
 import { NoticeModal } from '@/components/NoticeModal';
 import { OperatorBalanceModal } from '@/components/OperatorBalanceModal';
 import { AttendanceModal } from '@/components/AttendanceModal';
+import { PresenceModal } from '@/components/PresenceModal';
 import { AdminLoginModal } from '@/components/AdminLoginModal';
 import { ImageViewerModal } from '@/components/ImageViewerModal';
 import { AdminAuthModal, AdminActionType } from '@/components/AdminAuthModal';
@@ -82,6 +83,8 @@ export default function Home() {
   const [isNoticeOpen, setIsNoticeOpen] = useState<boolean>(false);
   const [isOperatorBalanceOpen, setIsOperatorBalanceOpen] = useState<boolean>(false);
   const [isAttendanceOpen, setIsAttendanceOpen] = useState<boolean>(false);
+  const [isPresenceOpen, setIsPresenceOpen] = useState<boolean>(false);
+  const [activeUsersCount, setActiveUsersCount] = useState<number>(0);
   const [isAdminLoginOpen, setIsAdminLoginOpen] = useState<boolean>(false);
   const [isAdminQuizOpen, setIsAdminQuizOpen] = useState<boolean>(false);
   const [isBestWinnerOpen, setIsBestWinnerOpen] = useState<boolean>(false);
@@ -171,6 +174,30 @@ export default function Home() {
     fetchMeals();
   }, [fetchMeals]);
 
+  // 실시간 IP별 동접 현황 경량 하트비트 (15초 주기 · 백그라운드 탭 일시중단 · DB 부하 0)
+  useEffect(() => {
+    const pingPresence = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      try {
+        const resp = await fetch(`/api/presence?track=main&_t=${Date.now()}`, { cache: 'no-store' });
+        const data = await resp.json();
+        if (data?.success && typeof data.totalActive === 'number') {
+          setActiveUsersCount(data.totalActive);
+        }
+      } catch {}
+    };
+    pingPresence();
+    const timer = setInterval(pingPresence, 15000);
+    const onVis = () => {
+      if (!document.hidden) pingPresence();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, []);
+
   // 끌어당겨 새로고침 (Pull to Refresh) 상태
   const [pullDistance, setPullDistance] = useState<number>(0);
   const [isPullRefreshing, setIsPullRefreshing] = useState<boolean>(false);
@@ -225,6 +252,8 @@ export default function Home() {
       isHowToOpen ||
       isNoticeOpen ||
       isOperatorBalanceOpen ||
+      isAttendanceOpen ||
+      isPresenceOpen ||
       isAdminLoginOpen ||
       isBestWinnerOpen ||
       isBestScoreOpen ||
@@ -1171,8 +1200,10 @@ export default function Home() {
         onOpenAdminLogin={() => setIsAdminLoginOpen(true)}
         onAdminLogout={handleAdminLogout}
         onOpenAdminQuiz={() => setIsAdminQuizOpen(true)}
+        onOpenPresence={() => setIsPresenceOpen(true)}
         onGoHome={handleGoHome}
         isAdmin={isAdmin}
+        activeUsersCount={activeUsersCount}
         totalMealsCount={meals.length}
         totalWinsCount={totalWinsCount}
       />
@@ -1833,6 +1864,11 @@ export default function Home() {
       <AttendanceModal
         isOpen={isAttendanceOpen}
         onClose={() => setIsAttendanceOpen(false)}
+      />
+
+      <PresenceModal
+        isOpen={isPresenceOpen}
+        onClose={() => setIsPresenceOpen(false)}
       />
 
       <MealDetailModal

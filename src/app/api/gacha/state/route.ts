@@ -6,8 +6,14 @@ import {
   getAllMemberTicketBalances,
   getGachaMachineOps,
   getNextScheduledResetInfo,
+  isAdminAuthorized,
   sanitizeMachineForClient,
 } from '@/lib/gachaServer';
+import {
+  buildGachaPageLabel,
+  getActivePresenceCount,
+  recordPresence,
+} from '@/lib/presence';
 
 export const dynamic = 'force-dynamic';
 
@@ -204,7 +210,42 @@ export async function GET(request: NextRequest) {
       .filter((d: any) => (d.claimStatus || 'unclaimed') === 'unclaimed')
       .map(formatWin);
 
-    const sanitizedMachines = machines.map(sanitizeMachineForClient);
+    const isAdminReq = isAdminAuthorized(request);
+    const sanitizedMachines = machines.map((m) => {
+      const sanitized = sanitizeMachineForClient(m);
+      if (machineOps.suspended && !isAdminReq) {
+        return {
+          ...sanitized,
+          items: [],
+          lock: {
+            active: false,
+            member: null,
+            turnId: null,
+            startedAt: null,
+            expiresAt: null,
+          },
+        };
+      }
+      return sanitized;
+    });
+
+    const { searchParams } = new URL(request.url);
+    const qMember = (searchParams.get('member') || '').trim();
+    const qMachineRaw = searchParams.get('machine');
+    const qMachineIdx =
+      qMachineRaw !== null && /^\d+$/.test(qMachineRaw) ? Number(qMachineRaw) : undefined;
+    const qEngine = (searchParams.get('engine') || '').trim() || 'Gacha';
+    const qPlaying = searchParams.get('playing') === '1' && !machineOps.suspended;
+    recordPresence(request, {
+      area: 'gacha',
+      engine: qEngine,
+      machineIndex: qMachineIdx,
+      member: qMember || undefined,
+      isPlaying: qPlaying,
+      page: buildGachaPageLabel(qEngine, qMachineIdx, machineOps.suspended),
+    });
+    const activeUsersCount = getActivePresenceCount();
+
     const nowMs = Date.now();
     const nextReset = getNextScheduledResetInfo(nowMs);
     const recentLogs = (recentLogsRaw as any[]).map((doc) => ({
@@ -221,6 +262,7 @@ export async function GET(request: NextRequest) {
       {
         success: true,
         serverNow: nowMs,
+        activeUsersCount,
         nextResetAt: nextReset.nextResetAt,
         nextResetLabel: nextReset.nextResetLabel,
         machineOps,

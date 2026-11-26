@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { GACHA_PHYSICS } from '@/constants/gacha';
+import { getGachaMachineOps } from '@/lib/gachaServer';
+import { buildGachaPageLabel, recordPresence } from '@/lib/presence';
 
 /**
  * POST /api/gacha/heartbeat
@@ -10,7 +12,7 @@ import { GACHA_PHYSICS } from '@/constants/gacha';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { turnId, member, machineIndex } = body || {};
+    const { turnId, member, machineIndex, engine } = body || {};
 
     if (!turnId || !member) {
       return NextResponse.json(
@@ -28,6 +30,34 @@ export async function POST(request: NextRequest) {
     }
 
     const now = Date.now();
+    const machineOps = await getGachaMachineOps(db);
+    if (machineOps.suspended) {
+      await db.collection('gacha_machine').updateMany(
+        { 'lock.turnId': turnId, 'lock.member': member },
+        {
+          $set: {
+            lock: {
+              active: false,
+              member: null,
+              turnId: null,
+              startedAt: null,
+              expiresAt: null,
+            },
+            updatedAt: now,
+          },
+        }
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          suspended: true,
+          message: '전 기기 운영 중단(점검중) 상태입니다.',
+          serverNow: now,
+        },
+        { status: 503 }
+      );
+    }
+
     const nextExpiresAt = now + GACHA_PHYSICS.LOCK_TTL_MS;
 
     const filter: Record<string, any> = {
@@ -56,6 +86,20 @@ export async function POST(request: NextRequest) {
         { status: 409 }
       );
     }
+
+    const resolvedIdx = typeof machineIndex === 'number' ? machineIndex : (res as any).machineIndex;
+    recordPresence(request, {
+      area: 'gacha',
+      engine: typeof engine === 'string' && engine ? engine : 'Gacha',
+      machineIndex: typeof resolvedIdx === 'number' ? resolvedIdx : undefined,
+      member: String(member),
+      isPlaying: true,
+      page: buildGachaPageLabel(
+        typeof engine === 'string' && engine ? engine : 'Gacha',
+        typeof resolvedIdx === 'number' ? resolvedIdx : undefined,
+        false
+      ),
+    });
 
     return NextResponse.json({
       success: true,

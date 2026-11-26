@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { getClientIp, maskIp } from '@/lib/ip';
 import { MEMBERS, LEGACY_MEMBERS } from '@/constants/members';
+import { recordPresence } from '@/lib/presence';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,8 +19,19 @@ interface MaintenanceChatDoc {
 
 const MAX_LIST = 150;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const src = searchParams.get('src') || '';
+    if (src !== 'gacha') {
+      recordPresence(request, {
+        area: 'maintenance',
+        page: '점검중 대기 페이지',
+        engine: 'Web',
+        preserveRecentGachaMs: 6000,
+      });
+    }
+
     const db = await getDatabase();
     if (!db) {
       return NextResponse.json(

@@ -163,19 +163,37 @@ export interface GachaMachineOps {
   updatedBy?: string;
 }
 
+const gOpsCache = globalThis as unknown as {
+  __aialMachineOpsCache?: { value: GachaMachineOps; fetchedAt: number };
+};
+
 export async function getGachaMachineOps(db: Db): Promise<GachaMachineOps> {
   try {
     const doc = (await db
       .collection('gacha_settings')
       .findOne({ _id: 'machine_ops' as any })) as any;
-    return {
+    const ops: GachaMachineOps = {
       suspended: Boolean(doc?.suspended),
       updatedAt: typeof doc?.updatedAt === 'number' ? doc.updatedAt : 0,
       updatedBy: typeof doc?.updatedBy === 'string' ? doc.updatedBy : undefined,
     };
+    gOpsCache.__aialMachineOpsCache = { value: ops, fetchedAt: Date.now() };
+    return ops;
   } catch {
     return { suspended: false, updatedAt: 0 };
   }
+}
+
+/**
+ * 초고빈도 엔드포인트(/api/gacha/live 등)용 짧은 인메모리 캐시 기반 운영 중단 확인 (최대 1.5초 TTL)
+ */
+export async function isGachaMachineSuspendedFast(db: Db): Promise<boolean> {
+  const cached = gOpsCache.__aialMachineOpsCache;
+  if (cached && Date.now() - cached.fetchedAt < 1500) {
+    return cached.value.suspended;
+  }
+  const ops = await getGachaMachineOps(db);
+  return ops.suspended;
 }
 
 export async function setGachaMachineOps(
@@ -189,7 +207,28 @@ export async function setGachaMachineOps(
     { $set: { suspended, updatedAt: now, updatedBy } },
     { upsert: true }
   );
-  return { suspended, updatedAt: now, updatedBy };
+  const ops: GachaMachineOps = { suspended, updatedAt: now, updatedBy };
+  gOpsCache.__aialMachineOpsCache = { value: ops, fetchedAt: now };
+
+  // 운영 중단 전환 시 진행 중인 모든 뽑기판의 턴 락을 즉시 강제 해제 (중도 F12/API 우회 차단)
+  if (suspended) {
+    await db.collection('gacha_machine').updateMany(
+      {},
+      {
+        $set: {
+          lock: {
+            active: false,
+            member: null,
+            turnId: null,
+            startedAt: null,
+            expiresAt: null,
+          },
+          updatedAt: now,
+        },
+      }
+    );
+  }
+  return ops;
 }
 
 /**

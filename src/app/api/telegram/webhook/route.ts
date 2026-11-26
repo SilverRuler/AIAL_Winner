@@ -20,6 +20,7 @@ import {
   recordGachaLog,
   setGachaMachineOps,
 } from '@/lib/gachaServer';
+import { getActivePresenceSummary } from '@/lib/presence';
 
 export const dynamic = 'force-dynamic';
 
@@ -127,6 +128,8 @@ export async function POST(request: NextRequest) {
     const isRefillCmd = actionWord === '리필';
     const isResetCmd = actionWord === '재정렬' || actionWord === '정렬';
     const isStatusCmd = normalized === '상태' || normalized === '재고';
+    const isPresenceCmd =
+      normalized === '동접' || normalized === '접속자' || normalized === '동접자';
     const isHelpCmd = normalized === '위너' || normalized === '명령어' || normalized === '도움말';
 
     // 2) 전체 유저 티켓 지급 명령: "전체 유저 N티켓 지급" (예: 전체 유저 1티켓 지급)
@@ -144,6 +147,7 @@ export async function POST(request: NextRequest) {
         `📖 <b>AIAL Winner &amp; UFO 뽑기 텔레그램 관리자 명령어</b>\n\n` +
           `<b>[1] 현황 조회</b>\n` +
           `• <code>상태</code> 또는 <code>재고</code> — 전체 ${GACHA_TOTAL_SLOTS}개 뽑기판 재고·잠금·운영 상태 조회\n` +
+          `• <code>동접</code> 또는 <code>접속자</code> — 실시간 IP별 동접 현황 조회 (기기·닉·위치)\n` +
           `• <code>/위너</code> — 관리자 명령어 전체 목록 보기\n\n` +
           `<b>[2] 개별 뽑기판 관리 (1~${GACHA_TOTAL_SLOTS}번 지정 필수)</b>\n` +
           `• <code>1번 리필</code> ~ <code>${GACHA_TOTAL_SLOTS}번 리필</code> — 품절된 해당 뽑기판 상품 보충\n` +
@@ -156,6 +160,35 @@ export async function POST(request: NextRequest) {
           `• <code>전 기기 운영 재개</code> — 전 기기 점검중 해제 및 정상 운영 복귀\n` +
           `• <code>전 기기 상품 제거</code> — 1~${GACHA_TOTAL_SLOTS}번 모든 기기의 상품 일괄 제거\n\n` +
           `<i>※ 자동 알림(식사 등록·댓글·리워드 신청)은 백그라운드 봇이 상시 발송합니다.</i>`,
+        replyToId
+      );
+    }
+
+    if (isPresenceCmd) {
+      const p = getActivePresenceSummary();
+      const fmtStay = (sec: number) => {
+        if (sec < 60) return `${sec}초`;
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return s > 0 ? `${m}분 ${s}초` : `${m}분`;
+      };
+      const lines =
+        p.sessions.length === 0
+          ? '• 현재 활성 접속자가 없습니다.'
+          : p.sessions
+              .map((s, idx) => {
+                const dev = s.deviceType === 'Mobile' ? '📱' : '💻';
+                const nickTag = s.member ? `<b>${s.member}</b>` : '방문자';
+                const playTag = s.isPlaying ? ' 🕹️<b>조작중</b>' : '';
+                return `${idx + 1}. <code>${s.ip}</code> ${dev}(${s.userAgentShort}) · ${nickTag} · ${s.page}${playTag} (체류 ${fmtStay(s.staySec)}, ${s.lastSeenAgoSec}초 전)`;
+              })
+              .join('\n');
+
+      return buildWebhookReply(
+        senderChatId,
+        `🟢 <b>실시간 IP별 동접 현황 (총 ${p.totalActive}명 · 최근 ${p.ttlSec}초 활성)</b>\n` +
+          `• 뽑기방: <b>${p.byArea.gacha}명</b> (조작중 ${p.playingCount}명) · 식사배틀: <b>${p.byArea.main}명</b> · 점검페이지: <b>${p.byArea.maintenance}명</b>\n\n` +
+          `${lines}`,
         replyToId
       );
     }
@@ -307,7 +340,7 @@ export async function POST(request: NextRequest) {
       await recordGachaLog(db, {
         type: 'admin_clear_all',
         member: '관리자(텔레그램)',
-        message: '🧹 운영자(텔레그램)가 전 기기(1~6번)의 상품을 모두 제거했습니다.',
+        message: `🧹 운영자(텔레그램)가 전 기기(1~${GACHA_TOTAL_SLOTS}번)의 상품을 모두 제거했습니다.`,
         meta: { clearedMachines: GACHA_TOTAL_SLOTS, source: 'telegram' },
         createdAt: now,
       });
@@ -325,13 +358,15 @@ export async function POST(request: NextRequest) {
     if (isStatusCmd) {
       const totalStock = machines.reduce((sum, m) => sum + m.items.length, 0);
       const opsBadge = machineOps.suspended ? '🛑 점검중 (운영 중단)' : '🟢 정상 운영 중';
+      const presence = getActivePresenceSummary();
       await sendTelegramReply(
         token,
         senderChatId,
         `🎰 <b>개별 UFO 뽑기판 현황 (${totalStock}/${GACHA_TOTAL_SLOTS}개)</b>\n` +
-          `• 운영 상태: <b>${opsBadge}</b>\n\n` +
+          `• 운영 상태: <b>${opsBadge}</b>\n` +
+          `• 실시간 동접: <b>${presence.totalActive}명</b> (뽑기방 ${presence.byArea.gacha} · 식사배틀 ${presence.byArea.main} · 점검 ${presence.byArea.maintenance})\n\n` +
           `${formatMachineStatusList(machines)}\n\n` +
-          `<i>💡 명령어: "1번 리필/재정렬/정렬", "전체 유저 1티켓 지급", "전 기기 운영 중단/재개", "전 기기 상품 제거"</i>`,
+          `<i>💡 명령어: "동접", "1번 리필/재정렬/정렬", "전체 유저 1티켓 지급", "전 기기 운영 중단/재개"</i>`,
         replyToId
       );
       return NextResponse.json({ ok: true });

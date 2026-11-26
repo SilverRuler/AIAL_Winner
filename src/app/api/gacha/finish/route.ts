@@ -13,6 +13,7 @@ import {
 import {
   getAllMachineStates,
   getAllMemberTicketBalances,
+  getGachaMachineOps,
   getOrInitMachineState,
   getTelegramConfig,
   recordGachaLog,
@@ -59,7 +60,39 @@ export async function POST(request: NextRequest) {
     }
 
     const col = db.collection('gacha_machine');
-    const rawMachine = (await col.findOne({ _id: docId as any })) as any;
+    const [machineOps, rawMachine] = await Promise.all([
+      getGachaMachineOps(db),
+      col.findOne({ _id: docId as any }) as Promise<any>,
+    ]);
+
+    if (machineOps.suspended) {
+      if (rawMachine?.lock?.active) {
+        await col.updateOne(
+          { _id: docId as any },
+          {
+            $set: {
+              lock: {
+                active: false,
+                member: null,
+                turnId: null,
+                startedAt: null,
+                expiresAt: null,
+              },
+              updatedAt: Date.now(),
+            },
+          }
+        );
+      }
+      return NextResponse.json(
+        {
+          success: false,
+          suspended: true,
+          serverNow: Date.now(),
+          message: '현재 전 기기 운영 중단(점검중) 상태라 플레이 결과를 반영할 수 없습니다.',
+        },
+        { status: 503 }
+      );
+    }
 
     if (!rawMachine) {
       const fresh = await getOrInitMachineState(db, machineIndex);

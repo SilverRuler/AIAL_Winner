@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDatabase } from '@/lib/mongodb';
 import { MEMBERS } from '@/constants/members';
-import { getAllMemberTicketBalances, grantGachaTickets, recordGachaLog } from '@/lib/gachaServer';
+import {
+  getAllMemberTicketBalances,
+  getGachaMachineOps,
+  grantGachaTickets,
+  recordGachaLog,
+} from '@/lib/gachaServer';
 import { getClientIp, normalizeIp } from '@/lib/ip';
 
 /**
@@ -27,6 +32,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, message: '데이터베이스 연결 실패' },
         { status: 500 }
+      );
+    }
+
+    const machineOps = await getGachaMachineOps(db);
+    if (machineOps.suspended) {
+      return NextResponse.json(
+        {
+          success: false,
+          suspended: true,
+          message: '현재 전 기기 운영 중단(점검중) 상태라 승점 교환을 이용할 수 없습니다.',
+        },
+        { status: 503 }
       );
     }
 

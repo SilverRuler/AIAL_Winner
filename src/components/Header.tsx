@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef } from 'react';
-import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell, Gamepad2, Wallet, CalendarCheck } from 'lucide-react';
+import { Trophy, Plus, Utensils, Sparkles, HelpCircle, Lock, ShieldCheck, Bell, Gamepad2, Wallet, CalendarCheck, Radio } from 'lucide-react';
 
 interface HeaderProps {
   onOpenNewMeal: () => void;
@@ -13,8 +13,10 @@ interface HeaderProps {
   onOpenAdminLogin: () => void;
   onAdminLogout: () => void;
   onOpenAdminQuiz?: () => void;
+  onOpenPresence?: () => void;
   onGoHome?: () => void;
   isAdmin: boolean;
+  activeUsersCount?: number;
   totalMealsCount: number;
   totalWinsCount: number;
 }
@@ -29,8 +31,10 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAdminLogin,
   onAdminLogout,
   onOpenAdminQuiz,
+  onOpenPresence,
   onGoHome,
   isAdmin,
+  activeUsersCount = 0,
   totalMealsCount,
   totalWinsCount,
 }) => {
@@ -105,6 +109,20 @@ export const Header: React.FC<HeaderProps> = ({
                     {/* 관리자 로그인/로그아웃 버튼 */}
                     {isAdmin ? (
                       <div className="flex items-center gap-1.5">
+                        {onOpenPresence && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenPresence();
+                            }}
+                            className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-200 border border-emerald-400/50 text-[10px] sm:text-xs font-black hover:bg-emerald-500/35 hover:text-white transition-all cursor-pointer shrink-0 shadow-sm shadow-emerald-900/30"
+                            title="실시간 IP별 동접 현황 보기"
+                          >
+                            <Radio className="w-3 h-3 text-emerald-300 animate-pulse" />
+                            <span>동접 {activeUsersCount}</span>
+                          </button>
+                        )}
                         {onOpenAdminQuiz && (
                           <button
                             type="button"

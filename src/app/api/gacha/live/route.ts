@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GACHA_MACHINE_COUNT } from '@/constants/gacha';
+import { getDatabase } from '@/lib/mongodb';
+import { isGachaMachineSuspendedFast } from '@/lib/gachaServer';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -74,6 +76,14 @@ export async function POST(request: NextRequest) {
         }
       }
       return NextResponse.json({ success: true });
+    }
+
+    const db = await getDatabase();
+    if (db && (await isGachaMachineSuspendedFast(db))) {
+      return NextResponse.json(
+        { success: false, suspended: true, message: '전 기기 운영 중단 상태입니다.' },
+        { status: 503 }
+      );
     }
 
     const frame: GachaLiveFrame = {

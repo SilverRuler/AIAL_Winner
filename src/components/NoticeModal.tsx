@@ -422,7 +422,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                 <p className="text-cyan-300 text-xs sm:text-sm flex items-start gap-2">
                   <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                   <span>
-                    <strong className="text-white">UFO 뽑기 대개편:</strong> 3D 인형 5종 클래식 산더미 인형뽑기 전환, 13종 뽑기판별 고유 물리·크레인·Bar 세팅, 뽑기판별 최근 로그 분리, [선택]/[랜덤] 이동, PC 확대 집중 모드 등 상세 변경 사항은 뽑기 페이지의 <strong>[UFO 공지]</strong>에서 확인하세요!
+                    <strong className="text-white">UFO 뽑기 대개편:</strong> 3D 인형 5종 클래식 산더미 인형뽑기(16개 산더미) 전환, 13종 뽑기판별 고유 물리·크레인·Bar 세팅, 뽑기판별 최근 로그 분리, [선택]/[랜덤] 이동, PC 확대 집중 모드 등 상세 변경 사항은 뽑기 페이지의 <strong>[UFO 공지]</strong>에서 확인하세요!
                   </span>
                 </p>
               </div>

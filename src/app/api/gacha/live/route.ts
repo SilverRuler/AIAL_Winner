@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
           }
         : {}),
       items: Array.isArray(body.items)
-        ? body.items.slice(0, 120).map((it: any) => ({
+        ? body.items.slice(0, 160).map((it: any) => ({
             id: String(it?.id || ''),
             position: Array.isArray(it?.position) ? it.position.slice(0, 3).map(Number) as [number, number, number] : [0, 1, 0],
             quaternion: Array.isArray(it?.quaternion) ? it.quaternion.slice(0, 4).map(Number) as [number, number, number, number] : [0, 0, 0, 1],

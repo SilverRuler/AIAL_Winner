@@ -8,6 +8,7 @@ import {
   getMachineDocId,
   getMachineLabel,
   getRestingBoxPosition,
+  isPlushSlot,
 } from '@/constants/gacha';
 import { MEMBERS } from '@/constants/members';
 import {
@@ -19,6 +20,7 @@ import {
   grantGachaTickets,
   recordGachaLog,
   setGachaMachineOps,
+  setMachinesSuspendedBatch,
   setSingleMachineSuspended,
 } from '@/lib/gachaServer';
 import { getActivePresenceSummary } from '@/lib/presence';
@@ -137,6 +139,12 @@ export async function POST(request: NextRequest) {
     const singleOpsAction =
       singleOpsSlotNum && singleOpsMatch ? (singleOpsMatch[2] as '중단' | '재개') : null;
 
+    // 1-3) 그룹별(3D 기기 / 일반 기기) 운영 중단/재개 명령
+    const upperNorm = normalized.toUpperCase();
+    const groupOpsMatch = upperNorm.match(/^(3D|일반)(?:기기)?(?:운영)?(중단|재개)$/);
+    const groupOpsTarget = groupOpsMatch ? (groupOpsMatch[1] as '3D' | '일반') : null;
+    const groupOpsAction = groupOpsMatch ? (groupOpsMatch[2] as '중단' | '재개') : null;
+
     const isRefillCmd = actionWord === '리필';
     const isResetCmd = actionWord === '재정렬' || actionWord === '정렬';
     const isStatusCmd = normalized === '상태' || normalized === '재고';
@@ -178,7 +186,9 @@ export async function POST(request: NextRequest) {
           `• <code>1번 재정렬</code> ~ <code>${GACHA_TOTAL_SLOTS}번 재정렬</code> — 해당 뽑기판 상품 중앙 정위치 복구\n` +
           `• <code>1번 정렬</code> ~ <code>${GACHA_TOTAL_SLOTS}번 정렬</code> — 재정렬과 동일\n` +
           `• <code>3번 기기 운영 중단</code> — 해당 번호 기기만 개별 점검중 전환 및 플레이 차단\n` +
-          `• <code>3번 기기 운영 재개</code> — 해당 번호 기기 개별 점검중 해제\n\n` +
+          `• <code>3번 기기 운영 재개</code> — 해당 번호 기기 개별 점검중 해제\n` +
+          `• <code>3D 기기 운영 중단</code> / <code>재개</code> — 3D 인형 기기 5종 일괄 중단/재개\n` +
+          `• <code>일반 기기 운영 중단</code> / <code>재개</code> — 일반 박스 기기 8종 일괄 중단/재개\n\n` +
           `<b>[3] 티켓 지급 / 차감</b>\n` +
           `• <code>전체 유저 1티켓 지급</code> — 12명 전원에게 뽑기권 +N장 일괄 지급\n` +
           `• <code>재쫄 유저 10티켓 지급</code> — 특정 멤버에게 뽑기권 +N장 지급 (<code>차감</code>도 지원)\n\n` +
@@ -227,6 +237,7 @@ export async function POST(request: NextRequest) {
       grantAllAmount === null &&
       grantUserMatch === null &&
       singleOpsSlotNum === null &&
+      groupOpsTarget === null &&
       !isSuspendAllCmd &&
       !isResumeAllCmd &&
       !isClearAllItemsCmd &&
@@ -426,6 +437,45 @@ export async function POST(request: NextRequest) {
           `• <code>win.silverruler.xyz</code>: <b>정상 서비스</b> 복귀\n` +
           `• 뽑기판 (4000/4100): 🟢 <b>전 기기 운영 재개</b> 완료\n\n` +
           `<i>💡 다시 점검으로 전환하려면 <b>개발 모드</b>라고 입력하세요.</i>`,
+        replyToId
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    // [그룹별(3D 기기 / 일반 기기) 운영 중단 / 재개]
+    if (groupOpsTarget && groupOpsAction) {
+      const is3D = groupOpsTarget === '3D';
+      const isSuspending = groupOpsAction === '중단';
+      const targetIndices = Array.from({ length: GACHA_TOTAL_SLOTS }, (_, idx) => idx).filter((idx) =>
+        is3D ? isPlushSlot(idx) : !isPlushSlot(idx)
+      );
+      const updatedOps = await setMachinesSuspendedBatch(db, targetIndices, isSuspending, 'telegram');
+      const targetNums = targetIndices.map((i) => `${i + 1}번`).join(', ');
+      const suspNums = updatedOps.suspendedMachines.map((i) => `${i + 1}번`).join(', ') || '없음';
+      const groupTitle = is3D ? '3D 인형 기기(5종)' : '일반 박스 기기(8종)';
+      await recordGachaLog(db, {
+        type: 'admin_ops',
+        member: '관리자(텔레그램)',
+        message: isSuspending
+          ? `🛑 운영자(텔레그램)가 ${groupTitle} [${targetNums}] 운영을 중단(점검중)했습니다.`
+          : `🟢 운영자(텔레그램)가 ${groupTitle} [${targetNums}] 운영을 재개했습니다.`,
+        meta: { group: groupOpsTarget, targetIndices, suspended: isSuspending, source: 'telegram' },
+        createdAt: now,
+      });
+      await sendTelegramReply(
+        token,
+        senderChatId,
+        isSuspending
+          ? `🛑 <b>${groupTitle} 운영 중단 완료!</b>\n` +
+              `• 중단 대상: <b>${targetNums}</b>\n` +
+              `• 현재 개별 중단 기기: <b>${suspNums}</b>\n` +
+              `• 해제하려면 <b>${groupOpsTarget} 기기 운영 재개</b>라고 입력하세요.`
+          : `🟢 <b>${groupTitle} 운영 재개 완료!</b>\n` +
+              `• 재개 대상: <b>${targetNums}</b>\n` +
+              `• 현재 개별 중단 기기: <b>${suspNums}</b>` +
+              (updatedOps.suspended
+                ? `\n⚠️ <i>참고: 현재 전 기기 운영 중단이 켜져 있어 전체 해제 전까지 점검중으로 표시됩니다.</i>`
+                : ''),
         replyToId
       );
       return NextResponse.json({ ok: true });

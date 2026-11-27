@@ -276,12 +276,28 @@ export async function setSingleMachineSuspended(
   suspended: boolean,
   updatedBy = 'telegram'
 ): Promise<GachaMachineOps> {
-  const safeIdx = normalizeMachineIndex(machineIndex, 0);
+  return setMachinesSuspendedBatch(db, [machineIndex], suspended, updatedBy);
+}
+
+/**
+ * 다수 뽑기판(예: 3D 기기 전체, 일반 기기 전체 등) 일괄 운영 중단 / 재개 설정
+ */
+export async function setMachinesSuspendedBatch(
+  db: Db,
+  machineIndices: number[],
+  suspended: boolean,
+  updatedBy = 'telegram'
+): Promise<GachaMachineOps> {
+  const safeIndices = Array.from(
+    new Set(machineIndices.map((idx) => normalizeMachineIndex(idx, 0)))
+  ).sort((a, b) => a - b);
   const now = Date.now();
   const prev = await getGachaMachineOps(db);
   const set = new Set(prev.suspendedMachines);
-  if (suspended) set.add(safeIdx);
-  else set.delete(safeIdx);
+  for (const idx of safeIndices) {
+    if (suspended) set.add(idx);
+    else set.delete(idx);
+  }
   const nextSuspendedMachines = Array.from(set).sort((a, b) => a - b);
 
   await db.collection('gacha_settings').updateOne(
@@ -305,10 +321,10 @@ export async function setSingleMachineSuspended(
   };
   gOpsCache.__aialMachineOpsCache = { value: ops, fetchedAt: now };
 
-  if (suspended) {
-    const docId = getMachineDocId(safeIdx);
-    await db.collection('gacha_machine').updateOne(
-      { _id: docId as any },
+  if (suspended && safeIndices.length > 0) {
+    const docIds = safeIndices.map((idx) => getMachineDocId(idx));
+    await db.collection('gacha_machine').updateMany(
+      { _id: { $in: docIds as any } },
       {
         $set: {
           lock: {

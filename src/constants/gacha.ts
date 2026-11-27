@@ -83,7 +83,7 @@ export function isPlushSlot(slotIndex: number): boolean {
   return slotIndex === 1 || slotIndex === 4 || slotIndex === 7 || slotIndex === 10 || slotIndex === 12;
 }
 
-export const PLUSH_MOUND_COUNT = 45;
+export const PLUSH_MOUND_COUNT = 25;
 export const PLUSH_MOUND_SCALE = 0.75;
 export const PLUSH_FLOOR_Y = 0.00;
 export const PLUSH_CHUTE_WALL_HEIGHT = 1.55;
@@ -92,65 +92,46 @@ export const PLUSH_CHUTE_HOME_Z = 1.06;
 
 type PlushSeat = { x: number; z: number; layer: number; yaw: number };
 
-function buildPlushMoundLayout45(): readonly PlushSeat[] {
+function buildPlushMoundLayout25(): readonly PlushSeat[] {
   const seats: PlushSeat[] = [];
   const push = (x: number, z: number, layer: number, idx: number) => {
     const yaw = Number((((((idx * 137 + layer * 53) % 360) - 180) * Math.PI) / 180).toFixed(3));
     seats.push({ x: Number(x.toFixed(3)), z: Number(z.toFixed(3)), layer, yaw });
   };
 
-  // Layer 0 (11개 · 바닥 L자 필드 전체: 좌후방 3 + 우측 메인 8)
+  // Layer 0 (10개 · 바닥 L자 필드 전체: 좌후방 3 + 우측 메인 7)
   const l0: Array<[number, number]> = [
-    [-1.22, -1.22], [-0.64, -1.22], [-1.12, -0.34],
-    [0.14, -1.24], [1.12, -1.24],
-    [0.14, -0.42], [1.12, -0.42],
-    [0.14,  0.42], [1.12,  0.42],
-    [0.18,  1.22], [1.10,  1.22],
+    [-1.22, -1.22], [-0.62, -1.22], [-1.08, -0.34],
+    [0.16, -1.22], [1.12, -1.22],
+    [0.16, -0.36], [1.12, -0.36],
+    [0.16,  0.48], [1.12,  0.48],
+    [0.64,  1.22],
   ];
   l0.forEach(([x, z], i) => push(x, z, 0, i));
 
-  // Layer 1 (10개 · 2단 엇갈림 배치)
+  // Layer 1 (9개 · 2단 엇갈림 배치)
   const l1: Array<[number, number]> = [
-    [-1.16, -1.10], [-0.56, -1.10], [-1.02, -0.30],
-    [0.22, -1.16], [1.14, -1.16],
-    [0.22, -0.32], [1.14, -0.32],
-    [0.22,  0.50], [1.12,  0.50],
-    [0.66,  1.16],
+    [-1.08, -1.06], [-0.86, -0.34],
+    [0.22, -1.10], [1.06, -1.10],
+    [0.22, -0.22], [1.06, -0.22],
+    [0.22,  0.60], [1.06,  0.60],
+    [0.64,  1.12],
   ];
-  l1.forEach(([x, z], i) => push(x, z, 1, i + 11));
+  l1.forEach(([x, z], i) => push(x, z, 1, i + 10));
 
-  // Layer 2 (9개 · 3단)
+  // Layer 2 (6개 · 3단 상단 산봉우리)
   const l2: Array<[number, number]> = [
-    [-1.06, -1.02], [-0.78, -0.32],
-    [0.18, -1.06], [1.06, -1.06],
-    [0.18, -0.22], [1.06, -0.22],
-    [0.18,  0.60], [1.04,  0.60],
-    [0.62,  1.10],
+    [-0.82, -0.82],
+    [0.30, -0.88], [0.96, -0.88],
+    [0.64, -0.06],
+    [0.34,  0.74], [0.94,  0.74],
   ];
-  l2.forEach(([x, z], i) => push(x, z, 2, i + 21));
-
-  // Layer 3 (8개 · 4단)
-  const l3: Array<[number, number]> = [
-    [-0.96, -0.92], [-0.68, -0.34],
-    [0.24, -0.94], [1.00, -0.94],
-    [0.24, -0.10], [1.00, -0.10],
-    [0.28,  0.72], [0.96,  0.72],
-  ];
-  l3.forEach(([x, z], i) => push(x, z, 3, i + 30));
-
-  // Layer 4 (7개 · 5단 산 정상 — 1.55m ㄱ벽 높이까지 볼륨감 있게 채움)
-  const l4: Array<[number, number]> = [
-    [-0.78, -0.74],
-    [0.32, -0.80], [0.92, -0.80],
-    [0.32,  0.00], [0.92,  0.00],
-    [0.38,  0.74], [0.88,  0.74],
-  ];
-  l4.forEach(([x, z], i) => push(x, z, 4, i + 38));
+  l2.forEach(([x, z], i) => push(x, z, 2, i + 19));
 
   return seats;
 }
 
-const PLUSH_MOUND_LAYOUT: readonly PlushSeat[] = buildPlushMoundLayout45();
+const PLUSH_MOUND_LAYOUT: readonly PlushSeat[] = buildPlushMoundLayout25();
 
 export function getPlushMoundPose(
   slotIndex: number,

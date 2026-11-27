@@ -28,7 +28,7 @@ export interface GachaLiveFrame {
     position: [number, number, number];
     quaternion: [number, number, number, number];
   }>;
-  effect?: 'start' | 'balance_catch' | 'extreme_drr' | 'near_near' | 'finish_win' | null;
+  effect?: 'start' | 'balance_catch' | 'extreme_drr' | 'near_near' | 'finish_win' | 'strong_grip' | null;
   effectSeq?: number;
   ts: number;
 }

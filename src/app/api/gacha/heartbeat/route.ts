@@ -31,7 +31,10 @@ export async function POST(request: NextRequest) {
 
     const now = Date.now();
     const machineOps = await getGachaMachineOps(db);
-    if (machineOps.suspended) {
+    if (
+      machineOps.suspended ||
+      (typeof machineIndex === 'number' && (machineOps.suspendedMachines || []).includes(machineIndex))
+    ) {
       await db.collection('gacha_machine').updateMany(
         { 'lock.turnId': turnId, 'lock.member': member },
         {

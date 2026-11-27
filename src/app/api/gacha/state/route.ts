@@ -36,56 +36,88 @@ export async function GET(request: NextRequest) {
     const logFilter =
       qMachineIdx !== undefined ? { 'meta.machineIndex': qMachineIdx } : {};
 
-    const [machines, ticketsByMember, allWinsRaw, validAppsRaw, solExchangesRaw, mealWinDocs, mealRewardApps, winExchanges, machineOps, recentLogsRaw, totalLogCount] =
-      await Promise.all([
-        getAllMachineStates(db),
-        getAllMemberTicketBalances(db),
-        db
-          .collection('gacha_wins')
-          .find({})
-          .sort({ createdAt: -1 })
-          .toArray(),
-        db
-          .collection('gacha_reward_applications')
-          .find({ status: { $ne: 'rejected' } })
-          .toArray(),
-        db
-          .collection('gacha_sol_exchanges')
-          .find({}, { projection: { member: 1, solUsed: 1 } })
-          .toArray(),
-        db
-          .collection('meals')
-          .find({ isWinner: true }, { projection: { member: 1 } })
-          .toArray(),
-        db
-          .collection('reward_applications')
-          .find({ status: { $ne: 'rejected' } }, { projection: { member: 1, requestedWins: 1 } })
-          .toArray(),
-        db
-          .collection('gacha_win_exchanges')
-          .find({}, { projection: { member: 1, winsUsed: 1 } })
-          .toArray(),
-        getGachaMachineOps(db),
-        db
-          .collection('gacha_logs')
-          .find(
-            logFilter,
-            {
-              projection: {
-                id: 1,
-                type: 1,
-                member: 1,
-                message: 1,
-                createdAt: 1,
-                'meta.machineIndex': 1,
-              },
-            }
-          )
-          .sort({ createdAt: -1, _id: -1 })
-          .limit(10)
-          .toArray(),
-        db.collection('gacha_logs').countDocuments(logFilter),
-      ]);
+    const [
+      machines,
+      ticketsByMember,
+      allWinsRaw,
+      validAppsRaw,
+      solExchangesRaw,
+      mealWinDocs,
+      mealRewardApps,
+      winExchanges,
+      machineOps,
+      recentLogsRaw,
+      totalLogCount,
+      allRecentLogsRaw,
+      allTotalLogCount,
+    ] = await Promise.all([
+      getAllMachineStates(db),
+      getAllMemberTicketBalances(db),
+      db
+        .collection('gacha_wins')
+        .find({})
+        .sort({ createdAt: -1 })
+        .toArray(),
+      db
+        .collection('gacha_reward_applications')
+        .find({ status: { $ne: 'rejected' } })
+        .toArray(),
+      db
+        .collection('gacha_sol_exchanges')
+        .find({}, { projection: { member: 1, solUsed: 1 } })
+        .toArray(),
+      db
+        .collection('meals')
+        .find({ isWinner: true }, { projection: { member: 1 } })
+        .toArray(),
+      db
+        .collection('reward_applications')
+        .find({ status: { $ne: 'rejected' } }, { projection: { member: 1, requestedWins: 1 } })
+        .toArray(),
+      db
+        .collection('gacha_win_exchanges')
+        .find({}, { projection: { member: 1, winsUsed: 1 } })
+        .toArray(),
+      getGachaMachineOps(db),
+      db
+        .collection('gacha_logs')
+        .find(
+          logFilter,
+          {
+            projection: {
+              id: 1,
+              type: 1,
+              member: 1,
+              message: 1,
+              createdAt: 1,
+              'meta.machineIndex': 1,
+            },
+          }
+        )
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(10)
+        .toArray(),
+      db.collection('gacha_logs').countDocuments(logFilter),
+      db
+        .collection('gacha_logs')
+        .find(
+          {},
+          {
+            projection: {
+              id: 1,
+              type: 1,
+              member: 1,
+              message: 1,
+              createdAt: 1,
+              'meta.machineIndex': 1,
+            },
+          }
+        )
+        .sort({ createdAt: -1, _id: -1 })
+        .limit(10)
+        .toArray(),
+      db.collection('gacha_logs').countDocuments({}),
+    ]);
 
     const formatWin = (doc: any) => ({
       id: doc.id || doc._id.toString(),
@@ -220,9 +252,10 @@ export async function GET(request: NextRequest) {
       .map(formatWin);
 
     const isAdminReq = isAdminAuthorized(request);
+    const suspendedSet = new Set(machineOps.suspendedMachines || []);
     const sanitizedMachines = machines.map((m) => {
       const sanitized = sanitizeMachineForClient(m);
-      if (machineOps.suspended && !isAdminReq) {
+      if ((machineOps.suspended || suspendedSet.has(m.machineIndex)) && !isAdminReq) {
         return {
           ...sanitized,
           items: [],
@@ -238,7 +271,10 @@ export async function GET(request: NextRequest) {
       return sanitized;
     });
 
-    const qPlaying = searchParams.get('playing') === '1' && !machineOps.suspended;
+    const qPlaying =
+      searchParams.get('playing') === '1' &&
+      !machineOps.suspended &&
+      !(qMachineIdx !== undefined && suspendedSet.has(qMachineIdx));
     recordPresence(request, {
       area: 'gacha',
       engine: qEngine,
@@ -251,7 +287,7 @@ export async function GET(request: NextRequest) {
 
     const nowMs = Date.now();
     const nextReset = getNextScheduledResetInfo(nowMs);
-    const recentLogs = (recentLogsRaw as any[]).map((doc) => ({
+    const formatLogDoc = (doc: any) => ({
       id: doc.id || String(doc._id),
       type: doc.type || 'info',
       member: doc.member || 'SYSTEM',
@@ -259,7 +295,9 @@ export async function GET(request: NextRequest) {
       createdAt: typeof doc.createdAt === 'number' ? doc.createdAt : 0,
       machineIndex:
         typeof doc.meta?.machineIndex === 'number' ? doc.meta.machineIndex : undefined,
-    }));
+    });
+    const recentLogs = (recentLogsRaw as any[]).map(formatLogDoc);
+    const allRecentLogs = (allRecentLogsRaw as any[]).map(formatLogDoc);
 
     return NextResponse.json(
       {
@@ -277,6 +315,8 @@ export async function GET(request: NextRequest) {
         recentLogs,
         recentLogsMachineIndex: qMachineIdx ?? null,
         totalLogCount,
+        allRecentLogs,
+        allTotalLogCount,
         gachaWinStats,
         usedWinsByMember,
         availableGachaSolByMember,

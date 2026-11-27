@@ -159,6 +159,7 @@ export async function getAllMemberTicketBalances(db: Db): Promise<Record<string,
  */
 export interface GachaMachineOps {
   suspended: boolean;
+  suspendedMachines: number[];
   updatedAt: number;
   updatedBy?: string;
 }
@@ -167,6 +168,16 @@ const gOpsCache = globalThis as unknown as {
   __aialMachineOpsCache?: { value: GachaMachineOps; fetchedAt: number };
 };
 
+function normalizeSuspendedMachines(raw: unknown): number[] {
+  if (!Array.isArray(raw)) return [];
+  const set = new Set<number>();
+  for (const v of raw) {
+    const n = Number(v);
+    if (Number.isInteger(n) && n >= 0 && n < GACHA_TOTAL_SLOTS) set.add(n);
+  }
+  return Array.from(set).sort((a, b) => a - b);
+}
+
 export async function getGachaMachineOps(db: Db): Promise<GachaMachineOps> {
   try {
     const doc = (await db
@@ -174,26 +185,36 @@ export async function getGachaMachineOps(db: Db): Promise<GachaMachineOps> {
       .findOne({ _id: 'machine_ops' as any })) as any;
     const ops: GachaMachineOps = {
       suspended: Boolean(doc?.suspended),
+      suspendedMachines: normalizeSuspendedMachines(doc?.suspendedMachines),
       updatedAt: typeof doc?.updatedAt === 'number' ? doc.updatedAt : 0,
       updatedBy: typeof doc?.updatedBy === 'string' ? doc.updatedBy : undefined,
     };
     gOpsCache.__aialMachineOpsCache = { value: ops, fetchedAt: Date.now() };
     return ops;
   } catch {
-    return { suspended: false, updatedAt: 0 };
+    return { suspended: false, suspendedMachines: [], updatedAt: 0 };
   }
 }
 
 /**
  * 초고빈도 엔드포인트(/api/gacha/live 등)용 짧은 인메모리 캐시 기반 운영 중단 확인 (최대 1.5초 TTL)
  */
-export async function isGachaMachineSuspendedFast(db: Db): Promise<boolean> {
+export async function isGachaMachineSuspendedFast(
+  db: Db,
+  machineIndex?: number
+): Promise<boolean> {
   const cached = gOpsCache.__aialMachineOpsCache;
+  let ops: GachaMachineOps;
   if (cached && Date.now() - cached.fetchedAt < 1500) {
-    return cached.value.suspended;
+    ops = cached.value;
+  } else {
+    ops = await getGachaMachineOps(db);
   }
-  const ops = await getGachaMachineOps(db);
-  return ops.suspended;
+  if (ops.suspended) return true;
+  if (typeof machineIndex === 'number' && ops.suspendedMachines.includes(machineIndex)) {
+    return true;
+  }
+  return false;
 }
 
 export async function setGachaMachineOps(
@@ -202,18 +223,92 @@ export async function setGachaMachineOps(
   updatedBy = 'telegram'
 ): Promise<GachaMachineOps> {
   const now = Date.now();
+  const prev = await getGachaMachineOps(db);
+  // 전 기기 운영 재개 시 개별 중단 목록도 함께 해제
+  const nextSuspendedMachines = suspended ? prev.suspendedMachines : [];
   await db.collection('gacha_settings').updateOne(
     { _id: 'machine_ops' as any },
-    { $set: { suspended, updatedAt: now, updatedBy } },
+    {
+      $set: {
+        suspended,
+        suspendedMachines: nextSuspendedMachines,
+        updatedAt: now,
+        updatedBy,
+      },
+    },
     { upsert: true }
   );
-  const ops: GachaMachineOps = { suspended, updatedAt: now, updatedBy };
+  const ops: GachaMachineOps = {
+    suspended,
+    suspendedMachines: nextSuspendedMachines,
+    updatedAt: now,
+    updatedBy,
+  };
   gOpsCache.__aialMachineOpsCache = { value: ops, fetchedAt: now };
 
   // 운영 중단 전환 시 진행 중인 모든 뽑기판의 턴 락을 즉시 강제 해제 (중도 F12/API 우회 차단)
   if (suspended) {
     await db.collection('gacha_machine').updateMany(
       {},
+      {
+        $set: {
+          lock: {
+            active: false,
+            member: null,
+            turnId: null,
+            startedAt: null,
+            expiresAt: null,
+          },
+          updatedAt: now,
+        },
+      }
+    );
+  }
+  return ops;
+}
+
+/**
+ * 개별 뽑기판(machineIndex: 0..12) 운영 중단 / 재개 설정
+ */
+export async function setSingleMachineSuspended(
+  db: Db,
+  machineIndex: number,
+  suspended: boolean,
+  updatedBy = 'telegram'
+): Promise<GachaMachineOps> {
+  const safeIdx = normalizeMachineIndex(machineIndex, 0);
+  const now = Date.now();
+  const prev = await getGachaMachineOps(db);
+  const set = new Set(prev.suspendedMachines);
+  if (suspended) set.add(safeIdx);
+  else set.delete(safeIdx);
+  const nextSuspendedMachines = Array.from(set).sort((a, b) => a - b);
+
+  await db.collection('gacha_settings').updateOne(
+    { _id: 'machine_ops' as any },
+    {
+      $set: {
+        suspended: prev.suspended,
+        suspendedMachines: nextSuspendedMachines,
+        updatedAt: now,
+        updatedBy,
+      },
+    },
+    { upsert: true }
+  );
+
+  const ops: GachaMachineOps = {
+    suspended: prev.suspended,
+    suspendedMachines: nextSuspendedMachines,
+    updatedAt: now,
+    updatedBy,
+  };
+  gOpsCache.__aialMachineOpsCache = { value: ops, fetchedAt: now };
+
+  if (suspended) {
+    const docId = getMachineDocId(safeIdx);
+    await db.collection('gacha_machine').updateOne(
+      { _id: docId as any },
       {
         $set: {
           lock: {
@@ -399,6 +494,7 @@ export async function getOrInitMachineState(db: Db, rawMachineIndex = 0): Promis
   const lastHandledMs = Number(existing.lastAutoResetAt) || Number(existing.updatedAt) || 0;
   if (
     !ops.suspended &&
+    !ops.suspendedMachines.includes(machineIndex) &&
     !isActivelyLocked &&
     existing.lastAutoResetSlot !== latestCp.key &&
     latestCp.timestampMs > lastHandledMs

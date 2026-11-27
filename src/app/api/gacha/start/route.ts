@@ -67,6 +67,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if ((machineOps.suspendedMachines || []).includes(machineIndex)) {
+      return NextResponse.json(
+        {
+          success: false,
+          suspended: true,
+          serverNow: now,
+          message: `[${machineIndex + 1}번 뽑기판] ${machineLabel}은(는) 현재 운영 중단(점검중) 상태입니다. 다른 뽑기판을 이용해주세요!`,
+        },
+        { status: 503 }
+      );
+    }
+
     const nextReset = getNextScheduledResetInfo(now);
     if (nextReset.secondsUntilReset > 0 && nextReset.secondsUntilReset <= 5) {
       const remain = Math.max(1, Math.ceil(nextReset.secondsUntilReset));

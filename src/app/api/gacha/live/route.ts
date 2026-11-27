@@ -19,6 +19,10 @@ export interface GachaLiveFrame {
   leftArmQuat: [number, number, number, number];
   rightArmPos: [number, number, number];
   rightArmQuat: [number, number, number, number];
+  backArmPos?: [number, number, number];
+  backArmQuat?: [number, number, number, number];
+  frontArmPos?: [number, number, number];
+  frontArmQuat?: [number, number, number, number];
   items: Array<{
     id: string;
     position: [number, number, number];
@@ -79,9 +83,9 @@ export async function POST(request: NextRequest) {
     }
 
     const db = await getDatabase();
-    if (db && (await isGachaMachineSuspendedFast(db))) {
+    if (db && (await isGachaMachineSuspendedFast(db, machineIndex))) {
       return NextResponse.json(
-        { success: false, suspended: true, message: '전 기기 운영 중단 상태입니다.' },
+        { success: false, suspended: true, message: '현재 운영 중단(점검중) 상태입니다.' },
         { status: 503 }
       );
     }
@@ -99,8 +103,20 @@ export async function POST(request: NextRequest) {
       leftArmQuat: Array.isArray(body.leftArmQuat) ? body.leftArmQuat.slice(0, 4).map(Number) as [number, number, number, number] : [0, 0, 0, 1],
       rightArmPos: Array.isArray(body.rightArmPos) ? body.rightArmPos.slice(0, 3).map(Number) as [number, number, number] : [0, 3, 0],
       rightArmQuat: Array.isArray(body.rightArmQuat) ? body.rightArmQuat.slice(0, 4).map(Number) as [number, number, number, number] : [0, 0, 0, 1],
+      ...(Array.isArray(body.backArmPos) && Array.isArray(body.backArmQuat)
+        ? {
+            backArmPos: body.backArmPos.slice(0, 3).map(Number) as [number, number, number],
+            backArmQuat: body.backArmQuat.slice(0, 4).map(Number) as [number, number, number, number],
+          }
+        : {}),
+      ...(Array.isArray(body.frontArmPos) && Array.isArray(body.frontArmQuat)
+        ? {
+            frontArmPos: body.frontArmPos.slice(0, 3).map(Number) as [number, number, number],
+            frontArmQuat: body.frontArmQuat.slice(0, 4).map(Number) as [number, number, number, number],
+          }
+        : {}),
       items: Array.isArray(body.items)
-        ? body.items.slice(0, 12).map((it: any) => ({
+        ? body.items.slice(0, 96).map((it: any) => ({
             id: String(it?.id || ''),
             position: Array.isArray(it?.position) ? it.position.slice(0, 3).map(Number) as [number, number, number] : [0, 1, 0],
             quaternion: Array.isArray(it?.quaternion) ? it.quaternion.slice(0, 4).map(Number) as [number, number, number, number] : [0, 0, 0, 1],

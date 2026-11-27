@@ -19,6 +19,7 @@ import {
   grantGachaTickets,
   recordGachaLog,
   setGachaMachineOps,
+  setSingleMachineSuspended,
 } from '@/lib/gachaServer';
 import { getActivePresenceSummary } from '@/lib/presence';
 import { getWinSiteMode, switchWinSiteMode } from '@/lib/siteMode';
@@ -119,12 +120,22 @@ export async function POST(request: NextRequest) {
     const normalized = rawText.replace(/^\/+/, '').replace(/\s+/g, '');
     const replyToId = typeof msg.message_id === 'number' ? msg.message_id : undefined;
 
-    // 1) 개별 뽑기판 명령: "1번 리필", "1번 재정렬", "1번 정렬" (1~12번)
+    // 1) 개별 뽑기판 명령: "1번 리필", "1번 재정렬", "1번 정렬" (1~13번)
     const exactMatch = normalized.match(/^(\d{1,2})번(리필|재정렬|정렬)$/);
     const rawSlotNum = exactMatch ? Number(exactMatch[1]) : null;
     const requestedSlotNum =
       rawSlotNum && rawSlotNum >= 1 && rawSlotNum <= GACHA_TOTAL_SLOTS ? rawSlotNum : null;
     const actionWord = requestedSlotNum && exactMatch ? exactMatch[2] : null;
+
+    // 1-2) 개별 기기 운영 중단/재개 명령: "3번 기기 운영 중단", "3번 기기 운영 재개" (축약: "3번 기기 중단/재개", "3번 운영 중단/재개")
+    const singleOpsMatch = normalized.match(/^(\d{1,2})번(?:기기)?(?:운영)?(중단|재개)$/);
+    const singleOpsRawSlot = singleOpsMatch ? Number(singleOpsMatch[1]) : null;
+    const singleOpsSlotNum =
+      singleOpsRawSlot && singleOpsRawSlot >= 1 && singleOpsRawSlot <= GACHA_TOTAL_SLOTS
+        ? singleOpsRawSlot
+        : null;
+    const singleOpsAction =
+      singleOpsSlotNum && singleOpsMatch ? (singleOpsMatch[2] as '중단' | '재개') : null;
 
     const isRefillCmd = actionWord === '리필';
     const isResetCmd = actionWord === '재정렬' || actionWord === '정렬';
@@ -165,7 +176,9 @@ export async function POST(request: NextRequest) {
           `<b>[2] 개별 뽑기판 관리 (1~${GACHA_TOTAL_SLOTS}번 지정 필수)</b>\n` +
           `• <code>1번 리필</code> ~ <code>${GACHA_TOTAL_SLOTS}번 리필</code> — 품절된 해당 뽑기판 상품 보충\n` +
           `• <code>1번 재정렬</code> ~ <code>${GACHA_TOTAL_SLOTS}번 재정렬</code> — 해당 뽑기판 상품 중앙 정위치 복구\n` +
-          `• <code>1번 정렬</code> ~ <code>${GACHA_TOTAL_SLOTS}번 정렬</code> — 재정렬과 동일\n\n` +
+          `• <code>1번 정렬</code> ~ <code>${GACHA_TOTAL_SLOTS}번 정렬</code> — 재정렬과 동일\n` +
+          `• <code>3번 기기 운영 중단</code> — 해당 번호 기기만 개별 점검중 전환 및 플레이 차단\n` +
+          `• <code>3번 기기 운영 재개</code> — 해당 번호 기기 개별 점검중 해제\n\n` +
           `<b>[3] 티켓 지급 / 차감</b>\n` +
           `• <code>전체 유저 1티켓 지급</code> — 12명 전원에게 뽑기권 +N장 일괄 지급\n` +
           `• <code>재쫄 유저 10티켓 지급</code> — 특정 멤버에게 뽑기권 +N장 지급 (<code>차감</code>도 지원)\n\n` +
@@ -213,6 +226,7 @@ export async function POST(request: NextRequest) {
       !isStatusCmd &&
       grantAllAmount === null &&
       grantUserMatch === null &&
+      singleOpsSlotNum === null &&
       !isSuspendAllCmd &&
       !isResumeAllCmd &&
       !isClearAllItemsCmd &&
@@ -233,15 +247,22 @@ export async function POST(request: NextRequest) {
     const machines = await getAllMachineStates(db);
     const machineOps = await getGachaMachineOps(db);
 
-    const formatMachineStatusList = (list: typeof machines) =>
-      list
+    const formatMachineStatusList = (list: typeof machines, suspendedList?: number[]) => {
+      const suspSet = new Set(suspendedList ?? machineOps.suspendedMachines ?? []);
+      return list
         .map((m) => {
           const locked = Boolean(m.lock?.active && m.lock?.expiresAt && m.lock.expiresAt > now);
-          const stockBadge = m.items.length > 0 ? '🟢 있음' : '🔴 품절';
+          const isSusp = machineOps.suspended || suspSet.has(m.machineIndex);
+          const stockBadge = isSusp
+            ? '🛠️ 점검중'
+            : m.items.length > 0
+            ? `🟢 있음(${m.items.length})`
+            : '🔴 품절';
           const lockBadge = locked ? ` (🔒 ${m.lock.member}님 조작 중)` : '';
           return `${m.machineIndex + 1}. ${m.machineLabel} — ${stockBadge}${lockBadge}`;
         })
         .join('\n');
+    };
 
     // [전체 유저 N티켓 지급]
     if (grantAllAmount !== null) {
@@ -410,6 +431,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // [개별 X번 기기 운영 중단 / 재개]
+    if (singleOpsSlotNum !== null && singleOpsAction) {
+      const targetIdx = singleOpsSlotNum - 1;
+      const targetLabel = getMachineLabel(targetIdx);
+      const isSuspending = singleOpsAction === '중단';
+      const updatedOps = await setSingleMachineSuspended(db, targetIdx, isSuspending, 'telegram');
+      await recordGachaLog(db, {
+        type: 'admin_ops',
+        member: '관리자(텔레그램)',
+        message: isSuspending
+          ? `🛑 운영자(텔레그램)가 [${singleOpsSlotNum}번 뽑기판] ${targetLabel} 운영을 중단(점검중)했습니다.`
+          : `🟢 운영자(텔레그램)가 [${singleOpsSlotNum}번 뽑기판] ${targetLabel} 운영을 재개했습니다.`,
+        meta: { machineIndex: targetIdx, machineLabel: targetLabel, suspended: isSuspending, source: 'telegram' },
+        createdAt: now,
+      });
+      const suspNums = updatedOps.suspendedMachines.map((i) => `${i + 1}번`).join(', ') || '없음';
+      await sendTelegramReply(
+        token,
+        senderChatId,
+        isSuspending
+          ? `🛑 <b>${singleOpsSlotNum}번 기기(${targetLabel}) 운영 중단 완료!</b>\n` +
+              `• 해당 기기만 점검중 상태로 전환되며, 다른 뽑기판은 정상 운영됩니다.\n` +
+              `• 현재 개별 중단 기기: <b>${suspNums}</b>\n` +
+              `• 해제하려면 <b>${singleOpsSlotNum}번 기기 운영 재개</b>라고 입력하세요.`
+          : `🟢 <b>${singleOpsSlotNum}번 기기(${targetLabel}) 운영 재개 완료!</b>\n` +
+              `• 현재 개별 중단 기기: <b>${suspNums}</b>` +
+              (updatedOps.suspended ? `\n⚠️ <i>참고: 현재 전 기기 운영 중단이 켜져 있어 전체 해제 전까지 점검중으로 표시됩니다.</i>` : ''),
+        replyToId
+      );
+      return NextResponse.json({ ok: true });
+    }
+
     // [전 기기 운영 중단]
     if (isSuspendAllCmd) {
       await setGachaMachineOps(db, true, 'telegram');
@@ -503,7 +556,13 @@ export async function POST(request: NextRequest) {
     // [상태 / 재고 조회]
     if (isStatusCmd) {
       const totalStock = machines.reduce((sum, m) => sum + m.items.length, 0);
-      const opsBadge = machineOps.suspended ? '🛑 점검중 (운영 중단)' : '🟢 정상 운영 중';
+      const suspCount = machineOps.suspendedMachines?.length || 0;
+      const suspListText = suspCount > 0 ? ` (개별 중단: ${machineOps.suspendedMachines.map((i) => `${i + 1}번`).join(', ')})` : '';
+      const opsBadge = machineOps.suspended
+        ? '🛑 전 기기 점검중 (운영 중단)'
+        : suspCount > 0
+        ? `🟡 일부 기기 점검중${suspListText}`
+        : '🟢 정상 운영 중';
       const siteMode = getWinSiteMode();
       const siteBadge =
         siteMode === 'dev'

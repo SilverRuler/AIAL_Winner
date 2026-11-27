@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
       col.findOne({ _id: docId as any }) as Promise<any>,
     ]);
 
-    if (machineOps.suspended) {
+    if (machineOps.suspended || (machineOps.suspendedMachines || []).includes(machineIndex)) {
       if (rawMachine?.lock?.active) {
         await col.updateOne(
           { _id: docId as any },

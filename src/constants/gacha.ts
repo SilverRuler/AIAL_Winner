@@ -83,6 +83,37 @@ export function isPlushSlot(slotIndex: number): boolean {
   return slotIndex === 1 || slotIndex === 4 || slotIndex === 7 || slotIndex === 10 || slotIndex === 12;
 }
 
+export const PLUSH_MOUND_COUNT = 5;
+export const PLUSH_MOUND_SCALE = 0.68;
+export const PLUSH_FLOOR_Y = 0.62;
+export const PLUSH_CHUTE_HOME_X = -1.16;
+export const PLUSH_CHUTE_HOME_Z = 1.06;
+
+const PLUSH_MOUND_LAYOUT: ReadonlyArray<{ x: number; z: number; layer: 0 | 1; yaw: number }> = [
+  { x: 0.18, z: -0.48, layer: 0, yaw: 0.25 },
+  { x: 0.92, z: -0.32, layer: 0, yaw: -0.42 },
+  { x: 0.46, z: 0.48, layer: 0, yaw: 0.58 },
+  { x: 0.54, z: -0.22, layer: 1, yaw: -0.24 },
+  { x: 0.62, z: 0.24, layer: 1, yaw: 0.40 },
+];
+
+export function getPlushMoundPose(
+  slotIndex: number,
+  seatIndex: number = 0
+): { position: [number, number, number]; quaternion: [number, number, number, number] } {
+  const safeSlot = Math.max(0, Math.min(GACHA_TOTAL_SLOTS - 1, slotIndex));
+  const { h } = getBoxDimensions(safeSlot);
+  const scaledH = h * PLUSH_MOUND_SCALE;
+  const seat = PLUSH_MOUND_LAYOUT[seatIndex % PLUSH_MOUND_LAYOUT.length];
+  const baseY = PLUSH_FLOOR_Y + scaledH / 2 + 0.025;
+  const y = seat.layer === 0 ? baseY : baseY + scaledH + 0.04;
+  const halfYaw = seat.yaw / 2;
+  return {
+    position: [seat.x, Number(y.toFixed(3)), seat.z],
+    quaternion: [0, Number(Math.sin(halfYaw).toFixed(4)), 0, Number(Math.cos(halfYaw).toFixed(4))],
+  };
+}
+
 export function getBoxDimensions(slotIndex: number) {
   const safeIdx = Math.max(0, Math.min(GACHA_SLOT_BOX_DIMS.length - 1, slotIndex));
   return GACHA_SLOT_BOX_DIMS[safeIdx];
@@ -190,14 +221,21 @@ export function createBoxForSlot(
   const safeSlot = Math.max(0, Math.min(GACHA_TOTAL_SLOTS - 1, slotIndex));
   const theme = GACHA_COLOR_THEMES[safeSlot % GACHA_COLOR_THEMES.length];
   const charLabel = GACHA_SLOT_LABELS[safeSlot] || `미스터리 박스 #${safeSlot + 1}`;
+  const isPlush = isPlushSlot(safeSlot);
+  const pose = isPlush
+    ? getPlushMoundPose(safeSlot, seatIndex)
+    : {
+        position: getRestingBoxPosition(safeSlot, 0),
+        quaternion: [0, 0, 0, 1] as [number, number, number, number],
+      };
   return {
-    id: `box_s${safeSlot}_${nowTs}_${Math.random().toString(36).substring(2, 7)}`,
+    id: `box_s${safeSlot}_${nowTs}_${seatIndex}_${Math.random().toString(36).substring(2, 7)}`,
     slotIndex: safeSlot,
     seatIndex,
     label: charLabel,
     colorTheme: theme,
-    position: getRestingBoxPosition(safeSlot, 0),
-    quaternion: [0, 0, 0, 1],
+    position: pose.position,
+    quaternion: pose.quaternion,
     isInitialState: true,
     rewardType: 'SOL',
     rewardAmount: getBoxRewardAmount(safeSlot),
@@ -226,6 +264,11 @@ export function isBoxAtInitialPose(
  */
 export function createSingleMachineItems(machineIndex: number, nowTs = Date.now()): GachaBoxItem[] {
   const safeSlot = normalizeMachineIndex(machineIndex, 0);
+  if (isPlushSlot(safeSlot)) {
+    return Array.from({ length: PLUSH_MOUND_COUNT }, (_, seatIdx) =>
+      createBoxForSlot(safeSlot, nowTs + seatIdx, seatIdx)
+    );
+  }
   return [createBoxForSlot(safeSlot, nowTs, 0)];
 }
 

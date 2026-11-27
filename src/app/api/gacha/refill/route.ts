@@ -6,7 +6,9 @@ import {
   GACHA_TOTAL_SLOTS,
   getMachineDocId,
   getMachineLabel,
+  isPlushSlot,
   normalizeMachineIndex,
+  PLUSH_MOUND_COUNT,
 } from '@/constants/gacha';
 import {
   getAllMachineStates,
@@ -54,8 +56,9 @@ export async function POST(request: NextRequest) {
       const docId = getMachineDocId(idx);
       const machineLabel = getMachineLabel(idx);
       const existing = (await col.findOne({ _id: docId as any })) as any;
-      const hasItem = Array.isArray(existing?.items) && existing.items.length > 0;
-      if (hasItem) continue;
+      const existingCount = Array.isArray(existing?.items) ? existing.items.length : 0;
+      const targetFullCount = isPlushSlot(idx) ? PLUSH_MOUND_COUNT : 1;
+      if (existingCount >= targetFullCount) continue;
 
       const freshItems = createSingleMachineItems(idx, now + idx * 10);
       const summary = `📦 운영자(관리자)가 [${idx + 1}번 뽑기판] ${machineLabel}을(를) 새로 리필했습니다!`;

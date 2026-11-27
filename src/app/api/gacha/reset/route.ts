@@ -6,7 +6,9 @@ import {
   GACHA_ALL_SLOT_INDICES,
   getMachineDocId,
   getMachineLabel,
+  getPlushMoundPose,
   getRestingBoxPosition,
+  isPlushSlot,
   normalizeMachineIndex,
 } from '@/constants/gacha';
 import {
@@ -60,14 +62,23 @@ export async function POST(request: NextRequest) {
       if (!existing || !Array.isArray(existing.items)) {
         resetItems = createSingleMachineItems(idx, now);
       } else {
-        resetItems = existing.items.map((item: GachaBoxItem) => ({
-          ...item,
-          slotIndex: idx,
-          seatIndex: 0,
-          position: getRestingBoxPosition(idx, 0),
-          quaternion: [0, 0, 0, 1] as [number, number, number, number],
-          isInitialState: true,
-        }));
+        const plushMachine = isPlushSlot(idx);
+        resetItems = existing.items.map((item: GachaBoxItem, arrIdx: number) => {
+          const pose = plushMachine
+            ? getPlushMoundPose(idx, arrIdx)
+            : {
+                position: getRestingBoxPosition(idx, 0),
+                quaternion: [0, 0, 0, 1] as [number, number, number, number],
+              };
+          return {
+            ...item,
+            slotIndex: idx,
+            seatIndex: arrIdx,
+            position: pose.position,
+            quaternion: pose.quaternion,
+            isInitialState: true,
+          };
+        });
       }
 
       if (resetItems.length === 0) {

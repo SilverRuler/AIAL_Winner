@@ -16,15 +16,19 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const pageRaw = Number(searchParams.get('page') || '1');
     const limitRaw = Number(searchParams.get('limit') || '10');
+    const machineRaw = searchParams.get('machine');
+    const machineIdx =
+      machineRaw !== null && /^\d+$/.test(machineRaw) ? Number(machineRaw) : undefined;
     const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1;
     const limit = Number.isFinite(limitRaw) && limitRaw >= 1 ? Math.min(50, Math.floor(limitRaw)) : 10;
 
+    const filter = machineIdx !== undefined ? { 'meta.machineIndex': machineIdx } : {};
     const col = db.collection('gacha_logs');
     const [totalCount, rawLogs] = await Promise.all([
-      col.countDocuments({}),
+      col.countDocuments(filter),
       col
         .find(
-          {},
+          filter,
           {
             projection: {
               id: 1,

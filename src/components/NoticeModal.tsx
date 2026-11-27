@@ -14,7 +14,8 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
   const [open261102, setOpen261102] = useState(false);
   const [open261122, setOpen261122] = useState(false);
   const [open261125, setOpen261125] = useState(false);
-  const [open261126, setOpen261126] = useState(true);
+  const [open261126, setOpen261126] = useState(false);
+  const [open261127, setOpen261127] = useState(true);
 
   if (!isOpen) return null;
 
@@ -355,6 +356,73 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                   <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                   <span>
                     UFO 뽑기판 13종 확장(신규 3D 인형 4종 포함)·실시간 관전(LIVE)·뽑기정보 스펙표는 뽑기 페이지의 <strong>[UFO 공지]</strong>와 <strong>[뽑기정보]</strong>에서 확인하실 수 있습니다.
+                  </span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 261127 공지 카드 (미니게임 개편, 출석시간, 단축키, 보안, UFO 대개편) */}
+          <div className="bg-slate-950/90 rounded-xl border border-amber-500/50 overflow-hidden transition-all">
+            <button
+              type="button"
+              onClick={() => setOpen261127(!open261127)}
+              className="w-full p-4 flex items-center justify-between gap-2 text-left hover:bg-slate-900/60 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                  📌 261127 공지
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-white truncate">
+                  미니게임 가위바위보·BGM · 단축키 · 보안 · UFO 대개편
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <span className="text-[11px] text-slate-400 hidden xs:inline">2026-11-27</span>
+                {open261127 ? (
+                  <ChevronUp className="w-4 h-4 text-amber-400 shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                )}
+              </div>
+            </button>
+
+            {open261127 && (
+              <div className="px-4 pb-4 pt-1 space-y-2.5 border-t border-slate-800/80 text-slate-200 leading-relaxed font-medium">
+                <p className="text-sm sm:text-base font-bold text-white flex items-start gap-2 pt-2">
+                  <Dices className="w-4 h-4 text-fuchsia-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="text-fuchsia-300">[미니게임]</strong> 인원수별 게임 규칙이 공정하게 개편되고, 사운드 연출이 추가되었습니다!
+                  </span>
+                </p>
+                <div className="ml-6 bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] sm:text-xs text-slate-300">
+                  <p>• <strong className="text-emerald-300">1명 참여:</strong> 별도 게임 없이 <strong className="text-white">자동 우승</strong> (뽑기권 +5장 즉시 지급)</p>
+                  <p>• <strong className="text-amber-300">2명 참여:</strong> <strong className="text-white">가위바위보(✌️/✊/✋)</strong> 1:1 대결로 자동 전환! 비길 경우 최대 3회 데스매치 진행 (3회 모두 비기면 승자 없음)</p>
+                  <p>• <strong className="text-cyan-300">3명 이상:</strong> 기존과 동일하게 <strong className="text-white">1~9 최저 단독 숫자 눈치게임</strong> 진행</p>
+                  <p>• <strong className="text-fuchsia-300">사운드:</strong> 인원 마감 5초 카운트다운 음성 및 게임 진행 중 전용 BGM 재생</p>
+                </div>
+                <p className="text-slate-200 text-xs sm:text-sm flex items-start gap-2">
+                  <CalendarCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="text-amber-300">[출석보상]</strong> 시간이 매일 <strong className="text-white">오전 08:00~10:00 (1회) · 저녁 18:00~20:00 (1회) (KST)</strong>으로 개편되었습니다. 각 시간대별 1회씩 뽑기권 +3장을 수령할 수 있습니다.
+                  </span>
+                </p>
+                <p className="text-slate-300 text-xs sm:text-sm flex items-start gap-2">
+                  <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <span>
+                    식사배틀·뽑기·미니게임의 모든 확인·안내·입력 팝업에서 <strong className="text-white">Enter(확인) / Esc(취소)</strong> 키보드 단축키를 지원합니다.
+                  </span>
+                </p>
+                <p className="text-emerald-300 text-xs sm:text-sm flex items-start gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>
+                    서비스 보안을 위해 <strong className="text-white">한국(KR) 및 Google 공식 IP 대역</strong> 외 해외 비정상 접속을 차단하는 Geo-Block 보안 정책이 적용되었습니다.
+                  </span>
+                </p>
+                <p className="text-cyan-300 text-xs sm:text-sm flex items-start gap-2">
+                  <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="text-white">UFO 뽑기 대개편:</strong> 3D 인형 5종 클래식 산더미 인형뽑기 전환, 13종 뽑기판별 고유 물리·크레인·Bar 세팅, 뽑기판별 최근 로그 분리, [선택]/[랜덤] 이동, PC 확대 집중 모드 등 상세 변경 사항은 뽑기 페이지의 <strong>[UFO 공지]</strong>에서 확인하세요!
                   </span>
                 </p>
               </div>

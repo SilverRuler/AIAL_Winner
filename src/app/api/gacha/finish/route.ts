@@ -235,7 +235,9 @@ export async function POST(request: NextRequest) {
         : '';
     const actionSummary =
       wonRecords.length > 0
-        ? `🎉 [${machineIndex + 1}번 뽑기판] ${member}님이 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공! (품절 · 리필 대기${refundNote})`
+        ? `🎉 [${machineIndex + 1}번 뽑기판] ${member}님이 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공! (${
+            remainingItems.length > 0 ? `남은 재고 ${remainingItems.length}개` : '품절 · 리필 대기'
+          }${refundNote})`
         : `[${machineIndex + 1}번 ${machineLabel}] ${member}님이 크레인을 조작하여 위치를 움직였습니다.${progressTag}`;
 
     const nextLock = sessionContinue

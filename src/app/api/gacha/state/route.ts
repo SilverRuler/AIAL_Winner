@@ -27,6 +27,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const { searchParams } = new URL(request.url);
+    const qMember = (searchParams.get('member') || '').trim();
+    const qMachineRaw = searchParams.get('machine');
+    const qMachineIdx =
+      qMachineRaw !== null && /^\d+$/.test(qMachineRaw) ? Number(qMachineRaw) : undefined;
+    const qEngine = (searchParams.get('engine') || '').trim() || 'Gacha';
+    const logFilter =
+      qMachineIdx !== undefined ? { 'meta.machineIndex': qMachineIdx } : {};
+
     const [machines, ticketsByMember, allWinsRaw, validAppsRaw, solExchangesRaw, mealWinDocs, mealRewardApps, winExchanges, machineOps, recentLogsRaw, totalLogCount] =
       await Promise.all([
         getAllMachineStates(db),
@@ -60,7 +69,7 @@ export async function GET(request: NextRequest) {
         db
           .collection('gacha_logs')
           .find(
-            {},
+            logFilter,
             {
               projection: {
                 id: 1,
@@ -75,7 +84,7 @@ export async function GET(request: NextRequest) {
           .sort({ createdAt: -1, _id: -1 })
           .limit(10)
           .toArray(),
-        db.collection('gacha_logs').countDocuments({}),
+        db.collection('gacha_logs').countDocuments(logFilter),
       ]);
 
     const formatWin = (doc: any) => ({
@@ -229,12 +238,6 @@ export async function GET(request: NextRequest) {
       return sanitized;
     });
 
-    const { searchParams } = new URL(request.url);
-    const qMember = (searchParams.get('member') || '').trim();
-    const qMachineRaw = searchParams.get('machine');
-    const qMachineIdx =
-      qMachineRaw !== null && /^\d+$/.test(qMachineRaw) ? Number(qMachineRaw) : undefined;
-    const qEngine = (searchParams.get('engine') || '').trim() || 'Gacha';
     const qPlaying = searchParams.get('playing') === '1' && !machineOps.suspended;
     recordPresence(request, {
       area: 'gacha',
@@ -272,6 +275,7 @@ export async function GET(request: NextRequest) {
         unclaimedWins,
         recentWins,
         recentLogs,
+        recentLogsMachineIndex: qMachineIdx ?? null,
         totalLogCount,
         gachaWinStats,
         usedWinsByMember,

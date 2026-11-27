@@ -140,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
                         onOpenAttendance();
                       }}
                       className="inline-flex items-center space-x-1 px-1.5 sm:px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-200 hover:bg-amber-500/30 border border-amber-400/50 text-[10px] sm:text-xs font-black transition-all cursor-pointer shrink-0 shadow-sm shadow-amber-900/30"
-                      title="출석보상 받기 (매일 09:00~09:10 · 15:00~15:10 KST · 뽑기권 +3)"
+                      title="출석보상 받기 (매일 08:00~10:00 · 18:00~20:00 KST · 뽑기권 +3)"
                     >
                       <CalendarCheck className="w-3 h-3 text-amber-300" />
                       <span className="sm:hidden">출석</span>

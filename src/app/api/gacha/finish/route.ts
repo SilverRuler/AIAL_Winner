@@ -217,17 +217,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await db.collection('gacha_tickets').updateOne(
+    const updatedTicketDoc = (await db.collection('gacha_tickets').findOneAndUpdate(
       { _id: member as any },
-      { $inc: ticketInc, $set: { updatedAt: now } }
-    );
+      { $inc: ticketInc, $set: { updatedAt: now } },
+      { returnDocument: 'after' }
+    )) as any;
+    const afterTickets =
+      typeof updatedTicketDoc?.tickets === 'number' ? Math.max(0, updatedTicketDoc.tickets) : null;
 
     // slotIndex 순 정렬
     remainingItems.sort((a, b) => a.slotIndex - b.slotIndex);
 
     const progressTag = totalPlays > 1 ? ` (${prevShotIndex}/${totalPlays}회)` : '';
     const refundNote =
-      refundedTickets > 0 ? ` · 미사용 뽑기권 ${refundedTickets}장 자동 환불` : '';
+      refundedTickets > 0
+        ? ` · 미사용 뽑기권 ${refundedTickets}장 자동 환불${afterTickets !== null ? ` (잔여 ${afterTickets}장)` : ''}`
+        : '';
     const actionSummary =
       wonRecords.length > 0
         ? `🎉 [${machineIndex + 1}번 뽑기판] ${member}님이 ${wonRecords.map((w) => w.boxLabel).join(', ')} 뽑기에 성공! (품절 · 리필 대기${refundNote})`

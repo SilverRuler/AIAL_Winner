@@ -325,7 +325,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                 <p className="text-sm sm:text-base font-bold text-white flex items-start gap-2 pt-2">
                   <CalendarCheck className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <span>
-                    상단 헤더에 <strong className="text-amber-300">[출석보상]</strong> (모바일: <strong>출석</strong>) 버튼이 추가되었습니다! 매일 <strong className="text-white">오전 09:00~09:10 · 오후 15:00~15:10 (KST)</strong>에 접속해 본인 닉네임을 누르면 <strong className="text-amber-300">뽑기권 +3장</strong>이 즉시 지급됩니다.
+                    상단 헤더에 <strong className="text-amber-300">[출석보상]</strong> (모바일: <strong>출석</strong>) 버튼이 추가되었습니다! 매일 <strong className="text-white">오전 08:00~10:00 · 저녁 18:00~20:00 (KST)</strong>에 접속해 본인 닉네임을 누르면 <strong className="text-amber-300">뽑기권 +3장</strong>이 즉시 지급됩니다.
                   </span>
                 </p>
                 <p className="text-slate-200 text-xs sm:text-sm flex items-start gap-2">

@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
               },
             }
           )
-          .sort({ createdAt: -1 })
+          .sort({ createdAt: -1, _id: -1 })
           .limit(10)
           .toArray(),
         db.collection('gacha_logs').countDocuments({}),

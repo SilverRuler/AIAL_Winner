@@ -34,22 +34,22 @@ function getKstAttendanceWindow(nowMs: number): {
   let activeWindow: AttendanceSlotKey | null = null;
   let activeWindowLabel: string | null = null;
 
-  // 오전 09:00~09:10 (09:00:00 ~ 09:10:59 KST)
-  if (hour === 9 && minute >= 0 && minute <= 10) {
+  // 오전 08:00~10:00 (08:00:00 ~ 10:00:59 KST)
+  if ((hour >= 8 && hour < 10) || (hour === 10 && minute === 0)) {
     activeWindow = 'morning';
-    activeWindowLabel = '오전 출석 (09:00~09:10)';
+    activeWindowLabel = '오전 출석 (08:00~10:00)';
   }
-  // 오후 15:00~15:10 (15:00:00 ~ 15:10:59 KST)
-  else if (hour === 15 && minute >= 0 && minute <= 10) {
+  // 저녁 18:00~20:00 (18:00:00 ~ 20:00:59 KST)
+  else if ((hour >= 18 && hour < 20) || (hour === 20 && minute === 0)) {
     activeWindow = 'afternoon';
-    activeWindowLabel = '오후 출석 (15:00~15:10)';
+    activeWindowLabel = '저녁 출석 (18:00~20:00)';
   }
 
-  let nextWindowLabel = '내일 오전 09:00~09:10';
-  if (hour < 9) {
-    nextWindowLabel = '오늘 오전 09:00~09:10';
-  } else if (hour < 15 || (hour === 9 && minute > 10)) {
-    nextWindowLabel = '오늘 오후 15:00~15:10';
+  let nextWindowLabel = '내일 오전 08:00~10:00';
+  if (hour < 8) {
+    nextWindowLabel = '오늘 오전 08:00~10:00';
+  } else if (hour < 18) {
+    nextWindowLabel = '오늘 저녁 18:00~20:00';
   }
 
   return {
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          message: `출석보상은 매일 오전 09:00~09:10, 오후 15:00~15:10 (KST)에만 받을 수 있습니다. (현재 ${info.kstTime})`,
+          message: `출석보상은 매일 오전 08:00~10:00, 저녁 18:00~20:00 (KST)에만 받을 수 있습니다. (현재 ${info.kstTime})`,
           serverNow: nowMs,
           kstTime: info.kstTime,
           activeWindow: null,

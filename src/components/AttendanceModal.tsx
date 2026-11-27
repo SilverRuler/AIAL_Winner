@@ -39,12 +39,12 @@ function getLiveKstInfo(nowMs: number) {
   const timeStr = `${String(hh).padStart(2, '0')}:${String(mi).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
   let activeWindow: 'morning' | 'afternoon' | null = null;
   let activeWindowLabel: string | null = null;
-  if (hh === 9 && mi >= 0 && mi <= 10) {
+  if ((hh >= 8 && hh < 10) || (hh === 10 && mi === 0)) {
     activeWindow = 'morning';
-    activeWindowLabel = '오전 출석 (09:00~09:10)';
-  } else if (hh === 15 && mi >= 0 && mi <= 10) {
+    activeWindowLabel = '오전 출석 (08:00~10:00)';
+  } else if ((hh >= 18 && hh < 20) || (hh === 20 && mi === 0)) {
     activeWindow = 'afternoon';
-    activeWindowLabel = '오후 출석 (15:00~15:10)';
+    activeWindowLabel = '저녁 출석 (18:00~20:00)';
   }
   return { timeStr, activeWindow, activeWindowLabel };
 }
@@ -197,7 +197,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({ isOpen, onClos
             <div>
               <h2 className="text-base sm:text-lg font-black text-white">타임 출석보상</h2>
               <p className="text-[11px] text-slate-400">
-                매일 09:00~09:10 · 15:00~15:10 접속 시 뽑기권 +3장!
+                매일 08:00~10:00 · 18:00~20:00 접속 시 뽑기권 +3장!
               </p>
             </div>
           </div>
@@ -253,8 +253,8 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({ isOpen, onClos
               <div className="text-[11px] text-slate-400 leading-relaxed">
                 현재는 출석보상 시간이 아닙니다.
                 <br />
-                <strong className="text-amber-300">오전 09:00~09:10</strong> 또는{' '}
-                <strong className="text-amber-300">오후 15:00~15:10</strong> 사이에 다시 접속해주세요!
+                <strong className="text-amber-300">오전 08:00~10:00</strong> 또는{' '}
+                <strong className="text-amber-300">저녁 18:00~20:00</strong> 사이에 다시 접속해주세요!
               </div>
             )}
           </div>
@@ -301,7 +301,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({ isOpen, onClos
                       {claimedActive
                         ? '✅ 수령완료'
                         : claimedMorning || claimedAfternoon
-                        ? `${claimedMorning ? '오전✓' : ''}${claimedMorning && claimedAfternoon ? ' ' : ''}${claimedAfternoon ? '오후✓' : ''}`
+                        ? `${claimedMorning ? '오전✓' : ''}${claimedMorning && claimedAfternoon ? ' ' : ''}${claimedAfternoon ? '저녁✓' : ''}`
                         : '선택'}
                     </div>
                   </button>
@@ -343,7 +343,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({ isOpen, onClos
             ) : !activeWindow ? (
               <>
                 <Clock className="w-4 h-4" />
-                <span>출석 시간(09:00~09:10 · 15:00~15:10) 대기 중</span>
+                <span>출석 시간(08:00~10:00 · 18:00~20:00) 대기 중</span>
               </>
             ) : !selectedMember ? (
               <>
@@ -366,13 +366,13 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({ isOpen, onClos
           {/* 오늘 출석 현황 요약 */}
           <div className="pt-2 border-t border-slate-800/80 grid grid-cols-2 gap-2 text-[11px]">
             <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800">
-              <div className="text-slate-400 font-bold">오전 09:00~09:10</div>
+              <div className="text-slate-400 font-bold">오전 08:00~10:00</div>
               <div className="text-amber-300 font-mono font-black mt-0.5">
                 {state?.claimedMorning?.length ?? 0}명 수령
               </div>
             </div>
             <div className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800">
-              <div className="text-slate-400 font-bold">오후 15:00~15:10</div>
+              <div className="text-slate-400 font-bold">저녁 18:00~20:00</div>
               <div className="text-cyan-300 font-mono font-black mt-0.5">
                 {state?.claimedAfternoon?.length ?? 0}명 수령
               </div>

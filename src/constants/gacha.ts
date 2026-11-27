@@ -83,32 +83,55 @@ export function isPlushSlot(slotIndex: number): boolean {
   return slotIndex === 1 || slotIndex === 4 || slotIndex === 7 || slotIndex === 10 || slotIndex === 12;
 }
 
-export const PLUSH_MOUND_COUNT = 16;
+export const PLUSH_MOUND_COUNT = 36;
 export const PLUSH_MOUND_SCALE = 0.68;
-export const PLUSH_FLOOR_Y = 0.62;
+export const PLUSH_FLOOR_Y = 0.00;
+export const PLUSH_CHUTE_WALL_HEIGHT = 1.55;
 export const PLUSH_CHUTE_HOME_X = -1.16;
 export const PLUSH_CHUTE_HOME_Z = 1.06;
 
-const PLUSH_MOUND_LAYOUT: ReadonlyArray<{ x: number; z: number; layer: 0 | 1 | 2; yaw: number }> = [
-  // Layer 0: 바닥 전체(L자 필드)를 가득 메우는 9개
-  { x: -1.16, z: -0.96, layer: 0, yaw: 0.32 },
-  { x: -1.12, z: -0.18, layer: 0, yaw: -0.45 },
-  { x: -0.34, z: -1.04, layer: 0, yaw: 0.18 },
-  { x: 0.42, z: -1.04, layer: 0, yaw: -0.28 },
-  { x: 1.14, z: -0.92, layer: 0, yaw: 0.50 },
-  { x: -0.02, z: -0.22, layer: 0, yaw: -0.15 },
-  { x: 1.02, z: -0.08, layer: 0, yaw: 0.38 },
-  { x: 0.08, z: 0.76, layer: 0, yaw: 0.24 },
-  { x: 1.02, z: 0.80, layer: 0, yaw: -0.40 },
-  // Layer 1: 2층 산더미 5개
-  { x: -0.78, z: -0.60, layer: 1, yaw: -0.28 },
-  { x: 0.10, z: -0.66, layer: 1, yaw: 0.44 },
-  { x: 0.86, z: -0.50, layer: 1, yaw: -0.32 },
-  { x: 0.40, z: 0.24, layer: 1, yaw: 0.22 },
-  { x: 0.96, z: 0.40, layer: 1, yaw: -0.52 },
-  // Layer 2: 3층 산 정상 2개
-  { x: 0.22, z: -0.22, layer: 2, yaw: -0.20 },
-  { x: 0.72, z: 0.04, layer: 2, yaw: 0.42 },
+const PLUSH_MOUND_LAYOUT: ReadonlyArray<{ x: number; z: number; layer: 0 | 1 | 2 | 3 | 4; yaw: number }> = [
+  // Layer 0 (9개 · 바닥 L자 필드 전체 밀착)
+  { x: -1.18, z: -1.04, layer: 0, yaw: 0.30 },
+  { x: -1.16, z: -0.22, layer: 0, yaw: -0.45 },
+  { x: -0.36, z: -1.08, layer: 0, yaw: 0.18 },
+  { x:  0.42, z: -1.08, layer: 0, yaw: -0.26 },
+  { x:  1.16, z: -0.98, layer: 0, yaw: 0.50 },
+  { x:  0.04, z: -0.22, layer: 0, yaw: -0.16 },
+  { x:  1.06, z: -0.10, layer: 0, yaw: 0.36 },
+  { x:  0.14, z:  0.84, layer: 0, yaw: 0.22 },
+  { x:  1.08, z:  0.86, layer: 0, yaw: -0.38 },
+  // Layer 1 (9개 · 2단 전체 채움)
+  { x: -1.12, z: -0.96, layer: 1, yaw: -0.35 },
+  { x: -1.08, z: -0.26, layer: 1, yaw: 0.42 },
+  { x: -0.30, z: -1.00, layer: 1, yaw: -0.22 },
+  { x:  0.48, z: -0.98, layer: 1, yaw: 0.34 },
+  { x:  1.12, z: -0.84, layer: 1, yaw: -0.48 },
+  { x:  0.12, z: -0.14, layer: 1, yaw: 0.28 },
+  { x:  1.04, z:  0.02, layer: 1, yaw: -0.30 },
+  { x:  0.20, z:  0.76, layer: 1, yaw: -0.24 },
+  { x:  1.02, z:  0.78, layer: 1, yaw: 0.46 },
+  // Layer 2 (8개 · 3단 중간 산더미)
+  { x: -0.98, z: -0.86, layer: 2, yaw: 0.40 },
+  { x: -0.88, z: -0.34, layer: 2, yaw: -0.28 },
+  { x: -0.16, z: -0.90, layer: 2, yaw: 0.25 },
+  { x:  0.62, z: -0.86, layer: 2, yaw: -0.40 },
+  { x:  1.04, z: -0.24, layer: 2, yaw: 0.32 },
+  { x:  0.18, z: -0.06, layer: 2, yaw: -0.36 },
+  { x:  0.28, z:  0.66, layer: 2, yaw: 0.30 },
+  { x:  0.96, z:  0.62, layer: 2, yaw: -0.44 },
+  // Layer 3 (6개 · 4단 상층 산더미)
+  { x: -0.78, z: -0.74, layer: 3, yaw: -0.32 },
+  { x:  0.02, z: -0.74, layer: 3, yaw: 0.42 },
+  { x:  0.80, z: -0.66, layer: 3, yaw: -0.24 },
+  { x:  0.26, z:  0.08, layer: 3, yaw: 0.36 },
+  { x:  0.92, z:  0.08, layer: 3, yaw: -0.38 },
+  { x:  0.58, z:  0.56, layer: 3, yaw: 0.20 },
+  // Layer 4 (4개 · 5단 정상 — 2.5x ㄱ벽 높이까지 꽉 채움)
+  { x: -0.46, z: -0.66, layer: 4, yaw: 0.28 },
+  { x:  0.46, z: -0.58, layer: 4, yaw: -0.34 },
+  { x:  0.34, z:  0.16, layer: 4, yaw: -0.18 },
+  { x:  0.82, z:  0.22, layer: 4, yaw: 0.44 },
 ];
 
 export function getPlushMoundPose(
@@ -119,8 +142,8 @@ export function getPlushMoundPose(
   const { h } = getBoxDimensions(safeSlot);
   const scaledH = h * PLUSH_MOUND_SCALE;
   const seat = PLUSH_MOUND_LAYOUT[seatIndex % PLUSH_MOUND_LAYOUT.length];
-  const baseY = PLUSH_FLOOR_Y + scaledH / 2 + 0.025;
-  const y = baseY + seat.layer * (scaledH + 0.04);
+  const baseY = PLUSH_FLOOR_Y + scaledH / 2 + 0.02;
+  const y = baseY + seat.layer * (scaledH + 0.025);
   const halfYaw = seat.yaw / 2;
   return {
     position: [seat.x, Number(y.toFixed(3)), seat.z],

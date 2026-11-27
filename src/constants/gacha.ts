@@ -83,7 +83,7 @@ export function isPlushSlot(slotIndex: number): boolean {
   return slotIndex === 1 || slotIndex === 4 || slotIndex === 7 || slotIndex === 10 || slotIndex === 12;
 }
 
-export const PLUSH_MOUND_COUNT = 20;
+export const PLUSH_MOUND_COUNT = 15;
 export const PLUSH_MOUND_SCALE = 0.75;
 export const PLUSH_FLOOR_Y = 0.00;
 export const PLUSH_CHUTE_WALL_HEIGHT = 1.55;
@@ -92,46 +92,37 @@ export const PLUSH_CHUTE_HOME_Z = 1.06;
 
 type PlushSeat = { x: number; z: number; layer: number; yaw: number };
 
-function buildPlushScatterLayout20(): readonly PlushSeat[] {
+function buildPlushScatterLayout15(): readonly PlushSeat[] {
   const seats: PlushSeat[] = [];
-  const push = (x: number, z: number, layer: number, yawDeg: number) => {
+  const push = (x: number, z: number, yawDeg: number) => {
     const yaw = Number(((yawDeg * Math.PI) / 180).toFixed(3));
-    seats.push({ x: Number(x.toFixed(3)), z: Number(z.toFixed(3)), layer, yaw });
+    seats.push({ x: Number(x.toFixed(3)), z: Number(z.toFixed(3)), layer: 0, yaw });
   };
 
-  // 바닥 L자 필드 전체에 자연스럽게 흩뿌린 배치 (13개 바닥 + 7개 느슨한 상단 흩뿌림 = 총 20개)
-  const floorScatter: Array<[number, number, number]> = [
-    [-1.24, -1.26,  24],
-    [-0.58, -1.16, -48],
-    [-1.16, -0.46, 112],
-    [-0.46, -0.38, -135],
-    [ 0.22, -1.28,  68],
-    [ 1.12, -1.18, -22],
-    [ 0.56, -0.68, 154],
-    [ 1.22, -0.36, -86],
-    [ 0.16, -0.06,  38],
-    [ 0.84,  0.14, -158],
-    [ 0.24,  0.66, 102],
-    [ 1.14,  0.76, -54],
-    [ 0.58,  1.26,  14],
+  // 바닥 L자 필드 전역에 넓게 산개 배치 (단층 15개 — 겹침 없이 자연스럽게 흩뿌림)
+  const wideScatter: Array<[number, number, number]> = [
+    [-1.30, -1.42,   26],
+    [-0.58, -1.32,  -52],
+    [-1.24, -0.56,  118],
+    [-0.54, -0.28, -140],
+    [ 0.24, -1.44,   68],
+    [ 1.24, -1.36,  -24],
+    [ 0.74, -0.90,  152],
+    [ 0.04, -0.78,  -94],
+    [ 1.28, -0.44,   42],
+    [ 0.56, -0.14, -162],
+    [ 1.18,  0.34,   96],
+    [ 0.08,  0.36,  -38],
+    [ 0.62,  0.76,  134],
+    [ 1.24,  1.24,  -68],
+    [ 0.22,  1.34,   16],
   ];
-  floorScatter.forEach(([x, z, deg]) => push(x, z, 0, deg));
-
-  const looseTopScatter: Array<[number, number, number]> = [
-    [-0.92, -0.88, -72],
-    [ 0.76, -1.04, 132],
-    [ 0.06, -0.62, -18],
-    [ 1.06, -0.08,  84],
-    [ 0.46,  0.34, -116],
-    [ 0.92,  0.98,  46],
-    [ 0.24,  1.06, -162],
-  ];
-  looseTopScatter.forEach(([x, z, deg]) => push(x, z, 1, deg));
+  wideScatter.forEach(([x, z, deg]) => push(x, z, deg));
 
   return seats;
 }
 
-const PLUSH_MOUND_LAYOUT: readonly PlushSeat[] = buildPlushScatterLayout20();
+const PLUSH_MOUND_LAYOUT: readonly PlushSeat[] = buildPlushScatterLayout15();
 
 export function getPlushMoundPose(
   slotIndex: number,

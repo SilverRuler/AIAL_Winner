@@ -32,10 +32,16 @@ const TARGET_MODELS = [
     order: 2,
     id: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
     displayName: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
-    shortName: 'Nemotron 3.5',
+    shortName: 'Nemotron 3.5 VL',
   },
   {
     order: 3,
+    id: 'nvidia/nemotron-3.5-bolt-e4b',
+    displayName: 'nvidia/nemotron-3.5-bolt-e4b',
+    shortName: 'Nemotron Bolt',
+  },
+  {
+    order: 4,
     id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
     displayName: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
     shortName: 'Nemotron Omni',
@@ -131,11 +137,15 @@ export async function GET(request: NextRequest) {
   try {
     const db = await getDatabase().catch(() => null);
 
-    // 1. DB 캐시 확인 (최근 3시간 이내 점검 기록)
+    // 1. DB 캐시 확인 (최근 3시간 이내 점검 기록 & 모델 구성 일치 시에만 재사용)
     if (!force) {
       if (db) {
         const cachedDoc = await db.collection('model_health').findOne({ _id: 'nim_models_health' as any });
-        if (cachedDoc && cachedDoc.checkedAt && now - cachedDoc.checkedAt < CACHE_TTL_MS) {
+        const cacheMatchesTargets =
+          Array.isArray(cachedDoc?.models) &&
+          cachedDoc.models.length === TARGET_MODELS.length &&
+          TARGET_MODELS.every((t, idx) => cachedDoc.models[idx]?.id === t.id);
+        if (cachedDoc && cachedDoc.checkedAt && cacheMatchesTargets && now - cachedDoc.checkedAt < CACHE_TTL_MS) {
           return NextResponse.json({
             success: true,
             checkedAt: cachedDoc.checkedAt,
@@ -144,7 +154,12 @@ export async function GET(request: NextRequest) {
             nextCheckInMs: CACHE_TTL_MS - (now - cachedDoc.checkedAt),
           });
         }
-      } else if (memoryCache && now - memoryCache.checkedAt < CACHE_TTL_MS) {
+      } else if (
+        memoryCache &&
+        memoryCache.models.length === TARGET_MODELS.length &&
+        TARGET_MODELS.every((t, idx) => memoryCache!.models[idx]?.id === t.id) &&
+        now - memoryCache.checkedAt < CACHE_TTL_MS
+      ) {
         return NextResponse.json({
           success: true,
           checkedAt: memoryCache.checkedAt,

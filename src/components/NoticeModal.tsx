@@ -15,7 +15,8 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
   const [open261122, setOpen261122] = useState(false);
   const [open261125, setOpen261125] = useState(false);
   const [open261126, setOpen261126] = useState(false);
-  const [open261127, setOpen261127] = useState(true);
+  const [open261127, setOpen261127] = useState(false);
+  const [open261128, setOpen261128] = useState(true);
 
   if (!isOpen) return null;
 
@@ -123,7 +124,7 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
               <div className="px-4 pb-4 pt-1 space-y-2.5 border-t border-slate-800/80 text-slate-200 leading-relaxed font-medium">
                 <p className="text-sm sm:text-base font-bold text-white flex items-center gap-2 pt-2">
                   <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
-                  출품한 작품은 4가지 폴백 모델에 의해 평가됩니다.
+                  출품한 작품은 4가지 폴백 모델에 의해 평가됩니다. <span className="text-[11px] font-normal text-cyan-400">(→ 261128 공지에서 5단계로 개편)</span>
                 </p>
                 <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] sm:text-xs text-slate-300">
                   <p><span className="text-indigo-400 font-bold">1.</span> mistralai/mistral-large-4-1t-a52b</p>
@@ -423,6 +424,62 @@ export const NoticeModal: React.FC<NoticeModalProps> = ({ isOpen, onClose }) => 
                   <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                   <span>
                     <strong className="text-white">UFO 뽑기 대개편:</strong> 3D 인형 5종 클래식 산더미 인형뽑기(36개 산더미 · 4방향 집게) 전환, 13종 뽑기판별 고유 물리·크레인·Bar 세팅, 뽑기판별 최근 로그 분리, [선택]/[랜덤] 이동, PC 확대 집중 모드 등 상세 변경 사항은 뽑기 페이지의 <strong>[UFO 공지]</strong>에서 확인하세요!
+                  </span>
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 261128 공지 카드 (AI 평가 폴백 모델 5단계 개편 & 본인 게시글 수정·삭제) */}
+          <div className="bg-slate-950/90 rounded-xl border border-cyan-500/50 overflow-hidden transition-all">
+            <button
+              type="button"
+              onClick={() => setOpen261128(!open261128)}
+              className="w-full p-4 flex items-center justify-between gap-2 text-left hover:bg-slate-900/60 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center space-x-2.5 min-w-0">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shrink-0">
+                  📌 261128 공지
+                </span>
+                <span className="text-xs sm:text-sm font-bold text-white truncate">
+                  AI 평가 폴백 모델 5단계 개편 · 본인 게시글 수정/삭제
+                </span>
+              </div>
+              <div className="flex items-center space-x-2 shrink-0">
+                <span className="text-[11px] text-slate-400 hidden xs:inline">2026-11-28</span>
+                {open261128 ? (
+                  <ChevronUp className="w-4 h-4 text-cyan-400 shrink-0" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                )}
+              </div>
+            </button>
+
+            {open261128 && (
+              <div className="px-4 pb-4 pt-1 space-y-2.5 border-t border-slate-800/80 text-slate-200 leading-relaxed font-medium">
+                <p className="text-sm sm:text-base font-bold text-white flex items-start gap-2 pt-2">
+                  <Sparkles className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                  <span>
+                    사진 미인식(텍스트 폴백) 발생을 최소화하기 위해 초고속 비전 모델(<strong className="text-cyan-300">nemotron-3.5-bolt-e4b</strong>)을 추가하여 <strong className="text-amber-300">5단계 폴백 체인</strong>으로 개편했습니다.
+                  </span>
+                </p>
+                <div className="bg-slate-900/90 border border-slate-800 rounded-lg p-2.5 space-y-1 text-[11px] sm:text-xs text-slate-300 font-mono">
+                  <p><span className="text-cyan-400 font-bold">1.</span> mistralai/mistral-large-4-1t-a52b <span className="text-slate-500 font-sans">(메인 비전)</span></p>
+                  <p><span className="text-cyan-400 font-bold">2.</span> nvidia/nemotron-3.5-super-vl-120b-a12b <span className="text-slate-500 font-sans">(고성능 비전)</span></p>
+                  <p><span className="text-emerald-400 font-bold">3.</span> <span className="text-emerald-300 font-bold">nvidia/nemotron-3.5-bolt-e4b</span> <span className="text-emerald-400/90 font-sans">(신규 · 초고속 비전)</span></p>
+                  <p><span className="text-cyan-400 font-bold">4.</span> nvidia/nemotron-3-nano-omni-30b-a3b-reasoning <span className="text-slate-500 font-sans">(예비 비전)</span></p>
+                  <p><span className="text-slate-400 font-bold">5.</span> sr-combo <span className="text-slate-500 font-sans">(최후 텍스트 폴백)</span></p>
+                </div>
+                <p className="text-slate-300 text-xs sm:text-sm flex items-start gap-2">
+                  <Info className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                  <span>
+                    각 평가 코멘트 끝에 실제 사용된 평가 모델명이 표시되며, 상단 <strong>모델 응답 상황</strong> 바에서 1~4순위 비전 모델의 상태를 확인할 수 있습니다.
+                  </span>
+                </p>
+                <p className="text-emerald-300 text-xs sm:text-sm flex items-start gap-2 pt-1 border-t border-slate-800/80">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong className="text-white">본인 게시글 수정·삭제 지원:</strong> 이제 관리자 로그인 없이도 본인이 작성한 기기(쿠키·IP·브라우저 인증)에서 <strong className="text-emerald-200">내 글</strong>의 메뉴명·코멘트를 직접 수정하거나 삭제할 수 있습니다.
                   </span>
                 </p>
               </div>

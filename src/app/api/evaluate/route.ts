@@ -4,14 +4,15 @@ import { MealEntry } from '@/types/meal';
 
 export const maxDuration = 60;
 
-// NVIDIA NIM Vision Model (1순위, 2순위, 3순위)
+// NVIDIA NIM Vision Model (1순위 ~ 4순위)
 const NIM_API_URL = process.env.NIM_API_URL || 'https://integrate.api.nvidia.com/v1/chat/completions';
 const NIM_MODEL_1 = process.env.NIM_MODEL || 'mistralai/mistral-large-4-1t-a52b';
 const NIM_MODEL_2 = process.env.NIM_MODEL_2 || 'nvidia/nemotron-3.5-super-vl-120b-a12b';
-const NIM_MODEL_3 = process.env.NIM_MODEL_3 || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
+const NIM_MODEL_3 = process.env.NIM_MODEL_3 || 'nvidia/nemotron-3.5-bolt-e4b';
+const NIM_MODEL_4 = process.env.NIM_MODEL_4 || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning';
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || '';
 
-// 4순위: LLM evaluation service (sr-combo on oci2 - fallback)
+// 5순위: LLM evaluation service (sr-combo on oci2 - fallback)
 const LLM_API_URL = process.env.LLM_API_URL || 'http://oci2.silverruler.xyz:20129/v1/chat/completions';
 const LLM_MODEL = process.env.LLM_MODEL || 'sr-combo';
 const LLM_API_KEY = process.env.LLM_API_KEY || '';
@@ -253,10 +254,9 @@ async function callNimVision(
   member: string
 ): Promise<SingleEvalResult | null> {
   if (!NVIDIA_API_KEY) return null;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 55000);
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 55000);
-
     const requestPayload: Record<string, any> = {
       model,
       messages: [
@@ -279,8 +279,6 @@ async function callNimVision(
       body: JSON.stringify(requestPayload),
       signal: controller.signal,
     });
-
-    clearTimeout(timeoutId);
 
     if (resp.ok && resp.body) {
       const reader = resp.body.getReader();
@@ -328,6 +326,8 @@ async function callNimVision(
     }
   } catch (nimErr) {
     console.warn(`[Single Meal Eval] NIM (${model}) call failed for ${member}:`, nimErr);
+  } finally {
+    clearTimeout(timeoutId);
   }
   return null;
 }
@@ -380,7 +380,7 @@ async function evaluateSingleMeal(
     const clampMdmScore = (s: number) => Math.max(1, Math.min(50, Math.round(s)));
 
     if (NVIDIA_API_KEY) {
-      for (const model of [NIM_MODEL_1, NIM_MODEL_2, NIM_MODEL_3]) {
+      for (const model of [NIM_MODEL_1, NIM_MODEL_2, NIM_MODEL_3, NIM_MODEL_4]) {
         const res = await callNimVision(model, mdmSystemPrompt, textOnlyContent, member);
         if (res) {
           return {
@@ -524,7 +524,7 @@ async function evaluateSingleMeal(
       };
     }
 
-    // 3순위: NIM Nemotron Omni Reasoning (nvidia/nemotron-3-nano-omni-30b-a3b-reasoning)
+    // 3순위: NIM Nemotron 3.5 Bolt E4B (nvidia/nemotron-3.5-bolt-e4b - 초고속 비전 모델)
     console.warn(`[Single Meal Eval] 2nd NIM (${NIM_MODEL_2}) failed for ${member}. Trying 3rd NIM (${NIM_MODEL_3})...`);
     const tier3Res = await callNimVision(NIM_MODEL_3, nimSystemPrompt, contentList, member);
     if (tier3Res) {
@@ -533,9 +533,19 @@ async function evaluateSingleMeal(
         review: appendModelTag(tier3Res.review, NIM_MODEL_3),
       };
     }
+
+    // 4순위: NIM Nemotron Omni Reasoning (nvidia/nemotron-3-nano-omni-30b-a3b-reasoning)
+    console.warn(`[Single Meal Eval] 3rd NIM (${NIM_MODEL_3}) failed for ${member}. Trying 4th NIM (${NIM_MODEL_4})...`);
+    const tier4Res = await callNimVision(NIM_MODEL_4, nimSystemPrompt, contentList, member);
+    if (tier4Res) {
+      return {
+        score: tier4Res.score,
+        review: appendModelTag(tier4Res.review, NIM_MODEL_4),
+      };
+    }
   }
 
-  // 4순위: sr-combo LLM 텍스트 기반 평가 Fallback
+  // 5순위: sr-combo LLM 텍스트 기반 평가 Fallback
   try {
     const systemPrompt = `당신은 세계 최고 권위의 미식 평가단이자 'AIAL 식사 배틀'의 AI 심사위원입니다.
 각 참가자가 제출한 ${slot} 식사 사진의 제목(메뉴명)과 코멘트를 참고하여(없거나 비어있을 수도 있음) 전문적이고 감각적인 미식 총평과 맛 점수를 부여합니다.

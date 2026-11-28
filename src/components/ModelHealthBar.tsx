@@ -66,14 +66,23 @@ export function ModelHealthBar() {
       id: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
       order: 2,
       displayName: 'nvidia/nemotron-3.5-super-vl-120b-a12b',
-      shortName: 'Nemotron 3.5',
+      shortName: 'Nemotron 3.5 VL',
       status: 'healthy',
-      latencyMs: 14000,
+      latencyMs: 6000,
+      checkedAt: 0,
+    },
+    {
+      id: 'nvidia/nemotron-3.5-bolt-e4b',
+      order: 3,
+      displayName: 'nvidia/nemotron-3.5-bolt-e4b',
+      shortName: 'Nemotron Bolt',
+      status: 'healthy',
+      latencyMs: 2500,
       checkedAt: 0,
     },
     {
       id: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
-      order: 3,
+      order: 4,
       displayName: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
       shortName: 'Nemotron Omni',
       status: 'healthy',
@@ -101,7 +110,7 @@ export function ModelHealthBar() {
           <span className="text-[10px] text-slate-500 font-mono">(3시간 점검)</span>
         </div>
 
-        <div className="flex items-center space-x-4 lg:space-x-6 overflow-x-auto scrollbar-none py-0.5">
+        <div className="flex items-center space-x-3 lg:space-x-4 overflow-x-auto scrollbar-none py-0.5 text-[11px]">
           {models.map((m) => {
             const isHealthy = m.status === 'healthy';
             return (

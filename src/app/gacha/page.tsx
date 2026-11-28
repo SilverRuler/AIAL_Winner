@@ -33,10 +33,15 @@ import {
   GACHA_SLOT_BOX_DIMS,
   GACHA_SLOT_DIFFICULTY_TEXT,
   GACHA_SLOT_LABELS,
+  GACHA_SLOT_SHORT_LABELS,
   GACHA_SLOT_REWARD_AMOUNTS,
   GACHA_TOTAL_SLOTS,
   getBoxRewardAmount,
+  getMachineCategory,
   getMachineLabel,
+  isFigureSlot,
+  isPlushSlot,
+  isPusherSlot,
 } from '@/constants/gacha';
 import { GachaMachineState, GachaTicketBalance, GachaWinRecord } from '@/types/gacha';
 import { MemberWinStats } from '@/types/meal';
@@ -62,6 +67,7 @@ export default function GachaPage() {
 
   const [machines, setMachines] = useState<GachaMachineState[]>([]);
   const [selectedMachineIndex, setSelectedMachineIndex] = useState<number>(0);
+  const [machineCategory, setMachineCategory] = useState<'figure' | 'plush' | 'pusher'>('figure');
   const machine = useMemo(
     () => machines[selectedMachineIndex] || null,
     [machines, selectedMachineIndex]
@@ -273,6 +279,7 @@ export default function GachaPage() {
       if (activeTurnId || isStarting || isFinishing) return;
       const wrapped = ((nextIdx % GACHA_MACHINE_COUNT) + GACHA_MACHINE_COUNT) % GACHA_MACHINE_COUNT;
       setSelectedMachineIndex(wrapped);
+      setMachineCategory(getMachineCategory(wrapped));
       setStatusMessage('');
       if (typeof window !== 'undefined') {
         localStorage.setItem('aial_gacha_machine_idx', String(wrapped));
@@ -290,7 +297,6 @@ export default function GachaPage() {
   }, [handleSelectMachine, selectedMachineIndex]);
 
   const machineSummaries = useMemo(() => {
-    const shortLabels = ['1.프리렌', '2.네즈코', '3.노엘', '4.레제', '5.바니카', '6.산드로네'];
     const approxNow = Date.now() + serverClockOffset;
     return Array.from({ length: GACHA_MACHINE_COUNT }, (_, idx) => {
       const m = machines[idx];
@@ -303,12 +309,48 @@ export default function GachaPage() {
           : null;
       return {
         index: idx,
-        shortName: shortLabels[idx] || `${idx + 1}번`,
+        shortName: GACHA_SLOT_SHORT_LABELS[idx] || `${idx + 1}번`,
         hasStock,
         lockedBy,
+        category: getMachineCategory(idx),
       };
     });
   }, [machines, serverClockOffset, activeTurnId]);
+
+  const visibleMachineIndices = useMemo(() => {
+    return machineSummaries
+      .filter((ms) => ms.category === machineCategory)
+      .map((ms) => ms.index);
+  }, [machineSummaries, machineCategory]);
+
+  const handleCategoryChange = useCallback((cat: 'figure' | 'plush' | 'pusher') => {
+    if (activeTurnId || isStarting || isFinishing) return;
+    setMachineCategory(cat);
+    const list = machineSummaries.filter((ms) => ms.category === cat).map((ms) => ms.index);
+    if (list.length > 0 && !list.includes(selectedMachineIndex)) {
+      handleSelectMachine(list[0]);
+    }
+  }, [activeTurnId, isStarting, isFinishing, machineSummaries, selectedMachineIndex, handleSelectMachine]);
+
+  const handleSelectInCategory = useCallback(() => {
+    const list = visibleMachineIndices;
+    if (list.length === 0) return;
+    const cur = list.indexOf(selectedMachineIndex);
+    const next = list[(cur + 1) % list.length];
+    handleSelectMachine(next);
+  }, [visibleMachineIndices, selectedMachineIndex, handleSelectMachine]);
+
+  const handleRandomInCategory = useCallback(() => {
+    const stocked = visibleMachineIndices.filter((idx) => {
+      const m = machines[idx];
+      return m ? (m.items?.length ?? 0) > 0 : true;
+    });
+    const pool = stocked.length > 0 ? stocked : visibleMachineIndices;
+    if (pool.length === 0) return;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    handleSelectMachine(pick);
+    setStatusMessage(`🎲 랜덤 이동: ${GACHA_SLOT_SHORT_LABELS[pick]}`);
+  }, [visibleMachineIndices, machines, handleSelectMachine]);
 
   // 본인 턴 진행 중 8초마다 하트비트 전송 (플레이 도중 락 만료 방지, 비정상 이탈 시 25초 내 자동 해제)
   useEffect(() => {
@@ -931,7 +973,58 @@ export default function GachaPage() {
           </div>
         )}
 
-        {/* 2. 3D UFO 크레인 머신 (개별 1상품 전용 뽑기판 6종) */}
+        {/* 2. 3D UFO 크레인 머신 (개별 1상품 전용 뽑기판) */}
+        <div className="rounded-2xl bg-slate-900/70 border border-slate-800 p-3 sm:p-4 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {([
+                { key: 'figure' as const, label: '피규어', icon: '📦' },
+                { key: 'plush' as const, label: '인형', icon: '🧸' },
+                { key: 'pusher' as const, label: '밀판', icon: '🪙' },
+              ]).map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  onClick={() => handleCategoryChange(c.key)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                    machineCategory === c.key
+                      ? 'bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-sm'
+                      : 'bg-slate-950/70 border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500'
+                  }`}
+                >
+                  <span className="mr-1">{c.icon}</span>{c.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleSelectInCategory}
+                disabled={!!activeTurnId || isStarting || isFinishing || visibleMachineIndices.length < 2}
+                className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-[11px] font-bold cursor-pointer disabled:opacity-40"
+              >
+                선택
+              </button>
+              <button
+                type="button"
+                onClick={handleRandomInCategory}
+                disabled={!!activeTurnId || isStarting || isFinishing || visibleMachineIndices.length < 1}
+                className="px-2.5 py-1.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/50 text-purple-200 text-[11px] font-bold cursor-pointer disabled:opacity-40"
+              >
+                랜덤
+              </button>
+              <span className="px-2.5 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-[11px] font-bold">
+                관전
+              </span>
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            {machineCategory === 'figure' && '피규어 박스 뽑기: 박스가 빨간 Bar 틈새로 통과하면 당첨!'}
+            {machineCategory === 'plush' && '인형 뽑기: 인형을 집어 좌측 하단 WIN 구멍에 넣으면 당첨!'}
+            {machineCategory === 'pusher' && '밀판 뽑기: 캡슐을 밀판 위에 올리고 밀어서 좌측 투입구로 떨어뜨리면 당첨!'}
+          </p>
+        </div>
+
         <UfoClawMachine3D
           items={machine?.items || []}
           isMyTurn={Boolean(activeTurnId) && !isFinishing && !pendingNextTurnKey}
@@ -955,6 +1048,7 @@ export default function GachaPage() {
           onNextMachine={handleNextMachine}
           onSelectMachine={handleSelectMachine}
           machineSummaries={machineSummaries}
+          visibleMachineIndices={visibleMachineIndices}
           isAdmin={isAdmin}
           onAdminRefill={handleAdminRefill}
           onAdminReset={handleAdminReset}

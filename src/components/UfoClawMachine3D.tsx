@@ -19,7 +19,29 @@ import {
   Loader2,
 } from 'lucide-react';
 import { GachaBoxItem } from '@/types/gacha';
-import { GACHA_PHYSICS, getBoxDimensions, getBoxRewardAmount, isBoxAtInitialPose, isPlushSlot } from '@/constants/gacha';
+import {
+  GACHA_PHYSICS,
+  getBoxDimensions,
+  getBoxRewardAmount,
+  isBoxAtInitialPose,
+  isPlushSlot,
+  isPusherSlot,
+  getPokemonCapsuleInfo,
+  PUSHER_BARRICADE_H,
+  PUSHER_BARRICADE_X,
+  PUSHER_DECK_FRONT_Z,
+  PUSHER_DECK_Y,
+  PUSHER_SLIDER_DEPTH,
+  PUSHER_SLIDER_HEIGHT,
+  PUSHER_SLIDER_SPEED,
+  PUSHER_SLIDER_WIDTH,
+  PUSHER_SLIDER_Z_BACK,
+  PUSHER_SLIDER_Z_FRONT,
+  PUSHER_DROP_HOME_X,
+  PUSHER_DROP_HOME_Z,
+  PUSHER_CHUTE_CENTER_X,
+  PUSHER_CHUTE_CENTER_Z,
+} from '@/constants/gacha';
 
 type CameraView = 'front' | 'top' | 'right';
 
@@ -73,7 +95,9 @@ interface UfoClawMachine3DProps {
     shortName: string;
     hasStock: boolean;
     lockedBy: string | null;
+    category?: 'figure' | 'plush' | 'pusher';
   }>;
+  visibleMachineIndices?: number[];
   isAdmin?: boolean;
   onAdminRefill?: () => void;
   onAdminReset?: () => void;
@@ -223,6 +247,55 @@ function createPlushMaterial(imgSrc: string): THREE.MeshStandardMaterial {
   });
 }
 
+const POKEMON_CAPSULE_TEX_CACHE = new Map<string, THREE.Texture>();
+
+function getPokemonCapsuleTexture(imgSrc: string): THREE.Texture {
+  const cached = POKEMON_CAPSULE_TEX_CACHE.get(imgSrc);
+  if (cached) return cached;
+  const tex = new THREE.TextureLoader().load(imgSrc);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  POKEMON_CAPSULE_TEX_CACHE.set(imgSrc, tex);
+  return tex;
+}
+
+function createPokemonCapsuleMesh(label: string, seatIndex: number): THREE.Group {
+  const info = getPokemonCapsuleInfo(seatIndex, label);
+  const group = new THREE.Group();
+  const tex = getPokemonCapsuleTexture(info.imgSrc);
+  const topMat = new THREE.MeshStandardMaterial({
+    map: tex,
+    color: '#ffffff',
+    roughness: 0.32,
+    metalness: 0.08,
+  });
+  const bottomMat = new THREE.MeshStandardMaterial({
+    color: info.color,
+    roughness: 0.36,
+    metalness: 0.12,
+  });
+  const rimMat = new THREE.MeshStandardMaterial({
+    color: info.rim,
+    roughness: 0.2,
+    metalness: 0.45,
+  });
+  const top = new THREE.Mesh(new THREE.SphereGeometry(0.165, 28, 20, 0, Math.PI * 2, 0, Math.PI / 2), topMat);
+  top.position.y = 0.012;
+  top.castShadow = true;
+  top.receiveShadow = true;
+  group.add(top);
+  const bottom = new THREE.Mesh(new THREE.SphereGeometry(0.165, 28, 20, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), bottomMat);
+  bottom.position.y = -0.012;
+  bottom.castShadow = true;
+  bottom.receiveShadow = true;
+  group.add(bottom);
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(0.168, 0.168, 0.03, 28), rimMat);
+  rim.castShadow = true;
+  rim.receiveShadow = true;
+  group.add(rim);
+  return group;
+}
+
 function getFigureSlotStyle(slotIndex: number) {
   const safeIdx = ((slotIndex % FIGURE_SLOT_STYLES.length) + FIGURE_SLOT_STYLES.length) % FIGURE_SLOT_STYLES.length;
   return FIGURE_SLOT_STYLES[safeIdx];
@@ -336,6 +409,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   onNextMachine,
   onSelectMachine,
   machineSummaries = [],
+  visibleMachineIndices,
   isAdmin = false,
   onAdminRefill,
   onAdminReset,
@@ -351,6 +425,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
   const [clawFeedback, setClawFeedback] = useState<string>('');
   const [showExtremeDrr, setShowExtremeDrr] = useState<boolean>(false);
   const [showBalanceCatch, setShowBalanceCatch] = useState<boolean>(false);
+  const isPusher = isPusherSlot(machineIndex);
 
   // Refs for animation loop access without re-creating Three.js scene
   const phaseRef = useRef<CranePhase>('idle');
@@ -476,6 +551,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     syncFromItems: (nextItems: GachaBoxItem[]) => void;
     resetClawToHome: () => void;
   } | null>(null);
+  const sliderMeshRef = useRef<THREE.Mesh | null>(null);
+  const sliderBodyRef = useRef<CANNON.Body | null>(null);
 
   // 새 턴 시작 감지 -> ready_right 진입 (항상 정면뷰로 자동 전환 + 최신 서버 좌표 items 즉시 반영)
   itemsRef.current = items;
@@ -496,6 +573,14 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMyTurn, turnKey, setCranePhase, playTone]);
+
+  // 밀판 머신일 때 크레인 시작/드롭 기준점을 밀판 위로 설정
+  useEffect(() => {
+    if (isPusher && !isMyTurn && !isFinishing && phaseRef.current === 'idle' && simControlRef.current) {
+      simControlRef.current.resetClawToHome();
+      simControlRef.current.syncFromItems(itemsRef.current);
+    }
+  }, [isPusher, isMyTurn, isFinishing]);
 
   // 대기 상태에서 서버 폴링 또는 뽑기판 전환으로 items 변경 시 3D 씬 동기화 (본인 턴/저장 중이 아닐 때)
   useEffect(() => {
@@ -723,55 +808,125 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     backRampMesh.rotation.x = 0.72;
     cabinetGroup.add(backRampMesh);
 
-    // 4개의 평행 UFO 브릿지 Bar (중앙 낙하용 2개 + 앞/뒤 외곽 높은 보조 Bar 2개)
-    const barGeo = new THREE.CylinderGeometry(
-      GACHA_PHYSICS.BAR_RADIUS,
-      GACHA_PHYSICS.BAR_RADIUS,
-      GACHA_PHYSICS.BAR_LENGTH,
-      24
-    );
-    barGeo.rotateZ(Math.PI / 2);
-    const barMatVisual = new THREE.MeshStandardMaterial({
-      color: '#e2e8f0',
-      metalness: 0.9,
-      roughness: 0.15,
-    });
-    const ringGeo = new THREE.TorusGeometry(GACHA_PHYSICS.BAR_RADIUS + 0.008, 0.015, 10, 24);
-    ringGeo.rotateY(Math.PI / 2);
-    const ringMat = new THREE.MeshStandardMaterial({
-      color: '#f43f5e',
-      emissive: '#e11d48',
-      emissiveIntensity: 0.35,
-      roughness: 0.5,
-    });
-    const outerRingMat = new THREE.MeshStandardMaterial({
-      color: '#38bdf8',
-      emissive: '#0284c7',
-      emissiveIntensity: 0.35,
-      roughness: 0.5,
-    });
+    const isPusherMachine = isPusherSlot(machineIndex);
+    const pusherDeckY = PUSHER_DECK_Y;
+    const pusherDeckZMin = -1.72;
+    const pusherDeckZMax = PUSHER_DECK_FRONT_Z;
+    const pusherDeckXMin = -GACHA_PHYSICS.CABINET_HALF_X + 0.02;
+    const pusherDeckXMax = PUSHER_BARRICADE_X - 0.03;
+    const pusherDeckW = pusherDeckXMax - pusherDeckXMin;
+    const pusherDeckD = pusherDeckZMax - pusherDeckZMin;
+    const pusherDeckCX = (pusherDeckXMin + pusherDeckXMax) / 2;
+    const pusherDeckCZ = (pusherDeckZMin + pusherDeckZMax) / 2;
 
-    const allBarSpecs = [
-      { y: GACHA_PHYSICS.BAR_Y, z: -GACHA_PHYSICS.BAR_HALF_Z, isOuter: false },
-      { y: GACHA_PHYSICS.BAR_Y, z: GACHA_PHYSICS.BAR_HALF_Z, isOuter: false },
-      { y: GACHA_PHYSICS.OUTER_BAR_Y, z: -GACHA_PHYSICS.OUTER_BAR_HALF_Z, isOuter: true },
-      { y: GACHA_PHYSICS.OUTER_BAR_Y, z: GACHA_PHYSICS.OUTER_BAR_HALF_Z, isOuter: true },
-    ];
+    // 4개의 평행 UFO 브릿지 Bar (피규어/인형 전용). 밀판은 Bar 대신 밀판+바리케이트 구조.
+    const allBarSpecs: Array<{ y: number; z: number; isOuter: boolean }> = isPusherMachine
+      ? []
+      : [
+          { y: GACHA_PHYSICS.BAR_Y, z: -GACHA_PHYSICS.BAR_HALF_Z, isOuter: false },
+          { y: GACHA_PHYSICS.BAR_Y, z: GACHA_PHYSICS.BAR_HALF_Z, isOuter: false },
+          { y: GACHA_PHYSICS.OUTER_BAR_Y, z: -GACHA_PHYSICS.OUTER_BAR_HALF_Z, isOuter: true },
+          { y: GACHA_PHYSICS.OUTER_BAR_Y, z: GACHA_PHYSICS.OUTER_BAR_HALF_Z, isOuter: true },
+        ];
 
-    allBarSpecs.forEach(({ y: by, z: bz, isOuter }) => {
-      const barMesh = new THREE.Mesh(barGeo, barMatVisual);
-      barMesh.position.set(0, by, bz);
-      barMesh.castShadow = true;
-      barMesh.receiveShadow = true;
-      cabinetGroup.add(barMesh);
+    if (!isPusherMachine) {
+      const barGeo = new THREE.CylinderGeometry(
+        GACHA_PHYSICS.BAR_RADIUS,
+        GACHA_PHYSICS.BAR_RADIUS,
+        GACHA_PHYSICS.BAR_LENGTH,
+        24
+      );
+      barGeo.rotateZ(Math.PI / 2);
+      const barMatVisual = new THREE.MeshStandardMaterial({
+        color: '#e2e8f0',
+        metalness: 0.9,
+        roughness: 0.15,
+      });
+      const ringGeo = new THREE.TorusGeometry(GACHA_PHYSICS.BAR_RADIUS + 0.008, 0.015, 10, 24);
+      ringGeo.rotateY(Math.PI / 2);
+      const ringMat = new THREE.MeshStandardMaterial({
+        color: '#f43f5e',
+        emissive: '#e11d48',
+        emissiveIntensity: 0.35,
+        roughness: 0.5,
+      });
+      const outerRingMat = new THREE.MeshStandardMaterial({
+        color: '#38bdf8',
+        emissive: '#0284c7',
+        emissiveIntensity: 0.35,
+        roughness: 0.5,
+      });
 
-      // 미끄럼방지 실리콘 링 배치 (1상품 전용 폭 커버)
-      for (let rx = -1.5; rx <= 1.51; rx += 0.5) {
-        const ring = new THREE.Mesh(ringGeo, isOuter ? outerRingMat : ringMat);
-        ring.position.set(rx, by, bz);
-        cabinetGroup.add(ring);
-      }
-    });
+      allBarSpecs.forEach(({ y: by, z: bz, isOuter }) => {
+        const barMesh = new THREE.Mesh(barGeo, barMatVisual);
+        barMesh.position.set(0, by, bz);
+        barMesh.castShadow = true;
+        barMesh.receiveShadow = true;
+        cabinetGroup.add(barMesh);
+
+        // 미끄럼방지 실리콘 링 배치 (1상품 전용 폭 커버)
+        for (let rx = -1.5; rx <= 1.51; rx += 0.5) {
+          const ring = new THREE.Mesh(ringGeo, isOuter ? outerRingMat : ringMat);
+          ring.position.set(rx, by, bz);
+          cabinetGroup.add(ring);
+        }
+      });
+    } else {
+      // 밀판 전용 스테이지: 좌측 밀판 데크, ㅣ 바리케이트, 우측 캡슐 존
+      const deckMat = new THREE.MeshStandardMaterial({ color: '#1e293b', metalness: 0.55, roughness: 0.35 });
+      const deck = new THREE.Mesh(new THREE.BoxGeometry(pusherDeckW, 0.08, pusherDeckD), deckMat);
+      deck.position.set(pusherDeckCX, pusherDeckY - 0.04, pusherDeckCZ);
+      deck.receiveShadow = true;
+      cabinetGroup.add(deck);
+
+      const deckLip = new THREE.Mesh(
+        new THREE.BoxGeometry(pusherDeckW, 0.05, 0.08),
+        new THREE.MeshStandardMaterial({ color: '#f59e0b', metalness: 0.35, roughness: 0.45, emissive: '#92400e', emissiveIntensity: 0.2 })
+      );
+      deckLip.position.set(pusherDeckCX, pusherDeckY + 0.01, pusherDeckZMax + 0.04);
+      cabinetGroup.add(deckLip);
+
+      const barricadeMat = new THREE.MeshStandardMaterial({
+        color: '#64748b',
+        metalness: 0.75,
+        roughness: 0.25,
+        transparent: true,
+        opacity: 0.92,
+      });
+      const barricadeW = 0.08;
+      const barricade = new THREE.Mesh(new THREE.BoxGeometry(barricadeW, PUSHER_BARRICADE_H, 3.9), barricadeMat);
+      barricade.position.set(PUSHER_BARRICADE_X, PUSHER_BARRICADE_H / 2 - 0.2, 0);
+      barricade.castShadow = true;
+      barricade.receiveShadow = true;
+      cabinetGroup.add(barricade);
+
+      const pitFloor = new THREE.Mesh(
+        new THREE.BoxGeometry(GACHA_PHYSICS.CABINET_HALF_X - PUSHER_BARRICADE_X - 0.08, 0.08, 3.6),
+        new THREE.MeshStandardMaterial({ color: '#0f172a', metalness: 0.2, roughness: 0.8 })
+      );
+      pitFloor.position.set((PUSHER_BARRICADE_X + GACHA_PHYSICS.CABINET_HALF_X) / 2 + 0.02, -0.04, 0);
+      pitFloor.receiveShadow = true;
+      cabinetGroup.add(pitFloor);
+
+      const chuteGuideMat = new THREE.MeshStandardMaterial({
+        color: '#22d3ee',
+        transparent: true,
+        opacity: 0.22,
+        emissive: '#0891b2',
+        emissiveIntensity: 0.25,
+      });
+      const chuteGuide = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.7, 0.9), chuteGuideMat);
+      chuteGuide.position.set(pusherDeckXMax + 0.03, 0.35, 1.05);
+      cabinetGroup.add(chuteGuide);
+
+      const chuteLabel = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.9, 0.28),
+        new THREE.MeshBasicMaterial({ color: '#67e8f9', transparent: true, opacity: 0.8, side: THREE.DoubleSide })
+      );
+      chuteLabel.rotation.x = -Math.PI / 2;
+      chuteLabel.position.set(PUSHER_CHUTE_CENTER_X, 0.03, PUSHER_CHUTE_CENTER_Z);
+      cabinetGroup.add(chuteLabel);
+    }
 
     // 4. UFO Claw Visual Assembly
     const clawGroup = new THREE.Group();
@@ -911,7 +1066,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       })
     );
 
-    // 정적 물리 바디: 평행 Bar 4개 (중앙 낙하용 2개 + 앞/뒤 외곽 높은 보조 Bar 2개)
+    // 정적 물리 바디: 평행 Bar 4개 (피규어/인형 전용)
     allBarSpecs.forEach(({ y: by, z: bz }) => {
       const barBody = new CANNON.Body({ mass: 0, material: barPhysMat });
       const cylShape = new CANNON.Cylinder(
@@ -927,7 +1082,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       world.addBody(barBody);
     });
 
-    // 정적 물리 바디: 좌우 유리벽 및 앞뒤 경사 가이드(바 바깥으로 떨어지지 않고 중앙 Bar 틈새로 유도)
+    // 정적 물리 바디: 좌우 유리벽 및 앞뒤 경사 가이드
     [-GACHA_PHYSICS.CABINET_HALF_X - 0.1, GACHA_PHYSICS.CABINET_HALF_X + 0.1].forEach((wx) => {
       const wallBody = new CANNON.Body({ mass: 0, material: barPhysMat });
       wallBody.addShape(new CANNON.Box(new CANNON.Vec3(0.1, 2.0, 2.0)));
@@ -935,25 +1090,98 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       world.addBody(wallBody);
     });
 
-    // 앞 경사 가이드 (외곽 Bar 바깥쪽 보호 벽)
-    const frontRampBody = new CANNON.Body({ mass: 0, material: barPhysMat });
-    frontRampBody.addShape(new CANNON.Box(new CANNON.Vec3(GACHA_PHYSICS.BAR_LENGTH / 2, 0.05, 0.42)));
-    frontRampBody.position.set(0, 1.24, 1.38);
-    frontRampBody.quaternion.setFromEuler(-0.72, 0, 0);
-    world.addBody(frontRampBody);
+    if (!isPusherMachine) {
+      // 앞 경사 가이드 (외곽 Bar 바깥쪽 보호 벽)
+      const frontRampBody = new CANNON.Body({ mass: 0, material: barPhysMat });
+      frontRampBody.addShape(new CANNON.Box(new CANNON.Vec3(GACHA_PHYSICS.BAR_LENGTH / 2, 0.05, 0.42)));
+      frontRampBody.position.set(0, 1.24, 1.38);
+      frontRampBody.quaternion.setFromEuler(-0.72, 0, 0);
+      world.addBody(frontRampBody);
 
-    // 뒤 경사 가이드 (외곽 Bar 바깥쪽 보호 벽)
-    const backRampBody = new CANNON.Body({ mass: 0, material: barPhysMat });
-    backRampBody.addShape(new CANNON.Box(new CANNON.Vec3(GACHA_PHYSICS.BAR_LENGTH / 2, 0.05, 0.42)));
-    backRampBody.position.set(0, 1.24, -1.38);
-    backRampBody.quaternion.setFromEuler(0.72, 0, 0);
-    world.addBody(backRampBody);
+      // 뒤 경사 가이드 (외곽 Bar 바깥쪽 보호 벽)
+      const backRampBody = new CANNON.Body({ mass: 0, material: barPhysMat });
+      backRampBody.addShape(new CANNON.Box(new CANNON.Vec3(GACHA_PHYSICS.BAR_LENGTH / 2, 0.05, 0.42)));
+      backRampBody.position.set(0, 1.24, -1.38);
+      backRampBody.quaternion.setFromEuler(0.72, 0, 0);
+      world.addBody(backRampBody);
+    } else {
+      // 밀판 스테이지 물리: 좌측 데크, ㅣ 바리케이트, 우측 바닥, 전면 배출구 가이드
+      const deckBody = new CANNON.Body({ mass: 0, material: barPhysMat });
+      deckBody.addShape(new CANNON.Box(new CANNON.Vec3(pusherDeckW / 2, 0.04, pusherDeckD / 2)));
+      deckBody.position.set(pusherDeckCX, pusherDeckY - 0.04, pusherDeckCZ);
+      world.addBody(deckBody);
+
+      const barricadeBody = new CANNON.Body({ mass: 0, material: barPhysMat });
+      barricadeBody.addShape(new CANNON.Box(new CANNON.Vec3(0.04, PUSHER_BARRICADE_H / 2, 1.95)));
+      barricadeBody.position.set(PUSHER_BARRICADE_X, PUSHER_BARRICADE_H / 2 - 0.2, 0);
+      world.addBody(barricadeBody);
+
+      const pitFloorBody = new CANNON.Body({ mass: 0, material: barPhysMat });
+      pitFloorBody.addShape(new CANNON.Box(new CANNON.Vec3((GACHA_PHYSICS.CABINET_HALF_X - PUSHER_BARRICADE_X) / 2, 0.04, 1.8)));
+      pitFloorBody.position.set((PUSHER_BARRICADE_X + GACHA_PHYSICS.CABINET_HALF_X) / 2, -0.04, 0);
+      world.addBody(pitFloorBody);
+
+      // 바리케이트 우측 캡슐존 앞/뒤 벽 (바닥 아래 WIN 슈트로 빠지지 않도록)
+      const pitFrontWall = new CANNON.Body({ mass: 0, material: barPhysMat });
+      pitFrontWall.addShape(new CANNON.Box(new CANNON.Vec3((GACHA_PHYSICS.CABINET_HALF_X - PUSHER_BARRICADE_X) / 2, 0.9, 0.08)));
+      pitFrontWall.position.set((PUSHER_BARRICADE_X + GACHA_PHYSICS.CABINET_HALF_X) / 2, 0.65, 1.72);
+      world.addBody(pitFrontWall);
+
+      const pitBackWall = new CANNON.Body({ mass: 0, material: barPhysMat });
+      pitBackWall.addShape(new CANNON.Box(new CANNON.Vec3((GACHA_PHYSICS.CABINET_HALF_X - PUSHER_BARRICADE_X) / 2, 0.9, 0.08)));
+      pitBackWall.position.set((PUSHER_BARRICADE_X + GACHA_PHYSICS.CABINET_HALF_X) / 2, 0.65, -1.72);
+      world.addBody(pitBackWall);
+
+      // 좌측 밀판 우측 벽(배출구 쪽 가이드): 바리케이트 기준 좌측 공간만 유지
+      const chuteInnerWall = new CANNON.Body({ mass: 0, material: barPhysMat });
+      chuteInnerWall.addShape(new CANNON.Box(new CANNON.Vec3(0.04, 0.45, 0.72)));
+      chuteInnerWall.position.set(PUSHER_BARRICADE_X - 0.02, 0.32, 1.22);
+      world.addBody(chuteInnerWall);
+
+      const deckBackWall = new CANNON.Body({ mass: 0, material: barPhysMat });
+      deckBackWall.addShape(new CANNON.Box(new CANNON.Vec3(pusherDeckW / 2, 0.55, 0.05)));
+      deckBackWall.position.set(pusherDeckCX, pusherDeckY + 0.45, pusherDeckZMin - 0.05);
+      world.addBody(deckBackWall);
+    }
 
     // 하단 WIN 슈트 바닥 콜라이더 (떨어진 상자가 안착)
     const floorBody = new CANNON.Body({ mass: 0, material: barPhysMat });
     floorBody.addShape(new CANNON.Box(new CANNON.Vec3(2.2, 0.1, 2.0)));
     floorBody.position.set(0, -1.55, 0);
     world.addBody(floorBody);
+
+    // 밀판 움직이는 슬라이더(푸셔) - kinematic
+    let pusherSliderMesh: THREE.Mesh | null = null;
+    let pusherSliderBody: CANNON.Body | null = null;
+    if (isPusherMachine) {
+      pusherSliderMesh = new THREE.Mesh(
+        new THREE.BoxGeometry(PUSHER_SLIDER_WIDTH, PUSHER_SLIDER_HEIGHT, PUSHER_SLIDER_DEPTH),
+        new THREE.MeshStandardMaterial({
+          color: '#38bdf8',
+          metalness: 0.45,
+          roughness: 0.3,
+          emissive: '#0ea5e9',
+          emissiveIntensity: 0.25,
+          transparent: true,
+          opacity: 0.92,
+        })
+      );
+      pusherSliderMesh.position.set(pusherDeckCX, pusherDeckY + PUSHER_SLIDER_HEIGHT / 2, PUSHER_SLIDER_Z_BACK);
+      pusherSliderMesh.castShadow = true;
+      pusherSliderMesh.receiveShadow = true;
+      cabinetGroup.add(pusherSliderMesh);
+
+      pusherSliderBody = new CANNON.Body({
+        type: CANNON.Body.KINEMATIC,
+        mass: 0,
+        material: barPhysMat,
+      });
+      pusherSliderBody.addShape(new CANNON.Box(new CANNON.Vec3(PUSHER_SLIDER_WIDTH / 2, PUSHER_SLIDER_HEIGHT / 2, PUSHER_SLIDER_DEPTH / 2)));
+      pusherSliderBody.position.set(pusherDeckCX, pusherDeckY + PUSHER_SLIDER_HEIGHT / 2, PUSHER_SLIDER_Z_BACK);
+      world.addBody(pusherSliderBody);
+      sliderMeshRef.current = pusherSliderMesh;
+      sliderBodyRef.current = pusherSliderBody;
+    }
 
     // Kinematic 크레인 물리 바디 (무한 질량 반발 튀어오름 방지: collisionResponse=false, 실제 누르기/후킹은 정밀 힘 제어로 구현)
     const clawAnchorBody = new CANNON.Body({
@@ -978,7 +1206,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
     // 동적 상품 박스 관리 맵
     interface BoxEntity {
       data: GachaBoxItem;
-      mesh: THREE.Mesh;
+      mesh: THREE.Object3D;
       body: CANNON.Body;
     }
     const boxEntities = new Map<string, BoxEntity>();
@@ -990,50 +1218,68 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       for (const [id, ent] of boxEntities.entries()) {
         if (!nextIds.has(id)) {
           scene.remove(ent.mesh);
-          ent.mesh.geometry.dispose();
-          if (Array.isArray(ent.mesh.material)) {
-            ent.mesh.material.forEach((m) => m.dispose());
-          } else {
-            ent.mesh.material.dispose();
-          }
+          ent.mesh.traverse((obj) => {
+            const m = obj as THREE.Mesh;
+            if (m.geometry) m.geometry.dispose();
+            const mat = m.material as THREE.Material | THREE.Material[] | undefined;
+            if (Array.isArray(mat)) mat.forEach((mm) => mm.dispose());
+            else if (mat) mat.dispose();
+          });
           world.removeBody(ent.body);
           boxEntities.delete(id);
         }
       }
 
-      // 추가 및 위치 동기화 (슬롯별 고유 크기·질량 및 입체 쿠션 인형 지오메트리/복합 콜라이더 반영)
+      // 추가 및 위치 동기화 (피규어 박스 / 인형 / 밀판 캡슐)
       for (const it of nextItems) {
         let ent = boxEntities.get(it.id);
         if (!ent) {
           const dims = getBoxDimensions(it.slotIndex);
           const plushItem = isPlushSlot(it.slotIndex);
-          let mesh: THREE.Mesh;
+          const pusherItem = isPusherSlot(it.slotIndex);
+          let mesh: THREE.Object3D;
           let body: CANNON.Body;
 
-          if (plushItem) {
+          if (pusherItem) {
+            mesh = createPokemonCapsuleMesh(it.label, it.seatIndex ?? 0);
+            mesh.castShadow = true;
+            scene.add(mesh);
+            body = new CANNON.Body({
+              mass: dims.mass,
+              material: boxPhysMat,
+              linearDamping: 0.2,
+              angularDamping: 0.35,
+            });
+            const r = Math.max(dims.w, dims.d) / 2;
+            const cylH = Math.max(0.04, dims.h - r * 2);
+            body.addShape(new CANNON.Cylinder(r, r, cylH, 12));
+            body.addShape(new CANNON.Sphere(r * 0.95), new CANNON.Vec3(0, cylH / 2, 0));
+            body.addShape(new CANNON.Sphere(r * 0.95), new CANNON.Vec3(0, -cylH / 2, 0));
+            world.addBody(body);
+          } else if (plushItem) {
             const style = getFigureSlotStyle(it.slotIndex);
             const plushMat = createPlushMaterial(style.imgSrc);
             const initialGeo = cachedSandroneGeoData
               ? buildBufferGeometryFromPlushData(cachedSandroneGeoData)
               : new THREE.BoxGeometry(dims.w * 0.7, dims.h, dims.d * 0.85);
-            mesh = new THREE.Mesh(initialGeo, plushMat);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            scene.add(mesh);
+            const mesh3 = new THREE.Mesh(initialGeo, plushMat);
+            mesh3.castShadow = true;
+            mesh3.receiveShadow = true;
+            scene.add(mesh3);
+            mesh = mesh3;
 
             if (!cachedSandroneGeoData) {
               const targetId = it.id;
               loadSandronePlushGeoData().then((geoData) => {
                 if (!geoData) return;
                 const liveEnt = boxEntities.get(targetId);
-                if (!liveEnt) return;
+                if (!liveEnt || !(liveEnt.mesh instanceof THREE.Mesh)) return;
                 const nextGeo = buildBufferGeometryFromPlushData(geoData);
                 liveEnt.mesh.geometry.dispose();
                 liveEnt.mesh.geometry = nextGeo;
               });
             }
 
-            // 산드로네 다이컷 쿠션 인형 실루엣에 맞춘 4파츠 복합 물리 콜라이더
             body = new CANNON.Body({
               mass: dims.mass,
               material: plushPhysMat,
@@ -1047,10 +1293,11 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             world.addBody(body);
           } else {
             const mats = createFigureBoxMaterials(it.slotIndex, it.label);
-            mesh = new THREE.Mesh(new THREE.BoxGeometry(dims.w, dims.h, dims.d), mats);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            scene.add(mesh);
+            const mesh3 = new THREE.Mesh(new THREE.BoxGeometry(dims.w, dims.h, dims.d), mats);
+            mesh3.castShadow = true;
+            mesh3.receiveShadow = true;
+            scene.add(mesh3);
+            mesh = mesh3;
 
             body = new CANNON.Body({
               mass: dims.mass,
@@ -1109,10 +1356,14 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       return Math.max(0.04, Math.min(CLAW_OPEN_ANGLE - 0.04, 0.02 + ratio * 0.44));
     };
 
+    const machineHomeX = isPusherMachine ? PUSHER_DROP_HOME_X : GACHA_PHYSICS.CLAW_HOME_X;
+    const machineHomeZ = isPusherMachine ? PUSHER_DROP_HOME_Z : GACHA_PHYSICS.CLAW_HOME_Z;
+    const machineDropY = isPusherMachine ? 1.02 : GACHA_PHYSICS.CLAW_DROP_Y; // 밀판 위 캡슐 안착 높이
+
     const state = {
-      clawX: GACHA_PHYSICS.CLAW_HOME_X,
+      clawX: machineHomeX,
       clawY: GACHA_PHYSICS.CLAW_HOME_Y,
-      clawZ: GACHA_PHYSICS.CLAW_HOME_Z,
+      clawZ: machineHomeZ,
       leftProngAngle: CLAW_OPEN_ANGLE,
       rightProngAngle: CLAW_OPEN_ANGLE,
       startLeftCloseAngle: CLAW_OPEN_ANGLE,
@@ -1145,9 +1396,9 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           world.removeConstraint(state.grabConstraint);
           state.grabConstraint = null;
         }
-        state.clawX = GACHA_PHYSICS.CLAW_HOME_X;
+        state.clawX = machineHomeX;
         state.clawY = GACHA_PHYSICS.CLAW_HOME_Y;
-        state.clawZ = GACHA_PHYSICS.CLAW_HOME_Z;
+        state.clawZ = machineHomeZ;
         state.leftProngAngle = CLAW_OPEN_ANGLE;
         state.rightProngAngle = CLAW_OPEN_ANGLE;
         state.startLeftCloseAngle = CLAW_OPEN_ANGLE;
@@ -1395,6 +1646,10 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         // - 양발 모두 막힘 또는 UFO 본체가 직접 상자 위에 닿음 -> 0.50초간 지그시 누른 뒤 정지
         // - 한쪽 집게만 걸림 -> 절대 중도 포기하지 않고 0.38 속도로 끝(CLAW_DROP_Y)까지 하강해 반대쪽 집게가 완전히 파고들도록 함!
         // - 양쪽 모두 안 걸림 -> 정상 하강
+        const dynamicDropY = isPusherMachine && state.clawX > PUSHER_BARRICADE_X - 0.1
+          ? GACHA_PHYSICS.CLAW_DROP_Y  // 우측 캡슐존 바닥 픽업
+          : machineDropY;
+
         let descendRate = GACHA_PHYSICS.CLAW_DESCEND_SPEED;
         if (bothTipsPressing || ufoBodyPressing) {
           if (boxStillSinking || maxHardPenetration < 0.065) {
@@ -1408,7 +1663,6 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             stopDescend = true;
           }
         } else if (curHitLeftId || curHitRightId) {
-          // 한쪽 집게만 상자 위를 누르며 내려가는 중 -> 반대쪽 집게가 끝까지 내려갈 수 있도록 계속 하강!
           descendRate = GACHA_PHYSICS.CLAW_DESCEND_SPEED * 0.82;
         } else {
           state.leftProngAngle += (CLAW_OPEN_ANGLE - state.leftProngAngle) * Math.min(1, 6 * dt);
@@ -1416,12 +1670,9 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
           state.clawTiltZ += (0 - state.clawTiltZ) * Math.min(1, 6 * dt);
         }
 
-        state.clawY = Math.max(
-          GACHA_PHYSICS.CLAW_DROP_Y,
-          state.clawY - descendRate * dt
-        );
+        state.clawY = Math.max(dynamicDropY, state.clawY - descendRate * dt);
 
-        if (state.clawY <= GACHA_PHYSICS.CLAW_DROP_Y || stopDescend) {
+        if (state.clawY <= dynamicDropY || stopDescend) {
           state.startLeftCloseAngle = state.leftProngAngle;
           state.startRightCloseAngle = state.rightProngAngle;
 
@@ -1909,12 +2160,18 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
             ent.body.quaternion.w
           );
 
-          if (!state.wonSet.has(ent.data.id) && ent.body.position.y < GACHA_PHYSICS.DROP_Y_THRESHOLD) {
-            state.wonSet.add(ent.data.id);
-            setDroppedThisTurn(state.wonSet.size);
-            playTone(783.99, 0.14, 'sine', 0.12);
-            setTimeout(() => playTone(1046.5, 0.25, 'sine', 0.12), 110);
-          }
+          const isPusherWin =
+        isPusherMachine &&
+        ent.body.position.y < GACHA_PHYSICS.DROP_Y_THRESHOLD &&
+        ent.body.position.x < PUSHER_BARRICADE_X - 0.05;
+      const isNormalWin =
+        !isPusherMachine && ent.body.position.y < GACHA_PHYSICS.DROP_Y_THRESHOLD;
+      if (!state.wonSet.has(ent.data.id) && (isPusherWin || isNormalWin)) {
+        state.wonSet.add(ent.data.id);
+        setDroppedThisTurn(state.wonSet.size);
+        playTone(783.99, 0.14, 'sine', 0.12);
+        setTimeout(() => playTone(1046.5, 0.25, 'sine', 0.12), 110);
+      }
         }
       }
 
@@ -1956,6 +2213,15 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         aimBeam.position.set(state.clawX, GACHA_PHYSICS.BAR_Y + 0.12 + beamH / 2, state.clawZ);
       }
 
+      // 밀판 슬라이더 전진/후퇴 애니메이션
+      if (isPusherMachine && pusherSliderMesh && pusherSliderBody) {
+        const cycle = (Math.sin(now * 0.001 * PUSHER_SLIDER_SPEED) + 1) / 2; // 0..1
+        const z = PUSHER_SLIDER_Z_BACK + (PUSHER_SLIDER_Z_FRONT - PUSHER_SLIDER_Z_BACK) * cycle;
+        pusherSliderMesh.position.z = z;
+        pusherSliderBody.position.z = z;
+        pusherSliderBody.velocity.set(0, 0, (PUSHER_SLIDER_Z_FRONT - PUSHER_SLIDER_Z_BACK) * Math.cos(now * 0.001 * PUSHER_SLIDER_SPEED) * PUSHER_SLIDER_SPEED * 0.001);
+      }
+
       // 카메라 시점(정면/까치발/항공/우측) 부드러운 보간 이동
       const desiredPose = getCameraPose(
         cameraViewRef.current,
@@ -1987,7 +2253,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
       window.removeEventListener('resize', handleResize);
       renderer.dispose();
     };
-  }, [playTone, setCranePhase, triggerExtremeDrr, triggerBalanceCatch]);
+  }, [playTone, setCranePhase, triggerExtremeDrr, triggerBalanceCatch, machineIndex]);
 
   const isCraneLockedToFront = isMyTurn || isFinishing || phase !== 'idle';
 
@@ -2140,7 +2406,7 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
         {machineSummaries.length > 0 && (
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
-              {machineSummaries.map((ms) => {
+              {(visibleMachineIndices ? machineSummaries.filter((ms) => visibleMachineIndices.includes(ms.index)) : machineSummaries).map((ms) => {
                 const isActive = ms.index === machineIndex;
                 return (
                   <button
@@ -2329,7 +2595,8 @@ export const UfoClawMachine3D: React.FC<UfoClawMachine3DProps> = ({
 
         {/* Bar 사이 낙하 안내 뱃지 */}
         <div className="absolute bottom-2.5 left-2.5 pointer-events-none px-2.5 py-1 rounded-lg bg-emerald-950/85 border border-emerald-500/40 text-[10px] sm:text-xs font-bold text-emerald-300 backdrop-blur-sm">
-          🎯 <strong className="text-white">{machineLabel}</strong> ({machineDifficulty}) · 통과 시{' '}
+          🎯 <strong className="text-white">{machineLabel}</strong> ({machineDifficulty}) ·{' '}
+          {isPusher ? '밀판→좌측 투입구 낙하 시 ' : '통과 시 '}
           <span className="text-amber-300 font-mono">{machineRewardSol} SOL</span> 당첨!
         </div>
 

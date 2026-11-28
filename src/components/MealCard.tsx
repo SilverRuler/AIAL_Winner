@@ -78,12 +78,17 @@ export const MealCard: React.FC<MealCardProps> = ({
         <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-black/30 opacity-60 group-hover/img:opacity-40 transition-opacity" />
 
         {/* 멤버 뱃지 (이미지 좌상단) */}
-        <div className="absolute top-3 left-3 z-10">
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5">
           <span
             className={`inline-flex items-center px-2.5 py-1 rounded-xl text-xs font-bold border backdrop-blur-md shadow-md ${memberInfo.avatarBg} ${memberInfo.borderColor}`}
           >
             {meal.member}
           </span>
+          {meal.isMine && (
+            <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-[10px] font-black bg-emerald-500/85 text-slate-950 border border-emerald-300/60 backdrop-blur-md shadow-md">
+              내 글
+            </span>
+          )}
         </div>
 
         {/* 등록 날짜, 타임 및 시각 (이미지 우상단) */}
@@ -113,7 +118,7 @@ export const MealCard: React.FC<MealCardProps> = ({
               {meal.menuName}
             </h3>
 
-            {/* 더보기 / 관리자 메뉴 */}
+            {/* 더보기 / 수정·삭제 메뉴 */}
             <div className="relative shrink-0">
               <button
                 type="button"
@@ -122,7 +127,7 @@ export const MealCard: React.FC<MealCardProps> = ({
                   setShowMenu(!showMenu);
                 }}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-                title="관리자 메뉴 (수정/삭제)"
+                title={meal.isMine ? '내 게시글 메뉴 (수정/삭제)' : '게시글 메뉴 (수정/삭제)'}
               >
                 <MoreVertical className="w-4 h-4" />
               </button>
@@ -137,9 +142,14 @@ export const MealCard: React.FC<MealCardProps> = ({
                     }}
                   />
                   <div
-                    className="absolute right-0 top-8 w-32 bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl shadow-2xl z-40 py-1 text-xs divide-y divide-slate-800 animate-fade-in"
+                    className="absolute right-0 top-8 w-36 bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-xl shadow-2xl z-40 py-1 text-xs divide-y divide-slate-800 animate-fade-in"
                     onClick={(e) => e.stopPropagation()}
                   >
+                    {meal.isMine && (
+                      <div className="px-3 py-1.5 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 rounded-t-xl">
+                        ✓ 본인 작성 게시글
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={(e) => {

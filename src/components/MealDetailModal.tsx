@@ -15,6 +15,7 @@ import {
   ExternalLink,
   Eye,
   Heart,
+  Edit2,
 } from 'lucide-react';
 import { MealEntry, MealComment, Member } from '@/types/meal';
 import { MEMBERS, LEGACY_MEMBERS, getMemberInfo, isLegacyEvaluation } from '@/constants/members';
@@ -29,6 +30,8 @@ interface MealDetailModalProps {
   onCommentAdded: (mealId: string, newComment: MealComment) => void;
   onCommentDeleted: (mealId: string, commentId: string) => void;
   onLike?: (mealId: string) => void;
+  onEditMeal?: (meal: MealEntry) => void;
+  onDeleteMeal?: (meal: MealEntry) => void;
 }
 
 export const MealDetailModal: React.FC<MealDetailModalProps> = ({
@@ -40,6 +43,8 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
   onCommentAdded,
   onCommentDeleted,
   onLike,
+  onEditMeal,
+  onDeleteMeal,
 }) => {
   const [author, setAuthor] = useState('');
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -294,13 +299,37 @@ export const MealDetailModal: React.FC<MealDetailModalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-            title="닫기"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center space-x-1.5 shrink-0">
+            {(meal.isMine || isAdmin) && onEditMeal && (
+              <button
+                type="button"
+                onClick={() => onEditMeal(meal)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white text-[11px] font-bold transition-colors cursor-pointer"
+                title={meal.isMine ? '내 게시글 수정' : '게시글 수정'}
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">수정</span>
+              </button>
+            )}
+            {(meal.isMine || isAdmin) && onDeleteMeal && (
+              <button
+                type="button"
+                onClick={() => onDeleteMeal(meal)}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300 hover:text-rose-200 text-[11px] font-bold transition-colors cursor-pointer"
+                title={meal.isMine ? '내 게시글 삭제' : '게시글 삭제'}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">삭제</span>
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              title="닫기"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* 모달 본문 (스크롤) */}

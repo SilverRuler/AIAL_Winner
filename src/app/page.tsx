@@ -1040,7 +1040,7 @@ export default function Home() {
     handleRecordMealView(meal.id);
   };
 
-  // 관리자 수정/삭제 핸들러
+  // 게시글 수정/삭제 핸들러 (작성자 본인 기기 또는 관리자)
   const handleAdminConfirm = async (
     adminId: string,
     adminPw: string,
@@ -1048,17 +1048,30 @@ export default function Home() {
   ) => {
     if (!adminTargetMeal) return;
 
+    const hasAdminCreds = Boolean(adminId && adminPw);
+
     if (adminAction === 'delete') {
-      const resp = await fetch(
-        `/api/meals?id=${adminTargetMeal.id}&adminId=${encodeURIComponent(
-          adminId
-        )}&adminPw=${encodeURIComponent(adminPw)}`,
-        { method: 'DELETE' }
-      );
+      const params = new URLSearchParams({ id: adminTargetMeal.id });
+      if (hasAdminCreds) {
+        params.set('adminId', adminId);
+        params.set('adminPw', adminPw);
+      }
+      const headers: Record<string, string> = {};
+      if (hasAdminCreds) {
+        headers['x-admin-id'] = adminId;
+        headers['x-admin-pw'] = adminPw;
+      }
+
+      const resp = await fetch(`/api/meals?${params.toString()}`, {
+        method: 'DELETE',
+        headers,
+      });
       const data = await resp.json();
       if (!resp.ok || !data.success) {
         throw new Error(data.message || '삭제 실패');
       }
+
+      const wasEvaluated = adminTargetMeal.isWinner || typeof adminTargetMeal.score === 'number';
 
       setMeals((prev) => {
         const updated = prev.filter((m) => m.id !== adminTargetMeal.id);
@@ -1067,17 +1080,26 @@ export default function Home() {
       });
 
       setSelectedDetailMeal((prev) => (prev?.id === adminTargetMeal.id ? null : prev));
+
+      if (wasEvaluated) {
+        fetchMeals();
+      }
     } else if (adminAction === 'edit' && editData) {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (hasAdminCreds) {
+        headers['x-admin-id'] = adminId;
+        headers['x-admin-pw'] = adminPw;
+      }
+
       const resp = await fetch('/api/meals', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           id: adminTargetMeal.id,
           menuName: editData.menuName,
           comment: editData.comment,
-          member: editData.member,
-          adminId,
-          adminPw,
+          ...(editData.member !== undefined ? { member: editData.member } : {}),
+          ...(hasAdminCreds ? { adminId, adminPw } : {}),
         }),
       });
       const data = await resp.json();
@@ -1085,14 +1107,18 @@ export default function Home() {
         throw new Error(data.message || '수정 실패');
       }
 
+      const nextMenuName = data.updatedFields?.menuName ?? (editData.menuName.trim() || '오늘의 한 끼');
+      const nextComment = data.updatedFields?.comment ?? editData.comment.trim();
+      const nextMember = data.updatedFields?.member ?? adminTargetMeal.member;
+
       setMeals((prev) => {
         const updated = prev.map((m) =>
           m.id === adminTargetMeal.id
             ? {
                 ...m,
-                menuName: editData.menuName,
-                comment: editData.comment,
-                member: editData.member || m.member,
+                menuName: nextMenuName,
+                comment: nextComment,
+                member: nextMember,
               }
             : m
         );
@@ -1104,9 +1130,9 @@ export default function Home() {
         prev?.id === adminTargetMeal.id
           ? {
               ...prev,
-              menuName: editData.menuName,
-              comment: editData.comment,
-              member: editData.member || prev.member,
+              menuName: nextMenuName,
+              comment: nextComment,
+              member: nextMember,
             }
           : prev
       );
@@ -1934,6 +1960,14 @@ export default function Home() {
         onCommentAdded={handleCommentAdded}
         onCommentDeleted={handleCommentDeleted}
         onLike={(mealId) => handleToggleMealLike(mealId)}
+        onEditMeal={(target) => {
+          setAdminTargetMeal(target);
+          setAdminAction('edit');
+        }}
+        onDeleteMeal={(target) => {
+          setAdminTargetMeal(target);
+          setAdminAction('delete');
+        }}
       />
 
       <AdminAuthModal
@@ -1941,6 +1975,8 @@ export default function Home() {
         onClose={() => setAdminTargetMeal(null)}
         actionType={adminAction}
         title={adminTargetMeal ? `${adminTargetMeal.member}님의 ${adminTargetMeal.menuName}` : ''}
+        isOwner={Boolean(adminTargetMeal?.isMine)}
+        isAdminLoggedIn={isAdmin}
         initialMenuName={adminTargetMeal?.menuName || ''}
         initialComment={adminTargetMeal?.comment || ''}
         initialMember={adminTargetMeal?.member || ''}

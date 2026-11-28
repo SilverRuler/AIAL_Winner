@@ -48,7 +48,12 @@ export interface MealEntry {
   likes?: number; // 게시글 좋아요 수 (1개 IP당 1회 카운트/토글 가능)
   likedIps?: string[]; // 몽고디비 내부 중복 방지용 IP 목록 (UI 비공개)
   hasLiked?: boolean; // 현재 접속자(IP 기준)의 좋아요 여부
+  isMine?: boolean; // 현재 접속자(기기 쿠키 / IP+UA 기준)가 작성한 본인 게시글 여부
   ip?: string; // 몽고디비 내부 기록용 작성자 원본 IP (UI 비공개)
+  userAgent?: string; // 몽고디비 내부 기록용 작성자 원본 User-Agent (UI 비공개)
+  uaPlatform?: string; // 몽고디비 내부 기록용 Sec-CH-UA-Platform (UI 비공개)
+  uaMobile?: string; // 몽고디비 내부 기록용 Sec-CH-UA-Mobile (UI 비공개)
+  authorDeviceId?: string; // 몽고디비 내부 기록용 작성 기기 식별 쿠키 ID (UI 비공개)
 }
 
 export interface MealSlotSummary {

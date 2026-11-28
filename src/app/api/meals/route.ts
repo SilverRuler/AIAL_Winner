@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { getDatabase } from '@/lib/mongodb';
 import { MealEntry } from '@/types/meal';
 import { MEMBERS, LEGACY_MEMBERS, checkCanRegisterMeal, getKSTNow } from '@/constants/members';
@@ -7,6 +8,68 @@ import { grantGachaTickets } from '@/lib/gachaServer';
 
 const ADMIN_ID = process.env.ADMIN_ID || 'aaa';
 const ADMIN_PW = process.env.ADMIN_PW || 'bbb';
+const DEVICE_COOKIE_NAME = 'aial_device_id';
+
+interface RequestIdentity {
+  rawIp: string;
+  ipNorm: string;
+  userAgent: string;
+  uaPlatform?: string;
+  uaMobile?: string;
+  deviceId: string;
+}
+
+function extractRequestIdentity(request: NextRequest): RequestIdentity {
+  const rawIp = getClientIp(request);
+  const ipNorm = normalizeIp(rawIp) || '';
+  const userAgent = (request.headers.get('user-agent') || '').trim();
+  const uaPlatform =
+    (request.headers.get('sec-ch-ua-platform') || '').replace(/"/g, '').trim() || undefined;
+  const uaMobile = (request.headers.get('sec-ch-ua-mobile') || '').trim() || undefined;
+  const deviceId = (request.cookies.get(DEVICE_COOKIE_NAME)?.value || '').trim();
+
+  return { rawIp, ipNorm, userAgent, uaPlatform, uaMobile, deviceId };
+}
+
+/**
+ * 현재 요청자가 해당 게시글의 작성자 본인인지 판별
+ * 1) 신규 게시글(authorDeviceId 보유) & 요청에 기기 쿠키 존재: 쿠키 일치 여부로 판별 (모바일 IP 변경 대응 + 동일 Wi-Fi 타인 차단)
+ * 2) 쿠키가 없는 경우(쿠키 삭제 등) 또는 구 게시글: IP 일치 + (UA가 기록돼 있으면 UA 일치)로 판별
+ * 3) IP/기기 정보가 아예 없는 아주 오래된 게시글: 관리자만 가능
+ */
+function checkIsMealAuthor(meal: any, identity: RequestIdentity): boolean {
+  if (!meal) return false;
+  const mealDeviceId = typeof meal.authorDeviceId === 'string' ? meal.authorDeviceId.trim() : '';
+  const mealIpNorm = normalizeIp(meal.ip);
+  const mealUa = typeof meal.userAgent === 'string' ? meal.userAgent.trim() : '';
+
+  if (mealDeviceId && identity.deviceId) {
+    return mealDeviceId === identity.deviceId;
+  }
+
+  if (!mealIpNorm || !identity.ipNorm || mealIpNorm !== identity.ipNorm) {
+    return false;
+  }
+
+  if (mealUa) {
+    return Boolean(identity.userAgent && mealUa === identity.userAgent);
+  }
+
+  return true;
+}
+
+function attachDeviceCookie(response: NextResponse, request: NextRequest, deviceId: string) {
+  const isHttps =
+    request.nextUrl.protocol === 'https:' ||
+    request.headers.get('x-forwarded-proto') === 'https';
+  response.cookies.set(DEVICE_COOKIE_NAME, deviceId, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isHttps,
+    path: '/',
+    maxAge: 60 * 60 * 24 * 365, // 1년
+  });
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,19 +99,24 @@ export async function GET(request: NextRequest) {
       .sort({ date: -1, createdAt: 1 })
       .toArray();
 
-    const rawIp = getClientIp(request);
-    const clientIp = normalizeIp(rawIp) || '';
+    const identity = extractRequestIdentity(request);
+    const clientIp = identity.ipNorm;
 
     const formattedMeals = meals.map((m: any) => ({
       ...m,
       id: m.id || m._id.toString(),
       _id: undefined,
       ip: undefined, // UI 노출 방지 (몽고디비 내부에만 기록)
+      userAgent: undefined, // UI 노출 방지
+      uaPlatform: undefined, // UI 노출 방지
+      uaMobile: undefined, // UI 노출 방지
+      authorDeviceId: undefined, // UI 노출 방지
       viewedIps: undefined, // UI 노출 방지 (몽고디비 내부에만 기록)
       likedIps: undefined, // UI 노출 방지 (몽고디비 내부에만 기록)
       views: typeof m.views === 'number' ? m.views : 0,
       likes: typeof m.likes === 'number' ? Math.max(0, m.likes) : 0,
       hasLiked: Boolean(clientIp && Array.isArray(m.likedIps) && m.likedIps.includes(clientIp)),
+      isMine: checkIsMealAuthor(m, identity),
       comments: Array.isArray(m.comments)
         ? m.comments
             .filter((c: any) => !c.isDeleted)
@@ -210,8 +278,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 클라이언트 IP 추출 (몽고디비 내부 기록용, UI 비공개)
-    const clientIp = getClientIp(request);
+    // 클라이언트 IP, User-Agent 및 기기 식별 쿠키 추출 (몽고디비 내부 기록용, UI 비공개)
+    const identity = extractRequestIdentity(request);
+    const authorDeviceId = identity.deviceId || crypto.randomUUID();
+    const shouldSetDeviceCookie = !identity.deviceId;
 
     const newEntry: MealEntry = {
       id: mealId,
@@ -233,7 +303,11 @@ export async function POST(request: NextRequest) {
       likedIps: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      ip: clientIp, // 몽고디비 원본 전체 IP 기록
+      ip: identity.rawIp, // 몽고디비 원본 전체 IP 기록
+      userAgent: identity.userAgent || undefined, // 몽고디비 원본 User-Agent 기록
+      uaPlatform: identity.uaPlatform,
+      uaMobile: identity.uaMobile,
+      authorDeviceId, // 몽고디비 작성 기기 식별 ID (모바일 IP 변경 대응 + 동일 Wi-Fi 타인 차단)
     };
 
     const db = await getDatabase();
@@ -286,38 +360,56 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 클라이언트 응답 시에는 IP를 제거하여 브라우저에 노출되지 않도록 처리
+      // 클라이언트 응답 시에는 민감 기기/IP 정보를 제거하여 브라우저에 노출되지 않도록 처리
       const responseMeal = {
         ...newEntry,
         ip: undefined,
+        userAgent: undefined,
+        uaPlatform: undefined,
+        uaMobile: undefined,
+        authorDeviceId: undefined,
         viewedIps: undefined,
         likedIps: undefined,
         hasLiked: false,
+        isMine: true,
       };
 
-      return NextResponse.json({
+      const res = NextResponse.json({
         success: true,
         meal: responseMeal,
         gachaTicketGranted,
         gachaTicketBalance: newTicketBalance,
         storageMode: 'mongodb',
       });
+      if (shouldSetDeviceCookie) {
+        attachDeviceCookie(res, request, authorDeviceId);
+      }
+      return res;
     }
 
     const responseMeal = {
       ...newEntry,
       ip: undefined,
+      userAgent: undefined,
+      uaPlatform: undefined,
+      uaMobile: undefined,
+      authorDeviceId: undefined,
       viewedIps: undefined,
       likedIps: undefined,
       hasLiked: false,
+      isMine: true,
     };
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       success: true,
       meal: responseMeal,
       storageMode: 'client_local',
       notice: 'MongoDB 연결 대기 중: 브라우저 로컬 저장소에 저장되었습니다.',
     });
+    if (shouldSetDeviceCookie) {
+      attachDeviceCookie(res, request, authorDeviceId);
+    }
+    return res;
   } catch (error: any) {
     console.error('Failed to save meal entry:', error);
     return NextResponse.json(
@@ -332,13 +424,6 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const { id, menuName, comment, slot, member, adminId, adminPw } = body;
 
-    if (adminId !== ADMIN_ID || adminPw !== ADMIN_PW) {
-      return NextResponse.json(
-        { success: false, message: '관리자 인증에 실패했습니다.' },
-        { status: 401 }
-      );
-    }
-
     if (!id) {
       return NextResponse.json(
         { success: false, message: '수정할 식사 일지 ID가 필요합니다.' },
@@ -346,13 +431,71 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    const updateFields: Record<string, any> = { updatedAt: Date.now() };
-    if (menuName !== undefined) updateFields.menuName = menuName.trim() || '오늘의 한 끼';
-    if (comment !== undefined) updateFields.comment = comment.trim();
-    if (slot !== undefined) updateFields.slot = slot;
-    if (member !== undefined) updateFields.member = member.trim();
+    const reqAdminId = (adminId ?? request.headers.get('x-admin-id') ?? '').toString().trim();
+    const reqAdminPw = (adminPw ?? request.headers.get('x-admin-pw') ?? '').toString().trim();
+    const attemptedAdmin = Boolean(reqAdminId || reqAdminPw);
+    const isAdmin = reqAdminId === ADMIN_ID && reqAdminPw === ADMIN_PW;
+    const identity = extractRequestIdentity(request);
 
     const db = await getDatabase();
+    let targetMeal: any = null;
+    if (db) {
+      targetMeal = await db.collection('meals').findOne({
+        $or: [{ id }, { _id: id as any }],
+      });
+
+      if (!targetMeal) {
+        return NextResponse.json(
+          { success: false, message: '수정할 식사 게시글을 찾을 수 없습니다.' },
+          { status: 404 }
+        );
+      }
+
+      if (!isAdmin) {
+        const isAuthor = checkIsMealAuthor(targetMeal, identity);
+        if (!isAuthor) {
+          if (attemptedAdmin) {
+            return NextResponse.json(
+              { success: false, message: '관리자 인증에 실패했습니다.' },
+              { status: 401 }
+            );
+          }
+          const hasAuthorTrack = Boolean(targetMeal.ip || targetMeal.authorDeviceId);
+          return NextResponse.json(
+            {
+              success: false,
+              requireAdmin: true,
+              message: hasAuthorTrack
+                ? '본인이 작성한 기기(IP/브라우저)에서만 수정할 수 있습니다.'
+                : '작성 기기 기록 기능 적용 전에 등록된 게시글은 관리자만 수정할 수 있습니다.',
+            },
+            { status: 403 }
+          );
+        }
+      }
+    } else if (!isAdmin) {
+      return NextResponse.json(
+        { success: false, message: '관리자 인증에 실패했습니다.' },
+        { status: 401 }
+      );
+    }
+
+    const updateFields: Record<string, any> = { updatedAt: Date.now() };
+    if (menuName !== undefined) {
+      const trimmedMenu = String(menuName).trim();
+      if (targetMeal?.isNoPhoto && !trimmedMenu) {
+        return NextResponse.json(
+          { success: false, message: '사진 없이 등록된 게시글은 메뉴 이름을 비워둘 수 없습니다.' },
+          { status: 400 }
+        );
+      }
+      updateFields.menuName = trimmedMenu || '오늘의 한 끼';
+    }
+    if (comment !== undefined) updateFields.comment = String(comment).trim();
+    // 작성 멤버 및 타임대 변경은 관리자 권한에서만 허용
+    if (isAdmin && slot !== undefined) updateFields.slot = slot;
+    if (isAdmin && member !== undefined) updateFields.member = String(member).trim();
+
     if (db) {
       await db.collection('meals').updateOne(
         { $or: [{ id }, { _id: id as any }] },
@@ -364,6 +507,7 @@ export async function PATCH(request: NextRequest) {
       success: true,
       updatedId: id,
       updatedFields: updateFields,
+      editedBy: isAdmin ? 'admin' : 'author',
     });
   } catch (error: any) {
     console.error('Failed to update meal:', error);
@@ -378,15 +522,10 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-    const adminId = searchParams.get('adminId');
-    const adminPw = searchParams.get('adminPw');
-
-    if (adminId !== ADMIN_ID || adminPw !== ADMIN_PW) {
-      return NextResponse.json(
-        { success: false, message: '관리자 인증에 실패했습니다.' },
-        { status: 401 }
-      );
-    }
+    const reqAdminId = (searchParams.get('adminId') || request.headers.get('x-admin-id') || '').trim();
+    const reqAdminPw = (searchParams.get('adminPw') || request.headers.get('x-admin-pw') || '').trim();
+    const attemptedAdmin = Boolean(reqAdminId || reqAdminPw);
+    const isAdmin = reqAdminId === ADMIN_ID && reqAdminPw === ADMIN_PW;
 
     if (!id) {
       return NextResponse.json(
@@ -395,16 +534,98 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
+    const identity = extractRequestIdentity(request);
     const db = await getDatabase();
     if (db) {
+      const targetMeal: any = await db.collection('meals').findOne({
+        $or: [{ id }, { _id: id as any }],
+      });
+
+      if (!targetMeal) {
+        return NextResponse.json(
+          { success: false, message: '삭제할 식사 게시글을 찾을 수 없습니다.' },
+          { status: 404 }
+        );
+      }
+
+      if (!isAdmin) {
+        const isAuthor = checkIsMealAuthor(targetMeal, identity);
+        if (!isAuthor) {
+          if (attemptedAdmin) {
+            return NextResponse.json(
+              { success: false, message: '관리자 인증에 실패했습니다.' },
+              { status: 401 }
+            );
+          }
+          const hasAuthorTrack = Boolean(targetMeal.ip || targetMeal.authorDeviceId);
+          return NextResponse.json(
+            {
+              success: false,
+              requireAdmin: true,
+              message: hasAuthorTrack
+                ? '본인이 작성한 기기(IP/브라우저)에서만 삭제할 수 있습니다.'
+                : '작성 기기 기록 기능 적용 전에 등록된 게시글은 관리자만 삭제할 수 있습니다.',
+            },
+            { status: 403 }
+          );
+        }
+      }
+
+      // 원본 감사 로그 보관 (실제 meals 컬렉션에서 삭제해 동일 타임 재등록 가능하도록 유지)
+      try {
+        await db.collection('deleted_meals_log').insertOne({
+          originalMeal: targetMeal,
+          mealId: targetMeal.id || String(targetMeal._id),
+          deletedAt: Date.now(),
+          deletedBy: isAdmin ? 'admin' : 'author',
+          deletedIp: identity.rawIp,
+          deletedUserAgent: identity.userAgent || undefined,
+          deletedDeviceId: identity.deviceId || undefined,
+        });
+      } catch (logErr) {
+        console.warn('Failed to archive deleted meal log:', logErr);
+      }
+
       await db.collection('meals').deleteOne({
         $or: [{ id }, { _id: id as any }],
       });
+
+      // 이미 AI 심사가 완료된 타임대의 우승작(또는 평가작)이 삭제된 경우 남은 평가작 중 최고점으로 승자 재산정
+      if (targetMeal.date && targetMeal.slot && (targetMeal.isWinner || typeof targetMeal.score === 'number')) {
+        try {
+          const remaining = await db
+            .collection('meals')
+            .find({ date: targetMeal.date, slot: targetMeal.slot })
+            .toArray();
+          const scored = remaining.filter((m: any) => typeof m.score === 'number');
+          if (scored.length > 0) {
+            const maxScore = Math.max(...scored.map((m: any) => Number(m.score)));
+            const now = Date.now();
+            for (const m of scored) {
+              const nextWinner = Number(m.score) === maxScore;
+              if (Boolean(m.isWinner) !== nextWinner) {
+                await db.collection('meals').updateOne(
+                  { _id: m._id },
+                  { $set: { isWinner: nextWinner, updatedAt: now } }
+                );
+              }
+            }
+          }
+        } catch (recalcErr) {
+          console.warn('Failed to recalculate winners after meal delete:', recalcErr);
+        }
+      }
+    } else if (!isAdmin) {
+      return NextResponse.json(
+        { success: false, message: '관리자 인증에 실패했습니다.' },
+        { status: 401 }
+      );
     }
 
     return NextResponse.json({
       success: true,
       deletedId: id,
+      deletedBy: isAdmin ? 'admin' : 'author',
     });
   } catch (error: any) {
     console.error('Failed to delete meal:', error);

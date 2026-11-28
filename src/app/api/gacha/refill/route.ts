@@ -5,10 +5,9 @@ import {
   GACHA_ALL_SLOT_INDICES,
   GACHA_TOTAL_SLOTS,
   getMachineDocId,
+  getMachineFullItemCount,
   getMachineLabel,
-  isPlushSlot,
   normalizeMachineIndex,
-  PLUSH_MOUND_COUNT,
 } from '@/constants/gacha';
 import {
   getAllMachineStates,
@@ -57,7 +56,7 @@ export async function POST(request: NextRequest) {
       const machineLabel = getMachineLabel(idx);
       const existing = (await col.findOne({ _id: docId as any })) as any;
       const existingCount = Array.isArray(existing?.items) ? existing.items.length : 0;
-      const targetFullCount = isPlushSlot(idx) ? PLUSH_MOUND_COUNT : 1;
+      const targetFullCount = getMachineFullItemCount(idx);
       if (existingCount >= targetFullCount) continue;
 
       const freshItems = createSingleMachineItems(idx, now + idx * 10);

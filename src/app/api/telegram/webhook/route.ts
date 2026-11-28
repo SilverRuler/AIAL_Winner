@@ -8,7 +8,9 @@ import {
   getMachineDocId,
   getMachineLabel,
   getRestingBoxPosition,
+  isFigureSlot,
   isPlushSlot,
+  isPusherSlot,
 } from '@/constants/gacha';
 import { MEMBERS } from '@/constants/members';
 import {
@@ -139,10 +141,10 @@ export async function POST(request: NextRequest) {
     const singleOpsAction =
       singleOpsSlotNum && singleOpsMatch ? (singleOpsMatch[2] as '중단' | '재개') : null;
 
-    // 1-3) 그룹별(3D 기기 / 일반 기기) 운영 중단/재개 명령
+    // 1-3) 그룹별(피규어 / 인형 / 밀판 / 3D / 일반 기기) 운영 중단/재개 명령
     const upperNorm = normalized.toUpperCase();
-    const groupOpsMatch = upperNorm.match(/^(3D|일반)(?:기기)?(?:운영)?(중단|재개)$/);
-    const groupOpsTarget = groupOpsMatch ? (groupOpsMatch[1] as '3D' | '일반') : null;
+    const groupOpsMatch = upperNorm.match(/^(3D|인형|일반|피규어|밀판)(?:기기)?(?:운영)?(중단|재개)$/);
+    const groupOpsTarget = groupOpsMatch ? (groupOpsMatch[1] as '3D' | '인형' | '일반' | '피규어' | '밀판') : null;
     const groupOpsAction = groupOpsMatch ? (groupOpsMatch[2] as '중단' | '재개') : null;
 
     const isRefillCmd = actionWord === '리필';
@@ -442,17 +444,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
-    // [그룹별(3D 기기 / 일반 기기) 운영 중단 / 재개]
+    // [그룹별(피규어 / 인형 / 밀판 / 3D / 일반 기기) 운영 중단 / 재개]
     if (groupOpsTarget && groupOpsAction) {
-      const is3D = groupOpsTarget === '3D';
+      const isPlushGrp = groupOpsTarget === '3D' || groupOpsTarget === '인형';
+      const isPusherGrp = groupOpsTarget === '밀판';
       const isSuspending = groupOpsAction === '중단';
       const targetIndices = Array.from({ length: GACHA_TOTAL_SLOTS }, (_, idx) => idx).filter((idx) =>
-        is3D ? isPlushSlot(idx) : !isPlushSlot(idx)
+        isPusherGrp ? isPusherSlot(idx) : isPlushGrp ? isPlushSlot(idx) : isFigureSlot(idx)
       );
       const updatedOps = await setMachinesSuspendedBatch(db, targetIndices, isSuspending, 'telegram');
       const targetNums = targetIndices.map((i) => `${i + 1}번`).join(', ');
       const suspNums = updatedOps.suspendedMachines.map((i) => `${i + 1}번`).join(', ') || '없음';
-      const groupTitle = is3D ? '3D 인형 기기(5종)' : '일반 박스 기기(8종)';
+      const groupTitle = isPusherGrp
+        ? '밀판 기기(1종)'
+        : isPlushGrp
+        ? '인형 기기(5종)'
+        : '피규어 기기(8종)';
       await recordGachaLog(db, {
         type: 'admin_ops',
         member: '관리자(텔레그램)',

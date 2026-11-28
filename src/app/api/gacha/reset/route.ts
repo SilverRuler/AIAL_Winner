@@ -7,8 +7,10 @@ import {
   getMachineDocId,
   getMachineLabel,
   getPlushMoundPose,
+  getPusherCapsulePose,
   getRestingBoxPosition,
   isPlushSlot,
+  isPusherSlot,
   normalizeMachineIndex,
 } from '@/constants/gacha';
 import {
@@ -63,8 +65,11 @@ export async function POST(request: NextRequest) {
         resetItems = createSingleMachineItems(idx, now);
       } else {
         const plushMachine = isPlushSlot(idx);
+        const pusherMachine = isPusherSlot(idx);
         resetItems = existing.items.map((item: GachaBoxItem, arrIdx: number) => {
-          const pose = plushMachine
+          const pose = pusherMachine
+            ? getPusherCapsulePose(arrIdx)
+            : plushMachine
             ? getPlushMoundPose(idx, arrIdx)
             : {
                 position: getRestingBoxPosition(idx, 0),

@@ -189,8 +189,9 @@ export async function POST(request: NextRequest) {
           `• <code>1번 정렬</code> ~ <code>${GACHA_TOTAL_SLOTS}번 정렬</code> — 재정렬과 동일\n` +
           `• <code>3번 기기 운영 중단</code> — 해당 번호 기기만 개별 점검중 전환 및 플레이 차단\n` +
           `• <code>3번 기기 운영 재개</code> — 해당 번호 기기 개별 점검중 해제\n` +
-          `• <code>3D 기기 운영 중단</code> / <code>재개</code> — 3D 인형 기기 5종 일괄 중단/재개\n` +
-          `• <code>일반 기기 운영 중단</code> / <code>재개</code> — 일반 박스 기기 8종 일괄 중단/재개\n\n` +
+          `• <code>피규어 기기 운영 중단</code> / <code>재개</code> — 피규어 기기 8종 일괄 중단/재개\n` +
+          `• <code>인형 기기 운영 중단</code> / <code>재개</code> — 인형 기기 5종 일괄 중단/재개\n` +
+          `• <code>밀판 기기 운영 중단</code> / <code>재개</code> — 밀판 기기 1종 일괄 중단/재개\n\n` +
           `<b>[3] 티켓 지급 / 차감</b>\n` +
           `• <code>전체 유저 1티켓 지급</code> — 12명 전원에게 뽑기권 +N장 일괄 지급\n` +
           `• <code>재쫄 유저 10티켓 지급</code> — 특정 멤버에게 뽑기권 +N장 지급 (<code>차감</code>도 지원)\n\n` +
